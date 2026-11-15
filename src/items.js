@@ -155,7 +155,7 @@ export function createItems(scene, ground, walkGrid, zones, collectedIds, canopi
     let best = null;
     let bestDistance = 2.2;
     for (const item of items) {
-      if (item.collected) continue;
+      if (item.collected || item.carried) continue;
       itemCenter.set(item.x, item.root.position.y + 0.6, item.z);
       const distance = ray.distanceToPoint(itemCenter);
       if (distance < bestDistance) {
@@ -181,6 +181,7 @@ export function createItems(scene, ground, walkGrid, zones, collectedIds, canopi
         }
         continue;
       }
+      if (item.carried) continue;
       const ring = item.root.children[1];
       ring.material.color.setHex(isNeeded(item.type) ? 0xffa020 : 0xf4ecd8);
       ring.material.opacity = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(time * 3 + item.x));

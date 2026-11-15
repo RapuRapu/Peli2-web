@@ -17,6 +17,7 @@ export function createEmptySave() {
     hunger: 100,
     worldTime: 0,
     caches: [],
+    burrows: [],
     navy: { state: 'coming', found: null },
     crabFriends: 0,
     tunnel: null,

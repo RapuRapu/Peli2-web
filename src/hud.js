@@ -44,6 +44,7 @@ export function createHud() {
     <div class="inventory"></div>
     <div class="tide-chip"></div>
     <div class="navy-chip"></div>
+    <div class="crab-chip"></div>
     <div class="hunger-chip"><span>🍗</span><div class="hunger-bar"><div class="hunger-fill"></div></div></div>
     <button class="reset" type="button">↺</button>
     <div class="toast"></div>
@@ -77,6 +78,8 @@ export function createHud() {
   let lastTideText = '';
   const navyChip = root.querySelector('.navy-chip');
   let lastNavyText = undefined;
+  const crabChip = root.querySelector('.crab-chip');
+  let lastCrabText = undefined;
   const craftChip = root.querySelector('.craft-chip');
   const craftLog = root.querySelector('.craft-log');
   const craftList = root.querySelector('.craft-list');
@@ -184,6 +187,13 @@ export function createHud() {
     lastNavyText = text;
     navyChip.textContent = text ?? '';
     navyChip.style.display = text ? '' : 'none';
+  }
+
+  function setCrabs(text) {
+    if (text === lastCrabText) return;
+    lastCrabText = text;
+    crabChip.textContent = text ?? '';
+    crabChip.style.display = text ? '' : 'none';
   }
 
   function closeMenus() {
@@ -302,5 +312,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide, onBagAction, setNavy };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide, onBagAction, setNavy, setCrabs };
 }

@@ -18,6 +18,7 @@ import { createWildlife } from './wildlife.js';
 import { createTracks } from './tracks.js';
 import { createTreasure } from './treasure.js';
 import { createNavy } from './navy.js';
+import { createCrabs } from './crabs.js';
 import { tide, setTideTime, tideStatus } from './tide.js';
 import { RECIPES, RAFT_PARTS, REARM_FRONDS, HUNGER_DRAIN_PER_SECOND, recipeViews, missingRaftParts, buildQuests, canAfford, spend, hasTool } from './survival.js';
 import { loadSave, writeSave, clearSave, createEmptySave } from './save.js';
@@ -332,6 +333,7 @@ const harvesting = createHarvesting(scene, ground, walkGrid, vegetation.harvesta
 const tracks = createTracks(scene, ground);
 const treasure = createTreasure(scene, ground, save.caches);
 if (save.navy.state === 'landed') save.navy.state = 'coming';
+const crabs = createCrabs(scene, ground, { tracks, items, beaches: [wreckSpot, westBeach, eastCove], savedBurrows: save.burrows, friendCount: save.crabFriends });
 
 function coastPointFrom(x, z) {
   const length = Math.hypot(x, z) || 1;
@@ -381,6 +383,8 @@ function persist() {
   save.ship = { x: shipState.x, z: shipState.z, heading: shipState.heading };
   save.traps = wildlife.serializeTraps();
   save.caches = treasure.serialize();
+  save.burrows = crabs.serializeBurrows();
+  save.crabFriends = crabs.friendCountNow();
   writeSave(save);
 }
 
@@ -491,7 +495,7 @@ function navyCountdownText() {
 }
 
 function digSeconds(baseSeconds) {
-  return baseSeconds * (save.crabFriends > 0 ? 0.6 : 1);
+  return baseSeconds * Math.max(0.55, 1 - 0.15 * crabs.friendCountNow());
 }
 
 function canDigAt(x, z) {
@@ -560,7 +564,7 @@ function navyContext() {
 }
 
 function crabSlowdown() {
-  return typeof crabs !== 'undefined' && crabs && crabs.migrationActive() ? 0.45 : 1;
+  return crabs.migrationActive() ? 0.45 : 1;
 }
 
 const navyCallbacks = {
@@ -608,6 +612,71 @@ function coverDigPatch(cache) {
     treasure.coverPatch(cache);
     tracks.eraseWithin(cache.x, cache.z, 6);
     hud.showToast('🌿 Patch hidden and tracks brushed away');
+    refreshInventoryViews();
+    persist();
+  });
+}
+
+function updateCrabs(deltaTime) {
+  const onFoot = mode === 'onFoot';
+  const playerX = onFoot ? character.state.x : null;
+  const events = crabs.update(deltaTime, simulationTime, save.worldTime, playerX, character.state.z, character.state.heading, (save.inventory.coconut ?? 0) > 0);
+  for (const loot of events.stashed) {
+    save.collectedItemIds.push(loot.id);
+    if (playerX !== null && Math.hypot(loot.x - playerX, loot.z - character.state.z) < 70) hud.showToast('🦀 A hermit crab hid a coin pouch in its burrow!');
+    persist();
+  }
+  if (events.migrationStarted) hud.showToast('🦀 Crab migration! Beach tracks are being trampled');
+  if (onFoot) {
+    for (const thief of crabs.thieves) {
+      if (thief.carrying && Math.hypot(thief.x - playerX, thief.z - character.state.z) < 2.6) {
+        crabs.scareThief(thief);
+        hud.showToast('🦀 The crab dropped the pouch!');
+      }
+    }
+  }
+  const untilMigration = crabs.secondsToMigration(save.worldTime);
+  if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!');
+  else if (untilMigration < 45) hud.setCrabs(`🦀 Crabs coming ${Math.ceil(untilMigration)}s`);
+  else hud.setCrabs(null);
+}
+
+function interactWithCrab({ kind, crab }) {
+  if (kind === 'thief') {
+    if (crab.carrying) {
+      character.setPath(walkGrid.findPath(character.state.x, character.state.z, crab.x, crab.z));
+      hud.showToast('Catch the crab to get the pouch back!');
+    } else {
+      crabs.scareThief(crab);
+      hud.showToast('🦀 A hermit crab – it steals coin pouches');
+    }
+    return;
+  }
+  if ((save.inventory.coconut ?? 0) < 1) {
+    hud.showToast('🦀 A digger crab – it looks hungry for a coconut');
+    return;
+  }
+  startGroundTask(crab.x, crab.z, 1.2, 'bush', () => {
+    if (!crabs.befriend(crab)) {
+      hud.showToast('You already have three crab friends');
+      return;
+    }
+    save.inventory.coconut -= 1;
+    hud.showToast('🦀 A digger crab joined you! Faster digging, sweeps tracks');
+    refreshInventoryViews();
+    persist();
+  });
+}
+
+function digUpBurrow(burrow) {
+  if (!hasTool(save, 'diggingStick')) {
+    hud.showToast('Craft a digging stick to dig out the burrow');
+    return;
+  }
+  startGroundTask(burrow.x, burrow.z, digSeconds(2.5), 'bush', () => {
+    const gold = crabs.emptyBurrow(burrow);
+    save.gold += gold;
+    hud.showToast(`🦀 Dug out the burrow: +${gold} gold`);
     refreshInventoryViews();
     persist();
   });
@@ -831,7 +900,9 @@ function walkTowardScreenPoint(clientX, clientY, isNewTouch) {
   let targetZ;
   if (!isNewTouch && (harvesting.isBusy() || groundTask.active)) return;
   const tappedItem = items.itemUnderRay(raycaster.ray);
-  const tappedCache = tappedItem ? null : treasure.cacheUnderRay(raycaster.ray);
+  const tappedCrab = tappedItem ? null : crabs.crabUnderRay(raycaster.ray);
+  const tappedBurrow = tappedItem || tappedCrab ? null : crabs.burrowUnderRay(raycaster.ray);
+  const tappedCache = tappedItem || tappedCrab || tappedBurrow ? null : treasure.cacheUnderRay(raycaster.ray);
   const tappedTrap = tappedItem || tappedCache ? null : wildlife.trapUnderRay(raycaster.ray);
   const tappedNode = tappedItem || tappedTrap || tappedCache ? null : harvesting.nodeUnderRay(raycaster.ray);
   harvesting.cancel();
@@ -840,6 +911,16 @@ function walkTowardScreenPoint(clientX, clientY, isNewTouch) {
   if (isNewTouch && trapPlacement.active) {
     const hits = raycaster.intersectObject(detailTerrain.frontMesh(), false);
     if (hits.length > 0) digTrapAt(hits[0].point.x, hits[0].point.z);
+    interactedInMode.onFoot = true;
+    return;
+  }
+  if (tappedCrab && isNewTouch) {
+    interactWithCrab(tappedCrab);
+    interactedInMode.onFoot = true;
+    return;
+  }
+  if (tappedBurrow && isNewTouch) {
+    digUpBurrow(tappedBurrow);
     interactedInMode.onFoot = true;
     return;
   }
@@ -1138,6 +1219,7 @@ function simulate(deltaTime) {
   wildlife.update(deltaTime, simulationTime, onFoot ? character.state.x : null, character.state.z);
   treasure.update(deltaTime, save.worldTime, onFoot ? character.state.x : null, character.state.z);
   updateNavy(deltaTime);
+  updateCrabs(deltaTime);
   save.hunger = Math.max(0, save.hunger - HUNGER_DRAIN_PER_SECOND * deltaTime);
   updateContextAction(deltaTime);
 
@@ -1236,4 +1318,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };

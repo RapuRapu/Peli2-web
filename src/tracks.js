@@ -118,5 +118,19 @@ export function createTracks(scene, ground) {
     return erased;
   }
 
-  return { add, update, aliveCount, aliveBelow, positionsWithin, eraseWithin };
+  function eraseBelowHeight(height, maxCount) {
+    let erased = 0;
+    for (let i = 0; i < CAPACITY && erased < maxCount; i++) {
+      const record = records[i];
+      if (record.alive && record.height < height) {
+        record.alive = false;
+        prints.setMatrixAt(i, hidden);
+        erased++;
+      }
+    }
+    if (erased) prints.instanceMatrix.needsUpdate = true;
+    return erased;
+  }
+
+  return { add, update, aliveCount, aliveBelow, positionsWithin, eraseWithin, eraseBelowHeight };
 }
