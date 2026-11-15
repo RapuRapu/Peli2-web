@@ -52,17 +52,17 @@ export function createTracks(scene, ground) {
   function add(x, z, heading, kind) {
     if (kind === 'boar') {
       const jitter = (Math.random() - 0.5) * 0.5;
-      for (const side of [-1, 1]) addSingle(x + Math.cos(heading) * 0.07 * side, z - Math.sin(heading) * 0.07 * side, heading + jitter + side * 0.12, 0.13, 0.32);
+      for (const side of [-1, 1]) addSingle(x + Math.cos(heading) * 0.07 * side, z - Math.sin(heading) * 0.07 * side, heading + jitter + side * 0.12, 0.13, 0.32, kind);
       return;
     }
-    addSingle(x, z, heading, 0.32, 0.55);
+    addSingle(x, z, heading, 0.32, 0.55, kind);
   }
 
-  function addSingle(x, z, heading, width, length) {
+  function addSingle(x, z, heading, width, length, kind) {
     const height = ground.heightAt(x, z);
     if (height < tide.level + WASH_MARGIN || height > 8) return;
     const record = records[next];
-    Object.assign(record, { alive: true, x, z, height, heading, age: 0, width, length });
+    Object.assign(record, { alive: true, x, z, height, heading, age: 0, width, length, kind });
     place(next, 1);
     prints.instanceMatrix.needsUpdate = true;
     next = (next + 1) % CAPACITY;
@@ -100,5 +100,23 @@ export function createTracks(scene, ground) {
     return records.filter((record) => record.alive && record.height < height).length;
   }
 
-  return { add, update, aliveCount, aliveBelow };
+  function positionsWithin(x, z, radius, kind) {
+    return records.filter((record) => record.alive && record.kind === kind && Math.hypot(record.x - x, record.z - z) < radius).map((record) => ({ x: record.x, z: record.z }));
+  }
+
+  function eraseWithin(x, z, radius) {
+    let erased = 0;
+    for (let i = 0; i < CAPACITY; i++) {
+      const record = records[i];
+      if (record.alive && Math.abs(record.x - x) < radius && Math.abs(record.z - z) < radius) {
+        record.alive = false;
+        prints.setMatrixAt(i, hidden);
+        erased++;
+      }
+    }
+    if (erased) prints.instanceMatrix.needsUpdate = true;
+    return erased;
+  }
+
+  return { add, update, aliveCount, aliveBelow, positionsWithin, eraseWithin };
 }

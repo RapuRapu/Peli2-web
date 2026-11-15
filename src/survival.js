@@ -10,6 +10,8 @@ export const RECIPES = [
   { id: 'rope', cost: { fiber: 3 } },
   { id: 'diggingStick', cost: { wood: 2 }, tool: true, note: 'Needed to dig pit traps' },
   { id: 'pitTrap', name: 'Pit trap', icon: '🕳️', cost: { fronds: TRAP_FRONDS }, requires: 'diggingStick', placeable: true, note: 'Craft, then tap the ground to dig it.' },
+  { id: 'decoyChest', cost: { wood: 3, rope: 1 }, note: 'Bury it to fool treasure hunters' },
+  { id: 'pickaxe', cost: { wood: 2, stone: 3, rope: 1 }, tool: true, note: 'Dig tunnels underground' },
   { id: 'paddle', cost: { wood: 1 } },
   { id: 'raftFrame', cost: { wood: 8, rope: 4 } },
   { id: 'hideSail', cost: { hide: 2, fronds: 4, rope: 1 } },
@@ -52,8 +54,9 @@ function step(label, have, need) {
   return { label, have: Math.min(have, need), need };
 }
 
-export function buildQuests(save) {
+export function buildQuests(save, { chestBuried = false, navyArrivesIn = null } = {}) {
   const hasAxe = hasTool(save, 'axe');
+  const navy = save.navy;
   const trapsDug = save.stats.trapsDug;
   const hides = save.stats.hidesGathered;
   return [
@@ -67,6 +70,25 @@ export function buildQuests(save) {
         step('🪓 Craft a stone axe', 0, 1),
       ],
       done: hasAxe,
+    },
+    {
+      title: 'Hide the treasure',
+      description: `A navy landing party is coming for the chest you saved from the wreck${navyArrivesIn ? ` – they land in ${navyArrivesIn}` : ''}. Craft a digging stick, then open the 🎒 Bag and bury the chest somewhere clever. Fresh digging and footprints give you away – high tide washes them off the beach.`,
+      steps: [
+        step('🪏 Craft a digging stick', hasTool(save, 'diggingStick') ? 1 : 0, 1),
+        step('👑 Bury the treasure chest', chestBuried || navy.state === 'gone' ? 1 : 0, 1),
+      ],
+      done: chestBuried || navy.state !== 'coming',
+      locked: !hasAxe,
+    },
+    {
+      title: 'Outlast the navy',
+      description: navy.state === 'gone'
+        ? (navy.found === 'chest' ? 'They found the treasure. It is gone.' : navy.found === 'decoy' ? 'They dug up your decoy and sailed away happy. The real chest is safe!' : 'They searched and found nothing. The treasure is safe!')
+        : 'Marines search inside their map circle (red ring). They dig where they see fresh digging or footprints. Pit traps stop them, decoy chests fool them. Keep your distance – if they spot you, they search closer to you.',
+      steps: [step(navy.state === 'gone' ? (navy.found === 'chest' ? '✗ Treasure lost' : '⚓ The navy has left') : '⚓ The navy leaves the island', navy.state === 'gone' ? 1 : 0, 1)],
+      done: navy.state === 'gone',
+      locked: navy.state === 'coming',
     },
     {
       title: 'Set a trap',

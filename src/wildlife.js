@@ -303,6 +303,10 @@ export function createWildlife(scene, ground, walkGrid, homeAreas, savedTraps, t
     setTrapState(trap, 'open');
   }
 
+  function springOnMarine(trap) {
+    setTrapState(trap, 'open');
+  }
+
   function rearm(trap) {
     setTrapState(trap, 'armed');
   }
@@ -311,5 +315,5 @@ export function createWildlife(scene, ground, walkGrid, homeAreas, savedTraps, t
     return traps.map((trap) => ({ x: trap.x, z: trap.z, state: trap.state }));
   }
 
-  return { boars, traps, update, addTrap, trapUnderRay, butcher, rearm, serializeTraps };
+  return { boars, traps, update, addTrap, trapUnderRay, butcher, rearm, springOnMarine, serializeTraps };
 }

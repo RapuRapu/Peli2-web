@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createRandom } from './noise.js';
 
 export const ITEM_CATEGORIES = [
+  { id: 'valuable', name: 'Valuables' },
   { id: 'resource', name: 'Raw materials' },
   { id: 'food', name: 'Food' },
   { id: 'crafted', name: 'Crafted' },
@@ -24,6 +25,9 @@ export const ITEM_TYPES = {
   axe: { name: 'Stone axe', icon: '🪓', category: 'tool' },
   diggingStick: { name: 'Digging stick', icon: '🪏', category: 'tool' },
   pouch: { name: 'Coin pouch', icon: '💰', gold: 25 },
+  treasureChest: { name: 'Treasure chest', icon: '👑', category: 'valuable' },
+  decoyChest: { name: 'Decoy chest', icon: '📦', category: 'valuable' },
+  pickaxe: { name: 'Pickaxe', icon: '⛏️', category: 'tool' },
 };
 
 const PICKUP_RADIUS = 2.0;

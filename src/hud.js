@@ -43,6 +43,7 @@ export function createHud() {
     <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🛶</span></div>
     <div class="inventory"></div>
     <div class="tide-chip"></div>
+    <div class="navy-chip"></div>
     <div class="hunger-chip"><span>🍗</span><div class="hunger-bar"><div class="hunger-fill"></div></div></div>
     <button class="reset" type="button">↺</button>
     <div class="toast"></div>
@@ -68,10 +69,14 @@ export function createHud() {
   const hungerFills = root.querySelectorAll('.hunger-fill');
   const hungerText = root.querySelector('.hunger-text');
   let eatHandler = null;
+  let bagActionHandler = null;
+  let bagActionsFor = () => [];
   let lastBagSignature = null;
   let lastHunger = -1;
   const tideChip = root.querySelector('.tide-chip');
   let lastTideText = '';
+  const navyChip = root.querySelector('.navy-chip');
+  let lastNavyText = undefined;
   const craftChip = root.querySelector('.craft-chip');
   const craftLog = root.querySelector('.craft-log');
   const craftList = root.querySelector('.craft-list');
@@ -96,6 +101,11 @@ export function createHud() {
     if (event.target === bagLog) bagLog.classList.remove('open');
     const button = event.target.closest('[data-eat]');
     if (button) eatHandler?.(button.dataset.eat);
+    const actionButton = event.target.closest('[data-bag-action]');
+    if (actionButton) {
+      const [type, action] = actionButton.dataset.bagAction.split('|');
+      bagActionHandler?.(type, action);
+    }
   });
   bagLog.querySelector('.quest-close').addEventListener('click', () => bagLog.classList.remove('open'));
   let lastSpeedText = '';
@@ -134,7 +144,7 @@ export function createHud() {
 
   function setInventory(gold, counts) {
     inventory.innerHTML = `<span class="slot">💰 ${gold}</span>`;
-    const signature = JSON.stringify(counts);
+    const signature = JSON.stringify(counts) + JSON.stringify(Object.keys(counts).map((type) => bagActionsFor(type)));
     if (signature === lastBagSignature) return;
     lastBagSignature = signature;
     const sections = ITEM_CATEGORIES.map((category) => {
@@ -142,7 +152,7 @@ export function createHud() {
       if (entries.length === 0) return '';
       return `<div class="bag-section">${category.name}</div><div class="bag-grid">` + entries.map(([type, count]) => {
         const itemType = ITEM_TYPES[type];
-        const eat = itemType.food ? `<button type="button" data-eat="${type}">Eat</button>` : '';
+        const eat = (itemType.food ? `<button type="button" data-eat="${type}">Eat</button>` : '') + bagActionsFor(type).map((action) => `<button type="button" data-bag-action="${type}|${action.id}">${action.label}</button>`).join('');
         return `<div class="bag-slot"><span class="bag-icon">${itemType.icon}</span><span class="bag-name">${itemType.name}</span><span class="bag-count">${category.id === 'tool' ? '' : '×' + count}</span>${eat}</div>`;
       }).join('') + '</div>';
     }).join('');
@@ -169,8 +179,21 @@ export function createHud() {
     tideChip.textContent = text;
   }
 
+  function setNavy(text) {
+    if (text === lastNavyText) return;
+    lastNavyText = text;
+    navyChip.textContent = text ?? '';
+    navyChip.style.display = text ? '' : 'none';
+  }
+
   function closeMenus() {
     for (const log of [questLog, craftLog, bagLog]) log.classList.remove('open');
+  }
+
+  function onBagAction(handler, actionsFor) {
+    bagActionHandler = handler;
+    bagActionsFor = actionsFor;
+    lastBagSignature = null;
   }
 
   function onEat(handler) {
@@ -279,5 +302,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide, onBagAction, setNavy };
 }

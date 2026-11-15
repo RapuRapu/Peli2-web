@@ -29,29 +29,29 @@ function limb(length, radius, upperColor, lowerColor, footColor) {
   return pivot;
 }
 
-export function createCharacter(scene) {
+export function createCharacter(scene, { coat = COAT, sash = SASH, trousers = TROUSERS, hat = HAT, scale = CHARACTER_SCALE } = {}) {
   const root = new THREE.Group();
   const body = new THREE.Group();
   root.add(body);
 
   const hipHeight = 0.9;
-  const leftLeg = limb(0.9, 0.11, TROUSERS, TROUSERS, BOOTS);
-  const rightLeg = limb(0.9, 0.11, TROUSERS, TROUSERS, BOOTS);
+  const leftLeg = limb(0.9, 0.11, trousers, trousers, BOOTS);
+  const rightLeg = limb(0.9, 0.11, trousers, trousers, BOOTS);
   leftLeg.position.set(-0.13, hipHeight, 0);
   rightLeg.position.set(0.13, hipHeight, 0);
   body.add(leftLeg, rightLeg);
 
-  body.add(part(new THREE.BoxGeometry(0.46, 0.14, 0.28), SASH, 0, hipHeight + 0.05, 0));
-  body.add(part(new THREE.BoxGeometry(0.46, 0.54, 0.28), COAT, 0, hipHeight + 0.38, 0));
+  body.add(part(new THREE.BoxGeometry(0.46, 0.14, 0.28), sash, 0, hipHeight + 0.05, 0));
+  body.add(part(new THREE.BoxGeometry(0.46, 0.54, 0.28), coat, 0, hipHeight + 0.38, 0));
   body.add(part(new THREE.BoxGeometry(0.16, 0.5, 0.06), SHIRT, 0, hipHeight + 0.4, 0.13));
   body.add(part(new THREE.SphereGeometry(0.15, 8, 6), SKIN, 0, hipHeight + 0.82, 0.02));
-  const hatBrim = part(new THREE.CylinderGeometry(0.34, 0.34, 0.07, 3), HAT, 0, hipHeight + 0.95, 0);
+  const hatBrim = part(new THREE.CylinderGeometry(0.34, 0.34, 0.07, 3), hat, 0, hipHeight + 0.95, 0);
   hatBrim.rotation.y = Math.PI;
-  body.add(hatBrim, part(new THREE.SphereGeometry(0.16, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), HAT, 0, hipHeight + 0.96, 0));
+  body.add(hatBrim, part(new THREE.SphereGeometry(0.16, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), hat, 0, hipHeight + 0.96, 0));
 
   const shoulderHeight = hipHeight + 0.6;
-  const leftArm = limb(0.66, 0.07, COAT, SKIN, null);
-  const rightArm = limb(0.66, 0.07, COAT, SKIN, null);
+  const leftArm = limb(0.66, 0.07, coat, SKIN, null);
+  const rightArm = limb(0.66, 0.07, coat, SKIN, null);
   leftArm.position.set(-0.29, shoulderHeight, 0);
   rightArm.position.set(0.29, shoulderHeight, 0);
   body.add(leftArm, rightArm);
@@ -74,7 +74,7 @@ export function createCharacter(scene) {
   contactShadow.visible = false;
   root.add(contactShadow);
 
-  root.scale.setScalar(CHARACTER_SCALE);
+  root.scale.setScalar(scale);
   scene.add(root);
 
   const state = { x: 0, z: 0, heading: 0, path: [], pathIndex: 0, walkPhase: 0, moving: false, time: 0, workKind: null, workSwing: 0 };
@@ -97,7 +97,7 @@ export function createCharacter(scene) {
     state.pathIndex = 0;
   }
 
-  function update(deltaTime, ground) {
+  function update(deltaTime, ground, speedMultiplier = 1) {
     state.time += deltaTime;
     let speed = 0;
     while (state.pathIndex < state.path.length) {
@@ -113,7 +113,7 @@ export function createCharacter(scene) {
       const headingError = Math.atan2(Math.sin(desiredHeading - state.heading), Math.cos(desiredHeading - state.heading));
       state.heading += headingError * Math.min(1, TURN_RATE * deltaTime);
       const isLastWaypoint = state.pathIndex === state.path.length - 1;
-      speed = WALK_SPEED * (isLastWaypoint ? Math.min(1, distance / 1.5 + 0.35) : 1);
+      speed = WALK_SPEED * speedMultiplier * (isLastWaypoint ? Math.min(1, distance / 1.5 + 0.35) : 1);
       const stepLength = Math.min(distance, speed * deltaTime);
       state.x += (toWaypointX / distance) * stepLength;
       state.z += (toWaypointZ / distance) * stepLength;
@@ -147,7 +147,7 @@ export function createCharacter(scene) {
     body.position.y = Math.abs(Math.cos(state.walkPhase)) * 0.05 * (state.moving ? 1 : 0) + breathing;
 
     const groundHeight = ground.heightAt(state.x, state.z);
-    root.position.set(state.x, Math.max(groundHeight, -0.5), state.z);
+    root.position.set(state.x, ground.floorY ?? Math.max(groundHeight, -0.5), state.z);
     root.rotation.y = state.heading;
   }
 
