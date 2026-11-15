@@ -7,7 +7,7 @@ const BODY_LENGTH = 3.2;
 const DOLPHIN_SCALE = 2.0;
 const SCALED_HALF_LENGTH = (BODY_LENGTH * DOLPHIN_SCALE) / 2;
 const DOLPHINS_PER_POD = 4;
-const TRIGGER_DISTANCE = 120;
+const TRIGGER_DISTANCE = 180;
 const MIN_SHIP_SPEED_TO_TRIGGER = 1.55;
 const MIN_SHIP_SPEED_TO_STAY = 1.0;
 const COOLDOWN_SECONDS = 60;
@@ -317,8 +317,8 @@ export function createDolphins(scene, heightmap, podHomes, { waterColor, seed = 
 
     const surface = waveHeightAt(dolphin.x, dolphin.z, time);
     const previousY = dolphin.y;
-    dolphin.breathPhase += deltaTime * (0.5 + dolphin.speed * 0.04);
-    let depthOffset = -1.5 + Math.max(0, Math.sin(dolphin.breathPhase)) * 1.0;
+    dolphin.breathPhase += deltaTime * (0.9 + dolphin.speed * 0.04);
+    let depthOffset = -1.5 + Math.max(0, Math.sin(dolphin.breathPhase)) * 1.05;
 
     const escorting = pod.state === POD_ESCORTING;
     if (dolphin.leapProgress >= 0) {
@@ -329,11 +329,11 @@ export function createDolphins(scene, heightmap, podHomes, { waterColor, seed = 
       } else {
         depthOffset = -0.4 + 2.4 * 4 * dolphin.leapProgress * (1 - dolphin.leapProgress);
       }
-    } else if (escorting) {
+    } else {
       dolphin.leapTimer -= deltaTime;
       if (dolphin.leapTimer <= 0) {
         dolphin.leapProgress = 0;
-        dolphin.leapTimer = 4 + random() * 6;
+        dolphin.leapTimer = escorting ? 4 + random() * 6 : 6 + random() * 8;
         splashes.spawn(dolphin.x, dolphin.z, 2.4);
       }
     }

@@ -95,7 +95,19 @@ const startWater = findOpenWater(startPose.angle, startPose.clearance);
 shipController.place(startWater.x, startWater.z, startWater.tangentHeading, 5);
 cameraDistance = startPose.distance;
 
-const podHomes = [BAY_ANGLE + 0.4, BAY_ANGLE + 2.4, BAY_ANGLE + 4.2].map((angle) => findOpenWater(angle, 230));
+function deepWaterAhead(x, z, heading, distance) {
+  let pointX = x + Math.sin(heading) * distance;
+  let pointZ = z + Math.cos(heading) * distance;
+  const outwardLength = Math.hypot(pointX, pointZ) || 1;
+  for (let step = 0; step < 60 && heightmap.heightAt(pointX, pointZ) > -9; step++) {
+    pointX += (pointX / outwardLength) * 5;
+    pointZ += (pointZ / outwardLength) * 5;
+  }
+  return { x: pointX, z: pointZ };
+}
+
+const firstPodHome = isScreenshotMode ? findOpenWater(BAY_ANGLE + 0.4, 230) : deepWaterAhead(startWater.x, startWater.z, Math.atan2(startWater.x, startWater.z), 160);
+const podHomes = [firstPodHome, ...[BAY_ANGLE + 2.4, BAY_ANGLE + 4.2].map((angle) => findOpenWater(angle, 230))];
 const dolphins = createDolphins(scene, heightmap, podHomes, { waterColor: new THREE.Color(0.05, 0.32, 0.4) });
 const shipForDolphins = { x: 0, z: 0, heading: 0, speed: 0, length: ship.length, halfBeam: ship.halfBeam };
 
