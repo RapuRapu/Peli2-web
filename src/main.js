@@ -6,6 +6,7 @@ import { createVegetation } from './vegetation.js';
 import { createWake } from './wake.js';
 import { createPerformanceMonitor } from './performance.js';
 import { createHud } from './hud.js';
+import { createDolphins } from './dolphins.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -86,12 +87,17 @@ const POSES = {
   4: { angle: 0.45, clearance: 35, distance: 170, warmup: 12 },
   5: { angle: 1.05, clearance: 30, distance: 110, warmup: 25 },
   6: { angle: BAY_ANGLE, clearance: 70, distance: 150, warmup: 12 },
+  7: { angle: BAY_ANGLE + 0.4, clearance: 170, distance: 110, warmup: 16 },
 };
 
 const startPose = POSES[screenshotPose] || POSES[1];
 const startWater = findOpenWater(startPose.angle, startPose.clearance);
 shipController.place(startWater.x, startWater.z, startWater.tangentHeading, 5);
 cameraDistance = startPose.distance;
+
+const podHomes = [BAY_ANGLE + 0.4, BAY_ANGLE + 2.4, BAY_ANGLE + 4.2].map((angle) => findOpenWater(angle, 230));
+const dolphins = createDolphins(scene, heightmap, podHomes, { waterColor: new THREE.Color(0.05, 0.32, 0.4) });
+const shipForDolphins = { x: 0, z: 0, heading: 0, speed: 0, length: ship.length, halfBeam: ship.halfBeam };
 
 const raycaster = new THREE.Raycaster();
 const seaPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -256,6 +262,11 @@ function simulate(deltaTime) {
   wake.update(simulationTime, state.x - Math.sin(state.heading) * sternOffset, state.z - Math.cos(state.heading) * sternOffset, state.heading, state.speed);
   ocean.update(simulationTime, cameraFocus.x, cameraFocus.z);
   swayTime.value = simulationTime;
+  shipForDolphins.x = state.x;
+  shipForDolphins.z = state.z;
+  shipForDolphins.heading = state.heading;
+  shipForDolphins.speed = state.speed;
+  dolphins.update(deltaTime, simulationTime, shipForDolphins);
 }
 
 function renderFrame(now) {
@@ -273,7 +284,8 @@ if (isScreenshotMode) {
   hud.setVisible(searchParameters.has('hud'));
   performanceMonitor.setVisible(false);
   updateCamera(0, true);
-  const warmupSteps = Math.round(startPose.warmup / FIXED_STEP);
+  const warmupSeconds = searchParameters.has('warmup') ? Number(searchParameters.get('warmup')) : startPose.warmup;
+  const warmupSteps = Math.round(warmupSeconds / FIXED_STEP);
   for (let i = 0; i < warmupSteps; i++) {
     simulate(FIXED_STEP);
     updateCamera(FIXED_STEP, i === 0);
@@ -291,4 +303,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { shipController, heightmap, renderer, scene, camera };
+window.__debug = { shipController, heightmap, renderer, scene, camera, dolphins, simulate };

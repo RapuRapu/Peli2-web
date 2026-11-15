@@ -2,7 +2,7 @@ import sys, time
 from playwright.sync_api import sync_playwright
 
 out_dir = sys.argv[1] if len(sys.argv) > 1 else 'shots'
-poses = sys.argv[2].split(',') if len(sys.argv) > 2 else ['1', '2', '3', '4', '5', '6']
+poses = sys.argv[2].split(',') if len(sys.argv) > 2 else ['1', '2', '3', '4', '5', '6', '7']
 import os
 os.makedirs(out_dir, exist_ok=True)
 

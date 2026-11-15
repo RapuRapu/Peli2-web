@@ -22,6 +22,7 @@ Avaa `dist/index.html` selaimessa.
 | `src/ship.js` | Sloopin malli ja purjehdusfysiikka (tuulikulma, karilleajo, keinunta) |
 | `src/vegetation.js` | Palmut, lehtipuut, pensaat, kivet (instansoitu, ruuduttain kullattu) |
 | `src/wake.js` | Peräaalto |
+| `src/dolphins.js` | Delfiiniparvet: vaeltelu, laivan saattaminen keulassa, hypyt ja roiskeet |
 | `src/performance.js` | 60 fps -rajoitin, automaattinen resoluutio, FPS-mittari |
 | `src/hud.js` | Tuulinuoli, nopeus, vihjeet |
 | `src/main.js` | Kamera, syöte, valaistus, kuvakulmat kuvakaappauksille |
@@ -30,4 +31,4 @@ Avaa `dist/index.html` selaimessa.
 
 ## Kuvakaappaukset
 
-`dist/index.html?pose=1..6&hud` renderöi kiinteän kuvakulman. `shoot.py` ajaa kaikki kuusi headless-Chromella (Playwright).
+`dist/index.html?pose=1..7&hud` renderöi kiinteän kuvakulman (pose 7 = delfiinit saattavat laivaa). `&warmup=N` vaihtaa simuloidun alkuajan. `shoot.py` ajaa kuvakulmat headless-Chromella (Playwright).
