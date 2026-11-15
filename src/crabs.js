@@ -29,7 +29,7 @@ function colored(geometry, color) {
   return plain;
 }
 
-function buildCrabGeometry(shellColor, { hermit = false } = {}) {
+function buildCrabGeometry(shellColor, { hermit = false, bigClaws = false } = {}) {
   const bodyColor = new THREE.Color(shellColor);
   const legColor = bodyColor.clone().multiplyScalar(0.7);
   const parts = [];
@@ -39,8 +39,8 @@ function buildCrabGeometry(shellColor, { hermit = false } = {}) {
   parts.push(colored(body, bodyColor));
   for (const side of [-1, 1]) {
     const claw = new THREE.SphereGeometry(0.2, 8, 5);
-    claw.scale(1, 0.7, 1.3);
-    claw.translate(side * 0.42, 0.32, 0.55);
+    claw.scale(bigClaws ? 1.7 : 1, bigClaws ? 1.1 : 0.7, bigClaws ? 1.9 : 1.3);
+    claw.translate(side * (bigClaws ? 0.5 : 0.42), 0.32, bigClaws ? 0.7 : 0.55);
     parts.push(colored(claw, bodyColor));
     const eye = new THREE.CylinderGeometry(0.035, 0.035, 0.22, 5);
     eye.translate(side * 0.14, 0.52, 0.32);
@@ -99,8 +99,8 @@ function buildBurrowMesh() {
 export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrows = [], friendCount = 0 }) {
   const random = createRandom(4242);
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
-  const hermitGeometry = buildCrabGeometry(0xd8642a, { hermit: true });
-  const diggerGeometry = buildCrabGeometry(0xc8261c);
+  const hermitGeometry = buildCrabGeometry(0x7a3fa8, { hermit: true });
+  const diggerGeometry = buildCrabGeometry(0xc8261c, { bigClaws: true });
   const migrantGeometry = buildCrabGeometry(0xe0582a);
 
   function placeOnGround(object, x, z, lift = 0) {
@@ -145,7 +145,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     scene.add(mesh);
     const home = beachPointNear(beach.x, beach.z, 18);
     placeOnGround(mesh, home.x, home.z);
-    const alert = buildEmojiSprite('💰', 1.2);
+    const alert = buildEmojiSprite('💰', 2.0);
     alert.visible = false;
     scene.add(alert);
     return { index, mesh, alert, x: home.x, z: home.z, homeX: home.x, homeZ: home.z, heading: 0, state: 'idle', carrying: null, target: null, wanderTimer: 0, cooldown: 30 + random() * 60, beach };
@@ -158,16 +158,20 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     scene.add(mesh);
     const spot = beachPointNear(beach.x, beach.z, 22);
     placeOnGround(mesh, spot.x, spot.z);
-    const heart = buildEmojiSprite('🥥', 0.9);
+    const heart = buildEmojiSprite('🥥', 1.3);
+    const friendBadge = buildEmojiSprite('❤️', 0.9);
+    friendBadge.visible = false;
+    scene.add(friendBadge);
     heart.visible = false;
     scene.add(heart);
-    return { mesh, heart, x: spot.x, z: spot.z, homeX: spot.x, homeZ: spot.z, heading: 0, friend: false, wanderTimer: 0, eraseTimer: 0, followOffset: 0 };
+    return { mesh, heart, friendBadge, x: spot.x, z: spot.z, homeX: spot.x, homeZ: spot.z, heading: 0, friend: false, wanderTimer: 0, eraseTimer: 0, followOffset: 0 };
   });
 
   function makeFriend(digger, followIndex) {
     digger.friend = true;
     digger.followOffset = followIndex;
     digger.heart.visible = false;
+    digger.friendBadge.visible = true;
   }
 
   for (let i = 0; i < Math.min(friendCount, diggers.length); i++) makeFriend(diggers[i], i);
@@ -266,6 +270,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
         moving = true;
         if (moveToward(thief, loot.x, loot.z, THIEF_SPEED, deltaTime) < 0.4) {
           loot.carried = true;
+          loot.root.children[1].visible = false;
           thief.carrying = loot;
           thief.state = 'fleeing';
           const burrowSpot = burrowSpotAwayFrom(thief.x, thief.z);
@@ -293,7 +298,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
         return { stashed: loot };
       }
     }
-    if (thief.alert.visible) thief.alert.position.set(thief.x, thief.mesh.position.y + 2.1 + Math.sin(time * 6) * 0.1, thief.z);
+    if (thief.alert.visible) thief.alert.position.set(thief.x, thief.mesh.position.y + 3.0 + Math.sin(time * 6) * 0.15, thief.z);
     poseCrab(thief, time, moving);
     return null;
   }
@@ -312,6 +317,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
         moving = true;
         moveToward(digger, targetX, targetZ, Math.min(FRIEND_SPEED, remaining * 2.5), deltaTime);
       }
+      digger.friendBadge.position.set(digger.x, digger.mesh.position.y + 1.3, digger.z);
       digger.eraseTimer -= deltaTime;
       if (digger.eraseTimer <= 0) {
         digger.eraseTimer = 0.4;
@@ -427,6 +433,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     }
     const loot = thief.carrying;
     loot.carried = false;
+    loot.root.children[1].visible = true;
     loot.x = thief.x + 0.8;
     loot.z = thief.z + 0.8;
     loot.root.position.set(loot.x, ground.heightAt(loot.x, loot.z), loot.z);

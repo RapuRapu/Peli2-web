@@ -65,7 +65,7 @@ function buildOwnerMarker() {
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
   sprite.renderOrder = 5;
-  sprite.scale.set(1.6, 1.6, 1);
+  sprite.scale.set(2.3, 2.3, 1);
   return sprite;
 }
 
@@ -137,7 +137,8 @@ export function createTreasure(scene, ground, savedCaches) {
     for (const cache of caches) {
       if (!cache.marker.visible) continue;
       const near = playerX !== null && Math.hypot(playerX - cache.x, playerZ - cache.z) < 45;
-      cache.marker.material.opacity = near ? 0.9 : 0;
+      cache.marker.material.opacity = near ? 0.95 : 0;
+      cache.marker.position.y = cache.height + 2.6 + Math.sin(worldTime * 3 + cache.x) * 0.15;
     }
     checkTimer -= deltaTime;
     if (checkTimer > 0) return;

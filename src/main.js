@@ -675,7 +675,8 @@ function updateCrabs(deltaTime) {
     }
   }
   const untilMigration = crabs.secondsToMigration(save.worldTime);
-  if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!');
+  if (mode === 'underground') hud.setCrabs(null);
+  else if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!');
   else if (untilMigration < 45) hud.setCrabs(`🦀 Crabs coming ${Math.ceil(untilMigration)}s`);
   else hud.setCrabs(null);
 }
@@ -695,7 +696,10 @@ function interactWithCrab({ kind, crab }) {
     hud.showToast('🦀 A digger crab – it looks hungry for a coconut');
     return;
   }
-  startGroundTask(crab.x, crab.z, 1.2, 'bush', () => {
+  crab.target = null;
+  crab.wanderTimer = 12;
+  const feedSpot = nearestWalkablePoint(crab.x, crab.z) ?? { x: crab.x, z: crab.z };
+  startGroundTask(feedSpot.x, feedSpot.z, 1.2, 'bush', () => {
     if (!crabs.befriend(crab)) {
       hud.showToast('You already have three crab friends');
       return;
@@ -853,7 +857,14 @@ function updateGuideArrow() {
       const distance = Math.hypot(boar.x - character.state.x, boar.z - character.state.z);
       return !best || distance < best.distance ? { boar, distance } : best;
     }, null) : null;
-  hud.setGuideArrow(nearestBoar ? offScreenAngle(nearestBoar.boar.x, nearestBoar.boar.z) : null, '🐗', nearestBoar?.distance ?? null);
+  const nearestMarine = mode === 'onFoot' && save.navy.state === 'landed' && navy ? navy.marines
+    .filter((marine) => marine.state !== 'gone' && marine.state !== 'boat')
+    .reduce((best, marine) => {
+      const distance = Math.hypot(marine.body.state.x - character.state.x, marine.body.state.z - character.state.z);
+      return !best || distance < best.distance ? { marine, distance } : best;
+    }, null) : null;
+  if (nearestMarine) hud.setGuideArrow(offScreenAngle(nearestMarine.marine.body.state.x, nearestMarine.marine.body.state.z), '💂', nearestMarine.distance);
+  else hud.setGuideArrow(nearestBoar ? offScreenAngle(nearestBoar.boar.x, nearestBoar.boar.z) : null, '🐗', nearestBoar?.distance ?? null);
   const partsReady = !save.raftBuilt && missingRaftParts(save).length === 0;
   hud.setSloopArrow(mode === 'onFoot' && partsReady ? offScreenAngle(raftSite.x, raftSite.z) : null);
 }
@@ -1266,8 +1277,8 @@ function updateCamera(deltaTime, snap) {
 
   const fogNear = cameraDistance * 2.4 + 120;
   const fogFar = cameraDistance * 6.5 + 600;
-  scene.fog.near = mode === 'underground' ? cameraDistance * 0.9 : fogNear;
-  scene.fog.far = mode === 'underground' ? cameraDistance * 1.9 : fogFar;
+  scene.fog.near = mode === 'underground' ? cameraDistance * 1.2 : fogNear;
+  scene.fog.far = mode === 'underground' ? cameraDistance * 2.8 : fogFar;
   ocean.uniforms.fogNear.value = fogNear;
   ocean.uniforms.fogFar.value = fogFar;
 

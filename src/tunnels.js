@@ -3,7 +3,7 @@ import * as THREE from 'three';
 export const TUNNEL_FLOOR_Y = -300;
 const GRID_SIZE = 21;
 const CELL_SIZE = 2;
-const ROCK_HEIGHT = 1.5;
+const ROCK_HEIGHT = 0.95;
 const DIG_ROCK_SECONDS = 2.5;
 const CENTER = Math.floor(GRID_SIZE / 2);
 
@@ -53,7 +53,7 @@ export function createTunnels(scene, ground, savedTunnel) {
   underground.visible = false;
   scene.add(underground);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE), new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE), new THREE.MeshStandardMaterial({ color: 0xd9b27a, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   underground.add(floor);
@@ -67,16 +67,40 @@ export function createTunnels(scene, ground, savedTunnel) {
 
   const ladder = buildLadder(5);
   underground.add(ladder);
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.3, 9, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff1c0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+  const shaftGeometry = new THREE.CylinderGeometry(0.7, 1.5, 9, 16, 4, true);
+  const shaftAlpha = new Float32Array(shaftGeometry.attributes.position.count * 4);
+  for (let i = 0; i < shaftGeometry.attributes.position.count; i++) {
+    const heightFraction = (shaftGeometry.attributes.position.getY(i) + 4.5) / 9;
+    shaftAlpha.set([1, 0.95, 0.75, 0.22 * (1 - heightFraction) ** 1.5], i * 4);
+  }
+  shaftGeometry.setAttribute('color', new THREE.BufferAttribute(shaftAlpha, 4));
+  const shaft = new THREE.Mesh(shaftGeometry, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
   underground.add(shaft);
 
-  const torch = new THREE.PointLight(0xffa850, 34, 24, 1.3);
+  const torch = new THREE.PointLight(0xffa850, 40, 34, 1.2);
   torch.castShadow = false;
   underground.add(torch);
-  const caveFill = new THREE.HemisphereLight(0x6a5a50, 0x2a1e14, 0.9);
+  const caveFill = new THREE.HemisphereLight(0x9a8a78, 0x3a2a1c, 1.6);
   caveFill.visible = false;
   scene.add(caveFill);
 
+  const entranceBadge = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 96;
+    const context = canvas.getContext('2d');
+    context.font = '64px sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('🪜', 48, 52);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+    sprite.renderOrder = 5;
+    sprite.scale.set(1.8, 1.8, 1);
+    sprite.visible = false;
+    scene.add(sprite);
+    return sprite;
+  })();
   const entrance = buildEntranceMesh();
   entrance.group.visible = false;
   scene.add(entrance.group);
@@ -108,11 +132,11 @@ export function createTunnels(scene, ground, savedTunnel) {
         } else {
           const wobble = Math.sin(column * 12.9 + row * 78.2) * 0.5 + 0.5;
           const wobbleB = Math.sin(column * 39.3 + row * 11.7) * 0.5 + 0.5;
-          const heightScale = 0.85 + wobble * 0.4;
+          const heightScale = 0.8 + wobble * 0.35;
           dummy.position.set(center.x + (wobbleB - 0.5) * 0.12, TUNNEL_FLOOR_Y + (ROCK_HEIGHT * heightScale) / 2, center.z + (wobble - 0.5) * 0.12);
           dummy.scale.set(1.02 + wobbleB * 0.06, heightScale, 1.02 + wobble * 0.06);
-          if (isEdge(column, row)) rockColor.setRGB(0.14, 0.12, 0.11);
-          else rockColor.setRGB(0.34 + wobble * 0.08, 0.27 + wobbleB * 0.06, 0.2 + wobble * 0.04);
+          if (isEdge(column, row)) rockColor.setRGB(0.07, 0.06, 0.06);
+          else rockColor.setRGB(0.16 + wobble * 0.05, 0.13 + wobbleB * 0.04, 0.11 + wobble * 0.03);
           rocks.setColorAt(index, rockColor);
         }
         dummy.rotation.set(0, dug.has(index) ? 0 : (Math.sin(column * 5.1 + row * 3.7) * 0.07), 0);
@@ -133,6 +157,8 @@ export function createTunnels(scene, ground, savedTunnel) {
     shaft.position.set(tunnel.x, TUNNEL_FLOOR_Y + 4.5, tunnel.z);
     entrance.group.position.set(tunnel.x, ground.heightAt(tunnel.x, tunnel.z), tunnel.z);
     entrance.group.visible = true;
+    entranceBadge.position.set(tunnel.x, ground.heightAt(tunnel.x, tunnel.z) + 2.6, tunnel.z);
+    entranceBadge.visible = true;
     entrance.cover.visible = tunnel.covered;
     refreshRocks();
   }
@@ -149,6 +175,7 @@ export function createTunnels(scene, ground, savedTunnel) {
 
   function setActive(active) {
     underground.visible = active;
+    entranceBadge.visible = !active && tunnel !== null;
     caveFill.visible = active;
   }
 
@@ -235,7 +262,7 @@ export function createTunnels(scene, ground, savedTunnel) {
 
   function update(deltaTime, time, character, digMultiplier) {
     torch.position.set(character.state.x, TUNNEL_FLOOR_Y + 3.2, character.state.z);
-    torch.intensity = 34 + Math.sin(time * 11) * 2.5 + Math.sin(time * 7.3) * 2;
+    torch.intensity = 40 + Math.sin(time * 11) * 2.5 + Math.sin(time * 7.3) * 2;
     if (!task.active) return null;
     const state = character.state;
     if (state.pathIndex < state.path.length) return null;

@@ -18,6 +18,26 @@ const RED_COAT = new THREE.Color(0.62, 0.08, 0.06);
 const WHITE = new THREE.Color(0.88, 0.86, 0.8);
 const BLACK = new THREE.Color(0.08, 0.07, 0.07);
 
+function buildBadge(emoji) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 96;
+  const context = canvas.getContext('2d');
+  context.fillStyle = 'rgba(150, 25, 18, 0.9)';
+  context.beginPath();
+  context.arc(48, 48, 40, 0, Math.PI * 2);
+  context.fill();
+  context.font = '52px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(emoji, 48, 52);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+  sprite.renderOrder = 5;
+  sprite.scale.set(2.6, 2.6, 1);
+  return sprite;
+}
+
 function buildCircle() {
   const material = new THREE.LineDashedMaterial({ color: 0xd02a1a, dashSize: 2.2, gapSize: 1.4, transparent: true, opacity: 0.9, depthTest: false });
   const line = new THREE.LineLoop(new THREE.BufferGeometry(), material);
@@ -39,13 +59,23 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
 
   const marines = [];
   for (let i = 0; i < MARINE_COUNT; i++) {
-    const body = createCharacter(scene, { coat: RED_COAT, sash: WHITE, trousers: WHITE, hat: BLACK });
+    const body = createCharacter(scene, { coat: RED_COAT, sash: WHITE, trousers: WHITE, hat: BLACK, scale: 1.2 });
     body.setVisible(false);
     marines.push({ body, state: 'boat', targets: [], digProgress: 0, trappedTimer: 0, target: null });
   }
 
   const circle = buildCircle();
   scene.add(circle);
+  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xd02a1a, transparent: true, opacity: 0.17, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  fill.visible = false;
+  fill.frustumCulled = false;
+  scene.add(fill);
+  const anchorBadges = [0, 1, 2, 3].map(() => {
+    const badge = buildBadge('⚓');
+    badge.visible = false;
+    scene.add(badge);
+    return badge;
+  });
   const search = { state: 'idle', timer: 0, centerX: 0, centerZ: 0, radius: BASE_RADIUS, landing: null, sea: null, spotCooldown: 0, found: null };
 
   function drawCircle() {
@@ -59,6 +89,34 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
     circle.geometry.dispose();
     circle.geometry = new THREE.BufferGeometry().setFromPoints(points);
     circle.computeLineDistances();
+    const rings = 8;
+    const segments = 64;
+    const positions = [];
+    const ringPoint = (ring, segment) => {
+      const radius = (ring / rings) * search.radius;
+      const angle = (segment / segments) * Math.PI * 2;
+      const x = search.centerX + Math.cos(angle) * radius;
+      const z = search.centerZ + Math.sin(angle) * radius;
+      return [x, Math.max(0.15, ground.heightAt(x, z)) + 0.25, z];
+    };
+    for (let ring = 0; ring < rings; ring++) {
+      for (let segment = 0; segment < segments; segment++) {
+        const a = ringPoint(ring, segment);
+        const b = ringPoint(ring + 1, segment);
+        const c = ringPoint(ring + 1, segment + 1);
+        const d = ringPoint(ring, segment + 1);
+        positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+      }
+    }
+    fill.geometry.dispose();
+    fill.geometry = new THREE.BufferGeometry();
+    fill.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    anchorBadges.forEach((badge, index) => {
+      const angle = (index / 4) * Math.PI * 2 + 0.4;
+      const x = search.centerX + Math.cos(angle) * search.radius;
+      const z = search.centerZ + Math.sin(angle) * search.radius;
+      badge.position.set(x, Math.max(0.3, ground.heightAt(x, z)) + 2.2, z);
+    });
   }
 
   function evidenceCircle(playerCarriesChest, playerX, playerZ) {
@@ -121,7 +179,13 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
     search.found = null;
     boat.visible = true;
     drawCircle();
-    circle.visible = true;
+    setCircleVisible(true);
+  }
+
+  function setCircleVisible(visible) {
+    circle.visible = visible;
+    fill.visible = visible;
+    for (const badge of anchorBadges) badge.visible = visible;
   }
 
   function finish(found, onFinished) {
@@ -215,7 +279,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
         marine.digProgress = 0;
       } else if (marine.state === 'digging') {
         marine.digProgress += (deltaTime * speedMultiplier) / DIG_SECONDS;
-        marine.body.setWorkPose('bush', (marine.digProgress * DIG_SECONDS * 1.4) % 1);
+        marine.body.setWorkPose('tree', (marine.digProgress * DIG_SECONDS * 1.1) % 1);
         if (marine.digProgress >= 1) {
           marine.body.setWorkPose(null, 0);
           const cache = treasure.cacheNear(state.x, state.z, FIND_RADIUS);
@@ -275,7 +339,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
         if (progress >= 1 || Math.hypot(boat.position.x - search.sea.x, boat.position.z - search.sea.z) < 6) {
           search.state = 'done';
           boat.visible = false;
-          circle.visible = false;
+          setCircleVisible(false);
           callbacks.onDeparted?.(search.found);
         }
       }

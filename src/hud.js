@@ -266,7 +266,7 @@ export function createHud() {
     const scale = Math.min(halfWidth / Math.max(1e-3, Math.abs(directionX)), halfHeight / Math.max(1e-3, Math.abs(directionY)));
     let arrowX = innerWidth / 2 + directionX * scale;
     const arrowY = centerY + directionY * scale;
-    if (arrowY < 190 && arrowX < 200) arrowX = 200;
+    if (arrowY < 200 && arrowX < 235) arrowX = 235;
     if (arrowY < 200 && arrowX > innerWidth - 210) arrowX = innerWidth - 210;
     element.style.transform = `translate(${arrowX - 24}px, ${arrowY - 24}px)`;
     element.querySelector('.chevron').style.transform = `rotate(${-screenAngle}rad)`;
