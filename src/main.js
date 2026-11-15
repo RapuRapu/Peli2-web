@@ -471,8 +471,9 @@ function updateContextAction(deltaTime) {
     if (!save.raftBuilt) {
       const nearSite = Math.hypot(characterState.x - raftSite.x, characterState.z - raftSite.z) < BUILD_DISTANCE;
       const missing = missingRaftParts(save);
-      const subtitle = missing.length ? 'Missing: ' + missing.map(([type]) => ITEM_TYPES[type].name).join(', ') : 'All parts ready!';
-      hud.setAction(nearSite ? '⛵ Build the raft' : null, tryBuildRaft, { subtitle, disabled: missing.length > 0 });
+      const blockaded = save.navy.state !== 'gone';
+      const subtitle = missing.length ? 'Missing: ' + missing.map(([type]) => ITEM_TYPES[type].name).join(', ') : blockaded ? 'Navy blockade – wait for them to leave' : 'All parts ready!';
+      hud.setAction(nearSite ? '⛵ Build the raft' : null, tryBuildRaft, { subtitle, disabled: missing.length > 0 || blockaded });
       return;
     }
     if (launch.active) {
@@ -493,6 +494,10 @@ function updateContextAction(deltaTime) {
 }
 
 function tryBuildRaft() {
+  if (save.navy.state !== 'gone') {
+    hud.showToast('⚓ The navy blockades the bay – wait until they leave');
+    return;
+  }
   const missing = missingRaftParts(save);
   if (missing.length > 0) {
     hud.showToast('Missing: ' + missing.map(([type]) => ITEM_TYPES[type].name).join(', '));
@@ -1482,4 +1487,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { raycaster, tunnels, tapUnderground, digTunnelEntrance, enterTunnel, climbOutOfTunnel, buryUnderground, toggleEntranceCover, crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { performanceMonitor, raycaster, tunnels, tapUnderground, digTunnelEntrance, enterTunnel, climbOutOfTunnel, buryUnderground, toggleEntranceCover, crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };

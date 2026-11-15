@@ -32,6 +32,12 @@ with sync_playwright() as p:
         if (trap.state==='caught'){ d.interactWithTrap(trap); step(20, ()=>!d.groundTask.active); log('butchered'); d.interactWithTrap(trap); step(20, ()=>!d.groundTask.active); } }
       out.waits=waits; log('hunt done');
       craft('hideSail'); log('sail');
+      let spot=null; for(let r=8;r<80&&!spot;r+=2) for(let k=0;k<24;k++){ const a=k/24*6.283, x=c.x+Math.cos(a)*r, z=c.z+Math.sin(a)*r; if(d.ground.heightAt(x,z)>1.6&&d.walkGrid.isPointWalkable(x,z)&&d.walkGrid.findPath(c.x,c.z,x,z).length){spot={x,z};break;} }
+      walkTo(spot.x,spot.z); d.buryHere('chest'); step(8,()=>!d.groundTask.active); d.coverDigPatch(d.treasure.caches[0]); step(5,()=>!d.groundTask.active); log('buried');
+      out.questWhileWaiting=document.querySelector('#hud .quest-chip').textContent;
+      out.navyChip=document.querySelector('#hud .navy-chip').textContent;
+      step(900, ()=>d.save.navy.state==='landed', 0.25); log('navy landed'); step(420, ()=>d.save.navy.state==='gone'); out.navyFound=d.save.navy.found; log('navy gone');
+      const cache=d.treasure.caches.find(k=>k.contents==='chest'); if(cache){ walkTo(cache.x,cache.z); d.digUpCache(cache); step(8,()=>!d.groundTask.active); } out.chestBack=d.save.inventory.treasureChest;
       out.questBeforeBuild=document.querySelector('#hud .quest-chip').textContent;
       const s=d.raftSite; walkTo(s.x,s.z,()=>Math.hypot(c.x-s.x,c.z-s.z)<12); step(0.5);
       out.action=document.querySelector('#hud .action').innerText; document.querySelector('#hud .action').click();

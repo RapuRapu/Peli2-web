@@ -110,9 +110,10 @@ export function buildQuests(save, { chestBuried = false, navyArrivesIn = null } 
     },
     {
       title: 'Build a raft',
-      description: 'Craft a raft frame, a hide sail and a paddle, then build the raft at the marked spot on the beach.',
+      description: 'Craft a raft frame, a hide sail and a paddle, then build the raft at the marked spot on the beach. The navy blockades the bay until they leave.',
       steps: [
         ...Object.keys(RAFT_PARTS).map((type) => step(`${ITEM_TYPES[type].icon} ${ITEM_TYPES[type].name}`, save.raftBuilt ? 1 : count(save, type), 1)),
+        step('⚓ Navy has left the bay', navy.state === 'gone' || save.raftBuilt ? 1 : 0, 1),
         step('⛵ Build the raft', save.raftBuilt ? 1 : 0, 1),
       ],
       done: save.raftBuilt,

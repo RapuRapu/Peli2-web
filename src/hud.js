@@ -264,7 +264,11 @@ export function createHud() {
     const directionX = Math.cos(screenAngle);
     const directionY = -Math.sin(screenAngle);
     const scale = Math.min(halfWidth / Math.max(1e-3, Math.abs(directionX)), halfHeight / Math.max(1e-3, Math.abs(directionY)));
-    element.style.transform = `translate(${innerWidth / 2 + directionX * scale - 24}px, ${centerY + directionY * scale - 24}px)`;
+    let arrowX = innerWidth / 2 + directionX * scale;
+    const arrowY = centerY + directionY * scale;
+    if (arrowY < 190 && arrowX < 200) arrowX = 200;
+    if (arrowY < 200 && arrowX > innerWidth - 210) arrowX = innerWidth - 210;
+    element.style.transform = `translate(${arrowX - 24}px, ${arrowY - 24}px)`;
     element.querySelector('.chevron').style.transform = `rotate(${-screenAngle}rad)`;
     element.classList.add('visible');
   }

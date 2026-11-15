@@ -53,7 +53,7 @@ export function createTunnels(scene, ground, savedTunnel) {
   underground.visible = false;
   scene.add(underground);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE), new THREE.MeshStandardMaterial({ color: 0x5a4330, roughness: 1 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE), new THREE.MeshStandardMaterial({ color: 0x4a3626, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   underground.add(floor);
@@ -70,7 +70,7 @@ export function createTunnels(scene, ground, savedTunnel) {
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.3, 9, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff1c0, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
   underground.add(shaft);
 
-  const torch = new THREE.PointLight(0xffb060, 60, 26, 1.4);
+  const torch = new THREE.PointLight(0xffa850, 34, 24, 1.3);
   torch.castShadow = false;
   underground.add(torch);
   const caveFill = new THREE.HemisphereLight(0x6a5a50, 0x2a1e14, 0.9);
@@ -107,13 +107,15 @@ export function createTunnels(scene, ground, savedTunnel) {
           dummy.scale.setScalar(0.001);
         } else {
           const wobble = Math.sin(column * 12.9 + row * 78.2) * 0.5 + 0.5;
-          dummy.position.set(center.x, TUNNEL_FLOOR_Y + ROCK_HEIGHT / 2 + wobble * 0.12, center.z);
-          dummy.scale.set(1, 1 + wobble * 0.16, 1);
-          if (isEdge(column, row)) rockColor.setRGB(0.2, 0.17, 0.15);
-          else rockColor.setRGB(0.5 + wobble * 0.1, 0.4 + wobble * 0.07, 0.3 + wobble * 0.04);
+          const wobbleB = Math.sin(column * 39.3 + row * 11.7) * 0.5 + 0.5;
+          const heightScale = 0.85 + wobble * 0.4;
+          dummy.position.set(center.x + (wobbleB - 0.5) * 0.12, TUNNEL_FLOOR_Y + (ROCK_HEIGHT * heightScale) / 2, center.z + (wobble - 0.5) * 0.12);
+          dummy.scale.set(1.02 + wobbleB * 0.06, heightScale, 1.02 + wobble * 0.06);
+          if (isEdge(column, row)) rockColor.setRGB(0.14, 0.12, 0.11);
+          else rockColor.setRGB(0.34 + wobble * 0.08, 0.27 + wobbleB * 0.06, 0.2 + wobble * 0.04);
           rocks.setColorAt(index, rockColor);
         }
-        dummy.rotation.set(0, 0, 0);
+        dummy.rotation.set(0, dug.has(index) ? 0 : (Math.sin(column * 5.1 + row * 3.7) * 0.07), 0);
         dummy.updateMatrix();
         rocks.setMatrixAt(index, dummy.matrix);
       }
@@ -233,7 +235,7 @@ export function createTunnels(scene, ground, savedTunnel) {
 
   function update(deltaTime, time, character, digMultiplier) {
     torch.position.set(character.state.x, TUNNEL_FLOOR_Y + 3.2, character.state.z);
-    torch.intensity = 60 + Math.sin(time * 11) * 4 + Math.sin(time * 7.3) * 3;
+    torch.intensity = 34 + Math.sin(time * 11) * 2.5 + Math.sin(time * 7.3) * 2;
     if (!task.active) return null;
     const state = character.state;
     if (state.pathIndex < state.path.length) return null;
