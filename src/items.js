@@ -2,12 +2,12 @@ import * as THREE from 'three';
 import { createRandom } from './noise.js';
 
 export const ITEM_TYPES = {
-  barrel: { name: 'Tynnyri', icon: '🛢️' },
-  crate: { name: 'Laatikko', icon: '📦' },
-  rope: { name: 'Köysi', icon: '🪢' },
-  plank: { name: 'Lankku', icon: '🪵' },
-  pouch: { name: 'Kukkaro', icon: '💰', gold: 25 },
-  sailcloth: { name: 'Purjekangas', icon: '🧵' },
+  barrel: { name: 'Barrel', icon: '🛢️' },
+  crate: { name: 'Crate', icon: '📦' },
+  rope: { name: 'Rope', icon: '🪢' },
+  plank: { name: 'Plank', icon: '🪵' },
+  pouch: { name: 'Coin pouch', icon: '💰', gold: 25 },
+  sailcloth: { name: 'Sailcloth', icon: '🧵' },
 };
 
 const PICKUP_RADIUS = 2.0;

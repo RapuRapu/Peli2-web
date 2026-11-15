@@ -25,7 +25,7 @@ const BOARDING_DISTANCE = 70;
 const LANDING_SEARCH_RADIUS = 80;
 const MAX_LANDING_SPEED = 2.6;
 const REPAIR_REQUIREMENTS = { plank: 4, rope: 2, barrel: 1, sailcloth: 1 };
-const REPAIR_LABELS = { plank: 'Lankut', rope: 'Köydet', barrel: 'Tynnyri', sailcloth: 'Purjekangas' };
+const REPAIR_LABELS = { plank: 'Planks', rope: 'Ropes', barrel: 'Barrel', sailcloth: 'Sailcloth' };
 const REPAIR_DISTANCE = 16;
 const LAUNCH_SECONDS = 2.5;
 const BEACHED_ROLL = -0.7;
@@ -332,7 +332,7 @@ function enterMode(nextMode) {
 function boardShip() {
   save.hasSailed = true;
   enterMode('sailing');
-  hud.showToast('Laivaan!');
+  hud.showToast('All aboard!');
   persist();
 }
 
@@ -341,7 +341,7 @@ function goAshore(landingPoint) {
   character.place(landingPoint.x, landingPoint.z, Math.atan2(landingPoint.x - shipState.x, landingPoint.z - shipState.z));
   shipState.speed = 0;
   enterMode('onFoot');
-  hud.showToast('Maihin!');
+  hud.showToast('Ashore!');
   persist();
 }
 
@@ -370,8 +370,8 @@ function updateContextAction(deltaTime) {
     if (!save.sloopRepaired) {
       const nearSloop = Math.hypot(characterState.x - beachedSloop.x, characterState.z - beachedSloop.z) < REPAIR_DISTANCE;
       const missing = missingRepairMaterials();
-      const subtitle = missing.length ? 'Puuttuu: ' + missing.map(([type, count]) => `${REPAIR_LABELS[type]} ${count}`).join(', ') : 'Kaikki tarvikkeet mukana!';
-      hud.setAction(nearSloop ? '🔨 Korjaa slooppi' : null, tryRepairSloop, { subtitle, disabled: missing.length > 0 });
+      const subtitle = missing.length ? 'Missing: ' + missing.map(([type, count]) => `${REPAIR_LABELS[type]} ${count}`).join(', ') : 'All materials ready!';
+      hud.setAction(nearSloop ? '🔨 Repair the sloop' : null, tryRepairSloop, { subtitle, disabled: missing.length > 0 });
       return;
     }
     if (launch.active) {
@@ -381,10 +381,10 @@ function updateContextAction(deltaTime) {
     const distanceToShip = Math.hypot(characterState.x - shipState.x, characterState.z - shipState.z);
     const nearShip = distanceToShip < BOARDING_DISTANCE;
     const atShore = distanceToShip < 40 || ground.heightAt(characterState.x, characterState.z) < 2.5;
-    hud.setAction(nearShip && atShore ? '⚓ Soutaa slooppiin' : null, boardShip);
+    hud.setAction(nearShip && atShore ? '⚓ Row to the sloop' : null, boardShip);
   } else {
     const landingPoint = shipState.speed < MAX_LANDING_SPEED ? findLandingSpot() : null;
-    hud.setAction(landingPoint ? '⚓ Mene maihin' : null, landingPoint ? () => goAshore(landingPoint) : null);
+    hud.setAction(landingPoint ? '⚓ Go ashore' : null, landingPoint ? () => goAshore(landingPoint) : null);
   }
 }
 
@@ -397,7 +397,7 @@ function missingRepairMaterials() {
 function tryRepairSloop() {
   const missing = missingRepairMaterials();
   if (missing.length > 0) {
-    hud.showToast('Puuttuu: ' + missing.map(([type, count]) => `${REPAIR_LABELS[type]} ${count}`).join(', '));
+    hud.showToast('Missing: ' + missing.map(([type, count]) => `${REPAIR_LABELS[type]} ${count}`).join(', '));
     return;
   }
   for (const [type, required] of Object.entries(REPAIR_REQUIREMENTS)) save.inventory[type] -= required;
@@ -406,7 +406,7 @@ function tryRepairSloop() {
   launch.progress = 0;
   ship.setDamaged(false);
   hud.setInventory(save.gold, save.inventory);
-  hud.showToast('Slooppi korjattu!');
+  hud.showToast('Sloop repaired!');
   updateObjective();
   persist();
 }
@@ -417,18 +417,18 @@ function buildQuests() {
     have: save.sloopRepaired ? need : Math.min(need, save.inventory[type] ?? 0),
     need,
   }));
-  repairSteps.push({ label: '🔨 Korjaa slooppi rannalla', have: save.sloopRepaired ? 1 : 0, need: 1 });
+  repairSteps.push({ label: '🔨 Repair the sloop on the beach', have: save.sloopRepaired ? 1 : 0, need: 1 });
   return [
     {
-      title: 'Korjaa slooppi',
-      description: 'Haaksirikko jätti sinut saarelle. Rannalla makaa vaurioitunut slooppi. Etsi saarelta tarvikkeet ja korjaa se.',
+      title: 'Repair the sloop',
+      description: 'The shipwreck left you stranded on this island. A damaged sloop lies on the beach. Find materials around the island and repair it.',
       steps: repairSteps,
       done: save.sloopRepaired,
     },
     {
-      title: 'Lähde merelle',
-      description: 'Slooppi on vesillä. Nouse laivaan ja purjehdi.',
-      steps: [{ label: '⚓ Nouse slooppiin', have: save.hasSailed ? 1 : 0, need: 1 }],
+      title: 'Set sail',
+      description: 'The sloop is afloat. Climb aboard and set sail.',
+      steps: [{ label: '⚓ Board the sloop', have: save.hasSailed ? 1 : 0, need: 1 }],
       done: Boolean(save.hasSailed),
       locked: !save.sloopRepaired,
     },
@@ -475,7 +475,7 @@ function collectItem(item) {
   const itemType = ITEM_TYPES[item.type];
   if (itemType.gold) {
     save.gold += itemType.gold;
-    hud.showToast(`+${itemType.gold} kultaa`);
+    hud.showToast(`+${itemType.gold} gold`);
   } else {
     save.inventory[item.type] = (save.inventory[item.type] ?? 0) + 1;
     hud.showToast(`+1 ${itemType.name}`);

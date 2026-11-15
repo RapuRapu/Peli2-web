@@ -1,8 +1,8 @@
 import { ITEM_TYPES } from './items.js';
 
 const HINTS = {
-  sailing: '<span>Kosketa merta: purjehdi sinne</span> · <span>Pidä pohjassa: ohjaa</span> · <span>Nipistä: zoomaa</span>',
-  onFoot: '<span>Kosketa: kävele sinne</span> · <span>Kerää korjaustarvikkeet</span> · <span>Nipistä: zoomaa</span>',
+  sailing: '<span>Tap the sea: sail there</span> · <span>Hold: steer</span> · <span>Pinch: zoom</span>',
+  onFoot: '<span>Tap: walk there</span> · <span>Gather repair materials</span> · <span>Pinch: zoom</span>',
 };
 
 export function createHud() {
@@ -19,7 +19,7 @@ export function createHud() {
     <button class="quest-chip" type="button"></button>
     <div class="quest-log">
       <div class="quest-panel">
-        <div class="quest-header"><span>📜 Tehtävät</span><button class="quest-close" type="button">✕</button></div>
+        <div class="quest-header"><span>📜 Quests</span><button class="quest-close" type="button">✕</button></div>
         <div class="quest-list"></div>
       </div>
     </div>
@@ -67,7 +67,7 @@ export function createHud() {
       return;
     }
     resetArmedUntil = now + 3000;
-    resetButton.textContent = 'Aloita alusta?';
+    resetButton.textContent = 'Start over?';
     resetButton.classList.add('armed');
     setTimeout(() => {
       resetButton.textContent = '↺';
@@ -115,7 +115,7 @@ export function createHud() {
       const need = active.steps.reduce((sum, step) => sum + step.need, 0);
       questChip.textContent = `📜 ${active.title} ${have}/${need}`;
     } else {
-      questChip.textContent = '📜 Tehtävät';
+      questChip.textContent = '📜 Quests';
     }
     questList.innerHTML = quests.filter((quest) => !quest.locked).map((quest) => `
       <div class="quest ${quest.done ? 'done' : ''}">
@@ -160,7 +160,7 @@ export function createHud() {
         lastSpeedText = nextSpeedText;
       }
     }
-    const nextStatus = !sailing ? '' : aground ? 'Karilla!' : efficiencyAngle < 0.56 ? 'Vastatuuleen – käänny' : '';
+    const nextStatus = !sailing ? '' : aground ? 'Aground!' : efficiencyAngle < 0.56 ? 'Into the wind – turn away' : '';
     if (nextStatus !== lastStatus) {
       status.textContent = nextStatus;
       status.classList.toggle('visible', nextStatus !== '');
