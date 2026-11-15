@@ -77,6 +77,9 @@
   #hud .guide-arrow .chevron { position: absolute; inset: -22px; display: flex; align-items: center; justify-content: flex-end; font-size: 26px; color: #f2a030; -webkit-text-stroke: 1.5px #3a2008; }
   #hud .guide-arrow.sloop { background: rgba(40, 22, 8, 0.85); border-color: #f4ecd8; }
   #hud .guide-arrow.visible { display: block; }
+  #hud .guide-arrow.threat { background: #b8231a; border-color: #ffd6cc; animation: threat-pulse 1s ease-in-out infinite; }
+  #hud .guide-arrow.threat .chevron { color: #d83a2a; -webkit-text-stroke: 1.5px #fff; }
+  @keyframes threat-pulse { 50% { box-shadow: 0 0 0 6px rgba(216, 58, 42, 0.45); } }
   #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
 </style>
 </head>

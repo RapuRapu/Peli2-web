@@ -273,7 +273,10 @@ export function createHud() {
     element.classList.add('visible');
   }
 
-  const setGuideArrow = (screenAngle, icon, distance) => placeEdgeArrow(guideArrow, screenAngle, icon, distance);
+  const setGuideArrow = (screenAngle, icon, distance, threat = false) => {
+    guideArrow.classList.toggle('threat', threat);
+    placeEdgeArrow(guideArrow, screenAngle, icon, distance);
+  };
   const setSloopArrow = (screenAngle) => placeEdgeArrow(sloopArrow, screenAngle, null);
 
   function setRecipes(recipes) {

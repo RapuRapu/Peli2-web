@@ -136,7 +136,7 @@ export function createTunnels(scene, ground, savedTunnel) {
           dummy.position.set(center.x + (wobbleB - 0.5) * 0.12, TUNNEL_FLOOR_Y + (ROCK_HEIGHT * heightScale) / 2, center.z + (wobble - 0.5) * 0.12);
           dummy.scale.set(1.02 + wobbleB * 0.06, heightScale, 1.02 + wobble * 0.06);
           if (isEdge(column, row)) rockColor.setRGB(0.07, 0.06, 0.06);
-          else rockColor.setRGB(0.1 + wobble * 0.03, 0.095 + wobbleB * 0.025, 0.09 + wobble * 0.02);
+          else rockColor.setRGB(0.1 + wobble * 0.012, 0.095 + wobble * 0.01, 0.09 + wobble * 0.008);
           rocks.setColorAt(index, rockColor);
         }
         dummy.rotation.set(0, dug.has(index) ? 0 : (Math.sin(column * 5.1 + row * 3.7) * 0.07), 0);

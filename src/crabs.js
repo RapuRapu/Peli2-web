@@ -151,7 +151,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     scene.add(mesh);
     const home = beachPointNear(beach.x, beach.z, 18);
     placeOnGround(mesh, home.x, home.z);
-    const alert = buildEmojiSprite('💰', 2.0);
+    const alert = buildEmojiSprite('💰', 2.2, 'rgba(190, 30, 20, 0.88)');
     alert.visible = false;
     scene.add(alert);
     return { index, mesh, alert, x: home.x, z: home.z, homeX: home.x, homeZ: home.z, heading: 0, state: 'idle', carrying: null, target: null, wanderTimer: 0, cooldown: 30 + random() * 60, beach };
@@ -168,9 +168,13 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     const friendBadge = buildEmojiSprite('❤️', 1.5, 'rgba(255, 255, 255, 0.92)');
     friendBadge.visible = false;
     scene.add(friendBadge);
+    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0x4aa8ff, transparent: true, opacity: 0.85, depthWrite: false }));
+    friendRing.rotation.x = -Math.PI / 2;
+    friendRing.visible = false;
+    scene.add(friendRing);
     heart.visible = false;
     scene.add(heart);
-    return { mesh, heart, friendBadge, x: spot.x, z: spot.z, homeX: spot.x, homeZ: spot.z, heading: 0, friend: false, wanderTimer: 0, eraseTimer: 0, followOffset: 0 };
+    return { mesh, heart, friendBadge, friendRing, x: spot.x, z: spot.z, homeX: spot.x, homeZ: spot.z, heading: 0, friend: false, wanderTimer: 0, eraseTimer: 0, followOffset: 0 };
   });
 
   function makeFriend(digger, followIndex) {
@@ -178,6 +182,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     digger.followOffset = followIndex;
     digger.heart.visible = false;
     digger.friendBadge.visible = true;
+    digger.friendRing.visible = true;
   }
 
   for (let i = 0; i < Math.min(friendCount, diggers.length); i++) makeFriend(diggers[i], i);
@@ -282,6 +287,8 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
           const burrowSpot = burrowSpotAwayFrom(thief.x, thief.z);
           thief.target = burrowSpot;
           thief.alert.visible = true;
+          poseCrab(thief, time, true);
+          return { grabbed: loot };
         }
       }
     } else if (thief.state === 'fleeing') {
@@ -313,8 +320,8 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     let moving = false;
     if (digger.friend && playerX !== null) {
       const sideAngle = playerHeading + Math.PI + (digger.followOffset - 1) * 0.7;
-      const targetX = playerX + Math.sin(sideAngle) * 2.2;
-      const targetZ = playerZ + Math.cos(sideAngle) * 2.2;
+      const targetX = playerX + Math.sin(sideAngle) * 3.2;
+      const targetZ = playerZ + Math.cos(sideAngle) * 3.2;
       const remaining = Math.hypot(targetX - digger.x, targetZ - digger.z);
       if (remaining > 40) {
         digger.x = targetX;
@@ -324,6 +331,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
         moveToward(digger, targetX, targetZ, Math.min(FRIEND_SPEED, remaining * 2.5), deltaTime);
       }
       digger.friendBadge.position.set(digger.x, digger.mesh.position.y + 1.9, digger.z);
+      digger.friendRing.position.set(digger.x, digger.mesh.position.y + 0.06, digger.z);
       digger.eraseTimer -= deltaTime;
       if (digger.eraseTimer <= 0) {
         digger.eraseTimer = 0.4;
@@ -382,10 +390,11 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
 
   function update(deltaTime, time, worldTime, playerX, playerZ, playerHeading, hasCoconut) {
     lastWorldTime = worldTime;
-    const events = { stashed: [], migrationStarted: false };
+    const events = { stashed: [], grabbed: [], migrationStarted: false };
     for (const thief of thieves) {
       const result = updateThief(thief, deltaTime, time, playerX, playerZ);
       if (result?.stashed) events.stashed.push(result.stashed);
+      if (result?.grabbed) events.grabbed.push(result.grabbed);
     }
     for (const digger of diggers) updateDigger(digger, deltaTime, time, playerX, playerZ, playerHeading, hasCoconut);
     for (const burrow of burrows) {

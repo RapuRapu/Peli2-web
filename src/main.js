@@ -666,6 +666,7 @@ function updateCrabs(deltaTime) {
     if (playerX !== null && Math.hypot(loot.x - playerX, loot.z - character.state.z) < 70) hud.showToast('🦀 A hermit crab hid a coin pouch in its burrow!');
     persist();
   }
+  if (events.grabbed.length && playerX !== null && events.grabbed.some((loot) => Math.hypot(loot.x - playerX, loot.z - character.state.z) < 70)) hud.showToast('🦀 Thief! A crab grabbed a coin pouch – catch it!');
   if (events.migrationStarted) hud.showToast('🦀 Crab migration! Beach tracks are being trampled');
   if (onFoot) {
     for (const thief of crabs.thieves) {
@@ -864,7 +865,7 @@ function updateGuideArrow() {
       const distance = Math.hypot(marine.body.state.x - character.state.x, marine.body.state.z - character.state.z);
       return !best || distance < best.distance ? { marine, distance } : best;
     }, null) : null;
-  if (nearestMarine) hud.setGuideArrow(offScreenAngle(nearestMarine.marine.body.state.x, nearestMarine.marine.body.state.z), '💂', nearestMarine.distance);
+  if (nearestMarine) hud.setGuideArrow(offScreenAngle(nearestMarine.marine.body.state.x, nearestMarine.marine.body.state.z), '💂', nearestMarine.distance, true);
   else hud.setGuideArrow(nearestBoar ? offScreenAngle(nearestBoar.boar.x, nearestBoar.boar.z) : null, '🐗', nearestBoar?.distance ?? null);
   const partsReady = !save.raftBuilt && missingRaftParts(save).length === 0;
   hud.setSloopArrow(mode === 'onFoot' && partsReady ? offScreenAngle(raftSite.x, raftSite.z) : null);
@@ -873,7 +874,8 @@ function updateGuideArrow() {
 function offScreenAngle(x, z) {
   guideTarget.set(x, ground.heightAt(x, z), z).project(camera);
   const inFront = guideTarget.z < 1;
-  const onScreen = inFront && Math.abs(guideTarget.x) < 0.85 && guideTarget.y < 0.8 && guideTarget.y > -0.6;
+  const underHudChips = guideTarget.x > 0.6 && guideTarget.y > -0.2;
+  const onScreen = inFront && !underHudChips && Math.abs(guideTarget.x) < 0.85 && guideTarget.y < 0.8 && guideTarget.y > -0.6;
   if (onScreen) return null;
   const sign = inFront ? 1 : -1;
   return Math.atan2(guideTarget.y * sign * innerHeight, guideTarget.x * sign * innerWidth);
