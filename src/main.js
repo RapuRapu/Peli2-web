@@ -19,6 +19,7 @@ import { createTracks } from './tracks.js';
 import { createTreasure } from './treasure.js';
 import { createNavy } from './navy.js';
 import { createCrabs } from './crabs.js';
+import { createTunnels, TUNNEL_FLOOR_Y } from './tunnels.js';
 import { tide, setTideTime, tideStatus } from './tide.js';
 import { RECIPES, RAFT_PARTS, REARM_FRONDS, HUNGER_DRAIN_PER_SECOND, recipeViews, missingRaftParts, buildQuests, canAfford, spend, hasTool } from './survival.js';
 import { loadSave, writeSave, clearSave, createEmptySave } from './save.js';
@@ -28,7 +29,7 @@ const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.ge
 const isScreenshotMode = screenshotPose !== null;
 
 const CAMERA_YAW = 0.55;
-const ZOOM_LIMITS = { sailing: [75, 380], onFoot: [24, 100] };
+const ZOOM_LIMITS = { sailing: [75, 380], onFoot: [24, 100], underground: [16, 45] };
 const AUTOSAVE_INTERVAL_SECONDS = 5;
 const BOARDING_DISTANCE = 70;
 const LANDING_SEARCH_RADIUS = 80;
@@ -63,7 +64,9 @@ sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.5;
 scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(new THREE.Color(0.62, 0.76, 0.95), new THREE.Color(0.5, 0.42, 0.3), 1.45));
+const skyLight = new THREE.HemisphereLight(new THREE.Color(0.62, 0.76, 0.95), new THREE.Color(0.5, 0.42, 0.3), 1.45);
+scene.add(skyLight);
+const caveBackground = new THREE.Color(0.03, 0.02, 0.015);
 
 const heightmap = generateIslandHeightmap();
 const baseHiddenRectangle = new THREE.Vector4(1e9, 1e9, -1e9, -1e9);
@@ -252,6 +255,10 @@ const itemZones = [
 ];
 
 const save = isScreenshotMode ? createEmptySave() : loadSave();
+if (save.mode === 'underground') {
+  save.mode = 'onFoot';
+  if (save.tunnel) save.character = { x: save.tunnel.x + 1.8, z: save.tunnel.z + 1.8, heading: 0 };
+}
 if (isScreenshotMode) {
   save.mode = startPose.mode;
   const tideParameter = searchParameters.get('tide');
@@ -333,6 +340,8 @@ const harvesting = createHarvesting(scene, ground, walkGrid, vegetation.harvesta
 const tracks = createTracks(scene, ground);
 const treasure = createTreasure(scene, ground, save.caches);
 if (save.navy.state === 'landed') save.navy.state = 'coming';
+const tunnels = createTunnels(scene, ground, save.tunnel);
+const tunnelGround = { heightAt: () => TUNNEL_FLOOR_Y, floorY: TUNNEL_FLOOR_Y };
 const crabs = createCrabs(scene, ground, { tracks, items, beaches: [wreckSpot, westBeach, eastCove], savedBurrows: save.burrows, friendCount: save.crabFriends });
 
 function coastPointFrom(x, z) {
@@ -370,9 +379,9 @@ const performanceMonitor = createPerformanceMonitor(renderer, { fixedPixelRatio:
 const hud = createHud();
 
 let mode = save.mode;
-const cameraDistanceByMode = { sailing: 150, onFoot: innerWidth < innerHeight ? 32 : 44 };
+const cameraDistanceByMode = { sailing: 150, onFoot: innerWidth < innerHeight ? 32 : 44, underground: innerWidth < innerHeight ? 24 : 30 };
 if (isScreenshotMode) cameraDistanceByMode[startPose.mode] = startPose.distance;
-const interactedInMode = { sailing: false, onFoot: false };
+const interactedInMode = { sailing: false, onFoot: false, underground: false };
 
 function persist() {
   if (isScreenshotMode) return;
@@ -385,13 +394,22 @@ function persist() {
   save.caches = treasure.serialize();
   save.burrows = crabs.serializeBurrows();
   save.crabFriends = crabs.friendCountNow();
+  save.tunnel = tunnels.serialize();
   writeSave(save);
 }
 
 function enterMode(nextMode) {
   mode = nextMode;
   const onFoot = mode === 'onFoot';
-  character.setVisible(onFoot);
+  const inTunnel = mode === 'underground';
+  character.setVisible(onFoot || inTunnel);
+  tunnels.setActive(inTunnel);
+  tunnels.cancelTask();
+  sun.intensity = inTunnel ? 0 : 2.7;
+  skyLight.intensity = inTunnel ? 0 : 1.45;
+  scene.background = inTunnel ? caveBackground : lighting.fogColor;
+  scene.fog.color.copy(inTunnel ? caveBackground : lighting.fogColor);
+  character.setWorkPose(null, 0);
   shipController.state.anchored = onFoot;
   shipController.state.hasTarget = false;
   character.stop();
@@ -440,6 +458,10 @@ function updateContextAction(deltaTime) {
   const shipState = shipController.state;
   if (mode === 'onFoot') {
     const characterState = character.state;
+    if (tunnels.exists() && tunnels.nearEntrance(characterState.x, characterState.z) && !groundTask.active) {
+      hud.setAction('🪜 Enter tunnel', enterTunnel, { subtitle: tunnels.state.covered ? 'Entrance hidden under fronds' : 'Entrance visible · tap it to hide (2 fronds)' });
+      return;
+    }
     const patchNearby = treasure.caches.find((cache) => cache.patchVisible && !cache.underground && Math.hypot(cache.x - characterState.x, cache.z - characterState.z) < 3.5);
     if (patchNearby && !groundTask.active) {
       const fronds = save.inventory.fronds ?? 0;
@@ -461,6 +483,9 @@ function updateContextAction(deltaTime) {
     const nearShip = distanceToShip < BOARDING_DISTANCE;
     const atShore = distanceToShip < 40 || ground.heightAt(characterState.x, characterState.z) < 2.5;
     hud.setAction(nearShip && atShore ? '⚓ Board the raft' : null, boardShip);
+  } else if (mode === 'underground') {
+    const onEntrance = tunnels.onEntranceCell(character.state.x, character.state.z);
+    hud.setAction(onEntrance ? '🪜 Climb out' : null, climbOutOfTunnel);
   } else {
     const landingPoint = shipState.speed < MAX_LANDING_SPEED ? findLandingSpot() : null;
     hud.setAction(landingPoint ? '⚓ Go ashore' : null, landingPoint ? () => goAshore(landingPoint) : null);
@@ -549,7 +574,7 @@ function digUpCache(cache) {
 
 let navy = null;
 function ensureNavy() {
-  if (!navy) navy = createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife, landingPointFor: coastPointFrom, seaPointFor: launchPointFrom, tunnelEntrances: () => (typeof tunnels !== 'undefined' && tunnels ? tunnels.visibleEntrances() : []) });
+  if (!navy) navy = createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife, landingPointFor: coastPointFrom, seaPointFor: launchPointFrom, tunnelEntrances: () => tunnels.visibleEntrances() });
   return navy;
 }
 
@@ -575,7 +600,16 @@ const navyCallbacks = {
   onChestTaken: () => {
     save.inventory.treasureChest = 0;
   },
-  searchTunnel: () => (typeof tunnels !== 'undefined' && tunnels ? tunnels.marinesSearch() : false),
+  searchTunnel: () => {
+    if (mode === 'underground' && (save.inventory.treasureChest ?? 0) > 0) {
+      save.inventory.treasureChest = 0;
+      return 'chest';
+    }
+    const hidden = treasure.caches.find((cache) => cache.underground && cache.contents !== 'empty');
+    if (!hidden) return null;
+    treasure.removeCache(hidden);
+    return hidden.contents;
+  },
   onFinished: (found) => {
     save.navy.found = found ?? 'nothing';
     hud.showToast(found === 'chest' ? '💀 The navy found your treasure!' : found === 'decoy' ? '📦 They took the decoy – the real chest is safe!' : 'The marines give up and head back');
@@ -682,8 +716,117 @@ function digUpBurrow(burrow) {
   });
 }
 
+function tapUnderground() {
+  interactedInMode.underground = true;
+  character.setWorkPose(null, 0);
+  const cache = treasure.cacheUnderRay(raycaster.ray, true);
+  if (cache) {
+    tunnels.walkTo(cache.x, cache.z, character);
+    tunnels.startWork(digSeconds(2.5), () => {
+      if (cache.contents === 'chest') addToInventory('treasureChest', 1);
+      if (cache.contents === 'decoy') addToInventory('decoyChest', 1);
+      treasure.removeCache(cache);
+      hud.showToast(cache.contents === 'chest' ? '👑 Dug up the treasure' : '📦 Dug up the decoy');
+      refreshInventoryViews();
+      persist();
+    });
+    return;
+  }
+  const result = tunnels.tap(raycaster.ray, character);
+  if (result.kind === 'bedrock') hud.showToast('Solid bedrock – too hard to dig');
+  if (result.kind === 'unreachable') hud.showToast('Dig next to an open tunnel');
+}
+
+function digTunnelEntrance() {
+  if (tunnels.exists()) return;
+  const characterState = character.state;
+  const x = characterState.x + Math.sin(characterState.heading) * 1.4;
+  const z = characterState.z + Math.cos(characterState.heading) * 1.4;
+  if (ground.heightAt(x, z) < 1.8) {
+    hud.showToast('Too close to the sea – the tunnel would flood');
+    return;
+  }
+  const problem = canDigAt(x, z);
+  if (problem) {
+    hud.showToast(problem);
+    return;
+  }
+  hud.closeMenus();
+  treasure.setDigPreview(x, z, true);
+  startGroundTask(x, z, digSeconds(6), 'tree', () => {
+    treasure.setDigPreview(x, z, false);
+    tunnels.create(x, z);
+    hud.showToast('⛏️ Tunnel dug! Climb in to dig deeper');
+    persist();
+  });
+}
+
+function toggleEntranceCover() {
+  const tunnelState = tunnels.state;
+  if (tunnelState.covered) {
+    tunnels.setCovered(false);
+    hud.showToast('Fronds pulled off the entrance');
+    persist();
+    return;
+  }
+  if ((save.inventory.fronds ?? 0) < 2) {
+    hud.showToast('Hiding the entrance needs 2 palm fronds');
+    return;
+  }
+  startGroundTask(tunnelState.x, tunnelState.z, 1.5, 'bush', () => {
+    save.inventory.fronds -= 2;
+    tunnels.setCovered(true);
+    tracks.eraseWithin(tunnelState.x, tunnelState.z, 5);
+    hud.showToast('🌿 Entrance hidden');
+    refreshInventoryViews();
+    persist();
+  });
+}
+
+function enterTunnel() {
+  const tunnelState = tunnels.state;
+  cancelGroundTask();
+  character.place(tunnelState.x, tunnelState.z + 0.3, 0);
+  enterMode('underground');
+  hud.showToast('⛏️ Tap rock walls to dig');
+  persist();
+}
+
+function climbOutOfTunnel() {
+  const tunnelState = tunnels.state;
+  const exit = nearestWalkablePoint(tunnelState.x + 1.8, tunnelState.z + 1.8) ?? { x: tunnelState.x + 1.8, z: tunnelState.z + 1.8 };
+  character.place(exit.x, exit.z, 0);
+  enterMode('onFoot');
+  if (!tunnelState.covered) hud.showToast('Tip: tap the entrance to hide it with fronds');
+  persist();
+}
+
+function buryUnderground(contents) {
+  const spot = tunnels.cellCenterAt(character.state.x, character.state.z);
+  if (!spot || spot.isEntrance) {
+    hud.showToast('Dig a side tunnel first – not under the ladder');
+    return;
+  }
+  if (treasure.caches.some((cache) => cache.underground && Math.hypot(cache.x - spot.x, cache.z - spot.z) < 1)) {
+    hud.showToast('Something is already buried here');
+    return;
+  }
+  hud.closeMenus();
+  character.setPath([{ x: spot.x, z: spot.z }]);
+  tunnels.startWork(digSeconds(3), () => {
+    if (contents === 'chest') save.inventory.treasureChest -= 1;
+    if (contents === 'decoy') save.inventory.decoyChest -= 1;
+    treasure.addCache({ id: `cache-${Math.round(save.worldTime * 10)}`, x: spot.x, z: spot.z, contents, buriedAt: save.worldTime, underground: true, floorY: TUNNEL_FLOOR_Y });
+    hud.showToast(contents === 'chest' ? '👑 Treasure buried in the tunnel' : '📦 Decoy buried in the tunnel');
+    refreshInventoryViews();
+    persist();
+  });
+}
+
 function bagActionsFor(type) {
+  if (mode === 'underground') return type === 'treasureChest' || type === 'decoyChest' ? [{ id: 'buryUnderground', label: 'Bury here' }] : [];
   if (mode !== 'onFoot') return [];
+  if (type === 'pickaxe') return tunnels.exists() ? [] : [{ id: 'tunnel', label: 'Dig tunnel here' }];
   if (type === 'treasureChest' || type === 'decoyChest') return [{ id: 'bury', label: 'Bury here' }];
   if (type === 'diggingStick') return [{ id: 'fakeHole', label: 'Dig fake hole' }];
   return [];
@@ -692,6 +835,8 @@ function bagActionsFor(type) {
 hud.onBagAction((type, action) => {
   if (action === 'bury') buryHere(type === 'treasureChest' ? 'chest' : 'decoy');
   if (action === 'fakeHole') buryHere('empty');
+  if (action === 'tunnel') digTunnelEntrance();
+  if (action === 'buryUnderground') buryUnderground(type === 'treasureChest' ? 'chest' : 'decoy');
 }, bagActionsFor);
 
 const guideTarget = new THREE.Vector3();
@@ -896,6 +1041,10 @@ function steerTowardScreenPoint(clientX, clientY, held) {
 
 function walkTowardScreenPoint(clientX, clientY, isNewTouch) {
   aimRayAt(clientX, clientY);
+  if (mode === 'underground') {
+    if (isNewTouch) tapUnderground();
+    return;
+  }
   let targetX;
   let targetZ;
   if (!isNewTouch && (harvesting.isBusy() || groundTask.active)) return;
@@ -911,6 +1060,11 @@ function walkTowardScreenPoint(clientX, clientY, isNewTouch) {
   if (isNewTouch && trapPlacement.active) {
     const hits = raycaster.intersectObject(detailTerrain.frontMesh(), false);
     if (hits.length > 0) digTrapAt(hits[0].point.x, hits[0].point.z);
+    interactedInMode.onFoot = true;
+    return;
+  }
+  if (isNewTouch && !tappedItem && !tappedCrab && tunnels.entranceUnderRay(raycaster.ray)) {
+    toggleEntranceCover();
     interactedInMode.onFoot = true;
     return;
   }
@@ -1091,7 +1245,7 @@ function updateCamera(deltaTime, snap) {
     const state = character.state;
     focusX = state.x;
     focusZ = state.z;
-    focusY = Math.max(0, ground.heightAt(state.x, state.z)) + 1.5;
+    focusY = mode === 'underground' ? TUNNEL_FLOOR_Y + 1.5 : Math.max(0, ground.heightAt(state.x, state.z)) + 1.5;
     pitch = THREE.MathUtils.lerp(0.92, 1.08, Math.sqrt(zoomFraction));
   }
   const follow = snap ? 1 : 1 - Math.exp(-deltaTime * (mode === 'sailing' ? 2.5 : 5));
@@ -1107,8 +1261,8 @@ function updateCamera(deltaTime, snap) {
 
   const fogNear = cameraDistance * 2.4 + 120;
   const fogFar = cameraDistance * 6.5 + 600;
-  scene.fog.near = fogNear;
-  scene.fog.far = fogFar;
+  scene.fog.near = mode === 'underground' ? cameraDistance * 0.9 : fogNear;
+  scene.fog.far = mode === 'underground' ? cameraDistance * 1.9 : fogFar;
   ocean.uniforms.fogNear.value = fogNear;
   ocean.uniforms.fogFar.value = fogFar;
 
@@ -1215,9 +1369,19 @@ function simulate(deltaTime) {
     updateGroundTask(deltaTime);
     detailTerrain.update(character.state.x, character.state.z);
   }
+  if (mode === 'underground') {
+    character.update(deltaTime, tunnelGround);
+    const result = tunnels.update(deltaTime, simulationTime, character, digSeconds(1));
+    if (result?.dugCell && tunnels.dugCount() % 3 === 0) {
+      addToInventory('stone', 1);
+      hud.showToast('+1 🪨 Stone');
+      refreshInventoryViews();
+    }
+    if (result?.dugCell) persist();
+  }
   items.update(deltaTime, simulationTime, onFoot ? character.state.x : null, character.state.z, collectItem, (type) => ITEM_TYPES[type].category === 'resource');
   wildlife.update(deltaTime, simulationTime, onFoot ? character.state.x : null, character.state.z);
-  treasure.update(deltaTime, save.worldTime, onFoot ? character.state.x : null, character.state.z);
+  treasure.update(deltaTime, save.worldTime, onFoot || mode === 'underground' ? character.state.x : null, character.state.z);
   updateNavy(deltaTime);
   updateCrabs(deltaTime);
   save.hunger = Math.max(0, save.hunger - HUNGER_DRAIN_PER_SECOND * deltaTime);
@@ -1318,4 +1482,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { raycaster, tunnels, tapUnderground, digTunnelEntrance, enterTunnel, climbOutOfTunnel, buryUnderground, toggleEntranceCover, crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };

@@ -227,8 +227,9 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
             }
             callbacks.onEmptyHole?.();
           }
-          if (marine.target?.tunnel && callbacks.searchTunnel?.()) {
-            finish('chest', callbacks.onFinished);
+          const tunnelFind = marine.target?.tunnel ? callbacks.searchTunnel?.() : null;
+          if (tunnelFind) {
+            finish(tunnelFind, callbacks.onFinished);
             break;
           }
           nextTarget(marine);

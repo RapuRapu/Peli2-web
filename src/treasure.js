@@ -75,16 +75,16 @@ export function createTreasure(scene, ground, savedCaches) {
   openHole.visible = false;
   scene.add(openHole);
 
-  function addCache({ id, x, z, contents, buriedAt, patchVisible = true, underground = false, found = false }) {
-    const height = ground.heightAt(x, z);
+  function addCache({ id, x, z, contents, buriedAt, patchVisible = true, underground = false, found = false, floorY = null }) {
+    const height = underground && floorY !== null ? floorY : ground.heightAt(x, z);
     const mound = buildMoundMesh();
     mound.position.set(x, height, z);
     mound.rotation.y = (x * 7.1 + z * 3.3) % (Math.PI * 2);
     const marker = buildOwnerMarker();
     marker.position.set(x, height + 2.4, z);
-    const cache = { id, x, z, height, contents, buriedAt, patchVisible, underground, found, mound, marker };
-    mound.visible = patchVisible && !underground;
-    marker.visible = !underground && !found && contents !== 'empty';
+    const cache = { id, x, z, height, contents, buriedAt, patchVisible, underground, found, floorY, mound, marker };
+    mound.visible = patchVisible;
+    marker.visible = !found && contents !== 'empty';
     scene.add(mound, marker);
     caches.push(cache);
     return cache;
@@ -117,11 +117,11 @@ export function createTreasure(scene, ground, savedCaches) {
   }
 
   const rayPoint = new THREE.Vector3();
-  function cacheUnderRay(ray) {
+  function cacheUnderRay(ray, underground = false) {
     let best = null;
     let bestDistance = 2.4;
     for (const cache of caches) {
-      if (cache.underground) continue;
+      if (cache.underground !== underground) continue;
       rayPoint.set(cache.x, cache.height + 0.3, cache.z);
       const distance = ray.distanceToPoint(rayPoint);
       if (distance < bestDistance) {
@@ -159,7 +159,7 @@ export function createTreasure(scene, ground, savedCaches) {
   }
 
   function serialize() {
-    return caches.map(({ id, x, z, contents, buriedAt, patchVisible, underground, found }) => ({ id, x, z, contents, buriedAt, patchVisible, underground, found }));
+    return caches.map(({ id, x, z, contents, buriedAt, patchVisible, underground, found, floorY }) => ({ id, x, z, contents, buriedAt, patchVisible, underground, found, floorY }));
   }
 
   return { caches, addCache, removeCache, cacheNear, cacheUnderRay, coverPatch, setDigPreview, update, serialize, buildChestMesh };

@@ -3,6 +3,7 @@ import { ITEM_TYPES, ITEM_CATEGORIES } from './items.js';
 const HINTS = {
   sailing: '<span>Tap the sea: sail there</span> · <span>Hold: steer</span> · <span>Pinch: zoom</span>',
   onFoot: '<span>Tap: walk</span> · <span>Tap trees, bushes, rocks: gather</span> · <span>🔨 Craft</span>',
+  underground: '<span>Tap rock: dig</span> · <span>Tap floor: walk</span> · <span>🎒 Bury chest here</span>',
 };
 
 export function createHud() {
