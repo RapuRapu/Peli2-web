@@ -43,11 +43,21 @@ export function createHud() {
     <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span><span class="distance"></span></div>
     <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🛶</span></div>
     <div class="inventory"></div>
-    <div class="tide-chip"></div>
-    <div class="navy-chip"></div>
-    <div class="crab-chip"></div>
     <div class="hunger-chip"><span>🍗</span><div class="hunger-bar"><div class="hunger-fill"></div></div></div>
-    <button class="reset" type="button">↺</button>
+    <div class="status-stack">
+      <div class="tide-chip"></div>
+      <div class="navy-chip"></div>
+      <div class="crab-chip"></div>
+      <button class="pause-button" type="button" aria-label="Pause">⏸</button>
+    </div>
+    <div class="pause-menu">
+      <div class="pause-card">
+        <div class="pause-title">Paused</div>
+        <button class="resume" type="button">▶ Resume</button>
+        <button class="reset" type="button">↺ Start over</button>
+        <div class="pause-note">The game saves automatically.</div>
+      </div>
+    </div>
     <div class="toast"></div>
     <button class="action" type="button"></button>
     <div class="status"></div>
@@ -63,6 +73,10 @@ export function createHud() {
   const toast = root.querySelector('.toast');
   const actionButton = root.querySelector('.action');
   const resetButton = root.querySelector('.reset');
+  const pauseButton = root.querySelector('.pause-button');
+  const pauseMenu = root.querySelector('.pause-menu');
+  const resumeButton = root.querySelector('.resume');
+  let pauseHandler = null;
   const questChip = root.querySelector('.quest-chip');
   const questLog = root.querySelector('.quest-log:not(.craft-log):not(.bag-log)');
   const bagChip = root.querySelector('.bag-chip');
@@ -128,20 +142,33 @@ export function createHud() {
       return;
     }
     resetArmedUntil = now + 3000;
-    resetButton.textContent = 'Start over?';
+    resetButton.textContent = 'Tap again to erase your save';
     resetButton.classList.add('armed');
     setTimeout(() => {
-      resetButton.textContent = '↺';
+      resetButton.textContent = '↺ Start over';
       resetButton.classList.remove('armed');
     }, 3000);
   });
-  for (const element of [actionButton, resetButton, questChip, questLog, craftChip, craftLog, bagChip, bagLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
+  pauseButton.addEventListener('click', () => pauseHandler?.(true));
+  resumeButton.addEventListener('click', () => pauseHandler?.(false));
+
+  function setPaused(paused) {
+    pauseMenu.classList.toggle('visible', paused);
+    pauseButton.style.visibility = paused ? 'hidden' : '';
+    if (paused) closeMenus();
+  }
+
+  function onPause(handler) {
+    pauseHandler = handler;
+  }
+
+  for (const element of [pauseButton, pauseMenu, actionButton, resetButton, questChip, questLog, craftChip, craftLog, bagChip, bagLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
 
   let hintShownAt = performance.now();
   function setMode(mode) {
     compass.style.display = mode === 'sailing' ? '' : 'none';
-    craftChip.style.display = mode === 'onFoot' ? '' : 'none';
-    bagChip.classList.toggle('shifted', mode !== 'onFoot');
+    craftChip.style.display = mode === 'sailing' ? 'none' : '';
+    bagChip.classList.toggle('shifted', mode === 'sailing');
     hint.innerHTML = HINTS[mode];
     hintShownAt = performance.now();
   }
@@ -174,26 +201,32 @@ export function createHud() {
     hungerText.textContent = rounded > 50 ? 'Fed' : rounded > 20 ? 'Peckish' : 'Hungry';
   }
 
+  function isCompact() {
+    return innerWidth < 560;
+  }
+
   function setTide({ rising, secondsToExtreme }) {
     const minutes = Math.floor(secondsToExtreme / 60);
     const seconds = Math.floor(secondsToExtreme % 60).toString().padStart(2, '0');
-    const text = `🌊 ${rising ? 'Rising · high' : 'Falling · low'} in ${minutes}:${seconds}`;
+    const text = isCompact() ? `🌊 ${rising ? '↑' : '↓'} ${minutes}:${seconds}` : `🌊 ${rising ? 'Rising · high' : 'Falling · low'} in ${minutes}:${seconds}`;
     if (text === lastTideText) return;
     lastTideText = text;
     tideChip.textContent = text;
   }
 
-  function setNavy(text) {
+  function setNavy(fullText, shortText = fullText) {
+    const text = isCompact() ? shortText : fullText;
     if (text === lastNavyText) return;
     lastNavyText = text;
-    const inside = Boolean(text && text.includes('inside'));
+    const inside = Boolean(fullText && fullText.includes('inside'));
     navyChip.classList.toggle('danger', inside);
     root.classList.toggle('in-danger', inside);
     navyChip.textContent = text ?? '';
     navyChip.style.display = text ? '' : 'none';
   }
 
-  function setCrabs(text) {
+  function setCrabs(fullText, shortText = fullText) {
+    const text = isCompact() ? shortText : fullText;
     if (text === lastCrabText) return;
     lastCrabText = text;
     crabChip.textContent = text ?? '';
@@ -269,9 +302,10 @@ export function createHud() {
     const scale = Math.min(halfWidth / Math.max(1e-3, Math.abs(directionX)), halfHeight / Math.max(1e-3, Math.abs(directionY)));
     let arrowX = innerWidth / 2 + directionX * scale;
     const arrowY = centerY + directionY * scale;
-    if (arrowY < 200 && arrowX < 235) arrowX = 235;
-    if (arrowY < 200 && arrowX > innerWidth - 210) arrowX = innerWidth - 210;
-    element.style.transform = `translate(${arrowX - 24}px, ${arrowY - 24}px)`;
+    let clampedArrowY = arrowY;
+    if (arrowX < 390) clampedArrowY = Math.max(clampedArrowY, 205);
+    if (arrowX > innerWidth - 230) clampedArrowY = Math.max(clampedArrowY, innerWidth < 560 ? 300 : 280);
+    element.style.transform = `translate(${arrowX - 24}px, ${clampedArrowY - 24}px)`;
     element.querySelector('.chevron').style.transform = `rotate(${-screenAngle}rad)`;
     element.classList.add('visible');
   }
@@ -323,5 +357,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide, onBagAction, setNavy, setCrabs };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide, onBagAction, setNavy, setCrabs, setPaused, onPause };
 }

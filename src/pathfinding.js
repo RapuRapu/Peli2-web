@@ -80,6 +80,13 @@ export function createWalkGrid(ground, worldSize, obstacles) {
     return isCellWalkable(toColumn(x), toRow(z));
   }
 
+  function isPointBlocked(x, z) {
+    const column = toColumn(x);
+    const row = toRow(z);
+    if (column < 0 || row < 0 || column >= gridSize || row >= gridSize) return false;
+    return blocked[row * gridSize + column] === 1;
+  }
+
   const costSoFar = new Float32Array(cellCount);
   const cameFrom = new Int32Array(cellCount);
   const visitStamp = new Uint32Array(cellCount);
@@ -230,5 +237,5 @@ export function createWalkGrid(ground, worldSize, obstacles) {
     return smoothed;
   }
 
-  return { findPath, isPointWalkable, removeObstacle };
+  return { findPath, isPointWalkable, isPointBlocked, removeObstacle };
 }

@@ -29,8 +29,16 @@
   #hud .inventory { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60vw; }
   #hud .slot { padding: 4px 9px; border-radius: 12px; background: rgba(20, 30, 36, 0.6); font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
   #hud button { pointer-events: auto; font-family: inherit; color: #fff8e8; border: 1.5px solid rgba(255, 248, 232, 0.7); cursor: pointer; }
-  #hud .reset { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 168px); right: max(8px, env(safe-area-inset-right)); padding: 3px 10px; border-radius: 12px; background: rgba(20, 30, 36, 0.45); font-size: 14px; }
-  #hud .reset.armed { background: rgba(120, 30, 20, 0.8); }
+  #hud .pause-button { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 168px); right: max(8px, env(safe-area-inset-right)); width: 40px; height: 34px; padding: 0; font-size: 16px; border-radius: 12px; border: 1px solid rgba(255, 244, 214, 0.6); background: rgba(40, 24, 10, 0.75); color: #fff8e8; font-size: 18px; pointer-events: auto; }
+  #hud .pause-menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10, 8, 6, 0.55); pointer-events: auto; }
+  #hud .pause-menu.visible { display: flex; }
+  #hud .pause-card { display: flex; flex-direction: column; gap: 12px; min-width: 220px; padding: 20px 22px; border-radius: 16px; background: rgba(48, 30, 14, 0.95); border: 2px solid #e8c88a; text-align: center; }
+  #hud .pause-title { font-size: 24px; font-weight: bold; letter-spacing: 1px; }
+  #hud .pause-card button { padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255, 244, 214, 0.5); background: rgba(90, 58, 26, 0.9); color: #fff8e8; font: inherit; font-size: 17px; }
+  #hud .pause-card .resume { background: #c98a2a; font-weight: bold; }
+  #hud .pause-card .reset { font-size: 14px; background: rgba(60, 30, 20, 0.9); }
+  #hud .pause-card .reset.armed { background: rgba(150, 30, 20, 0.95); }
+  #hud .pause-note { font-size: 12px; opacity: 0.75; }
   #hud .toast { position: absolute; top: 14%; left: 50%; transform: translate(-50%, -6px); padding: 7px 16px; border-radius: 10px; background: rgba(20, 30, 36, 0.7); font-size: 18px; opacity: 0; transition: opacity .25s, transform .25s; }
   #hud .toast.visible { opacity: 1; transform: translate(-50%, 0); }
   #hud .action { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 52px); padding: 12px 20px; border-radius: 26px; background: rgba(150, 90, 30, 0.88); font-size: 18px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,.4); display: none; }
@@ -40,6 +48,8 @@
   #hud .quest-chip { position: absolute; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); max-width: 55vw; padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
   #hud .bag-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); left: calc(max(8px, env(safe-area-inset-left)) + 92px); padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; }
   #hud .bag-chip.shifted { left: max(8px, env(safe-area-inset-left)); }
+  #hud .status-stack { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 70px); right: max(8px, env(safe-area-inset-right)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  #hud .status-stack > * { position: static !important; }
   #hud .tide-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 70px); right: max(8px, env(safe-area-inset-right)); padding: 4px 9px; border-radius: 12px; background: rgba(15, 50, 70, 0.65); font-size: 14px; font-variant-numeric: tabular-nums; }
   #hud .navy-chip.danger { background: rgba(180, 28, 18, 0.9); animation: threat-pulse 1s ease-in-out infinite; }
   #hud.in-danger::before { content: ''; position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 60px 10px rgba(200, 30, 20, 0.45); animation: danger-edge 1.6s ease-in-out infinite; }

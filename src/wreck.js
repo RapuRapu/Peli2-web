@@ -51,6 +51,6 @@ export function createWreck(scene, ground, { x, z, heading }) {
   group.updateMatrixWorld(true);
   scene.add(group);
 
-  const obstacles = [{ x, z, radius: 6.5 }];
+  const obstacles = [{ x, z, radius: 5 }, ...[-8, -4, 4, 8].map((alongHull) => ({ x: x + Math.sin(heading) * alongHull, z: z + Math.cos(heading) * alongHull, radius: 3 }))];
   return { group, obstacles };
 }

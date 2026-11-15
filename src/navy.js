@@ -61,7 +61,11 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
   for (let i = 0; i < MARINE_COUNT; i++) {
     const body = createCharacter(scene, { coat: RED_COAT, sash: WHITE, trousers: WHITE, hat: BLACK, scale: 1.2 });
     body.setVisible(false);
-    marines.push({ body, state: 'boat', targets: [], digProgress: 0, trappedTimer: 0, target: null });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.visible = false;
+    scene.add(ring);
+    marines.push({ ring, body, state: 'boat', targets: [], digProgress: 0, trappedTimer: 0, target: null });
   }
 
   const circle = buildCircle();
@@ -231,6 +235,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
 
   function update(deltaTime, time, context, callbacks) {
     if (search.state === 'idle' || search.state === 'done') return;
+    syncRings();
     search.timer += deltaTime;
     const speedMultiplier = context.slowdown ?? 1;
 
@@ -357,6 +362,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
           search.state = 'done';
           boat.visible = false;
           setCircleVisible(false);
+          for (const marine of marines) marine.ring.visible = false;
           callbacks.onDeparted?.(search.found);
         }
       }
@@ -365,6 +371,14 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
 
   function contains(x, z) {
     return search.state === 'searching' && Math.hypot(x - search.centerX, z - search.centerZ) < search.radius;
+  }
+
+  function syncRings() {
+    for (const marine of marines) {
+      const visible = marine.state !== 'gone' && marine.state !== 'boat' && search.state !== 'idle' && search.state !== 'done';
+      marine.ring.visible = visible;
+      if (visible) marine.ring.position.set(marine.body.state.x, ground.heightAt(marine.body.state.x, marine.body.state.z) + 0.08, marine.body.state.z);
+    }
   }
 
   function remainingSearchSeconds() {

@@ -154,9 +154,10 @@ export function createTerrainMaterial({ hiddenRectangle = null } = {}) {
        diffuseColor.rgb *= 0.86 + 0.28 * terrainDetail;
        float tideWetness = (1.0 - smoothstep(0.8, 1.0, terrainWorldPosition.y)) * smoothstep(-1.2, -0.9, terrainWorldPosition.y);
        diffuseColor.rgb *= 1.0 - 0.3 * tideWetness;
-       float wrackLine = smoothstep(0.84, 0.9, terrainWorldPosition.y) * (1.0 - smoothstep(0.96, 1.04, terrainWorldPosition.y));
-       float wrackClumps = smoothstep(0.45, 0.75, terrainNoise(terrainWorldPosition.xz * 0.9));
-       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.22, 0.24, 0.12), wrackLine * wrackClumps * 0.75);`,
+       float wrackHeight = terrainWorldPosition.y + 0.05 * sin(terrainWorldPosition.x * 0.7 + terrainWorldPosition.z * 0.45);
+       float wrackLine = smoothstep(0.86, 0.9, wrackHeight) * (1.0 - smoothstep(0.93, 0.98, wrackHeight));
+       float wrackClumps = 0.55 + 0.45 * smoothstep(0.3, 0.7, terrainNoise(terrainWorldPosition.xz * 0.35));
+       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.3, 0.3, 0.17), wrackLine * wrackClumps * 0.5);`,
     );
   };
   return material;

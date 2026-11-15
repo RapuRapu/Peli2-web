@@ -142,7 +142,7 @@ export function createTreasure(scene, ground, savedCaches) {
       if (!cache.marker.visible) continue;
       const near = playerX !== null && Math.hypot(playerX - cache.x, playerZ - cache.z) < 45;
       cache.marker.material.opacity = near ? 0.95 : 0;
-      cache.marker.position.y = cache.height + 2.6 + Math.sin(worldTime * 3 + cache.x) * 0.15;
+      cache.marker.position.y = cache.height + (cache.underground ? 1.7 : 2.6) + Math.sin(worldTime * 3 + cache.x) * 0.15;
     }
     checkTimer -= deltaTime;
     if (checkTimer > 0) return;

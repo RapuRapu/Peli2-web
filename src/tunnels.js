@@ -3,9 +3,30 @@ import * as THREE from 'three';
 export const TUNNEL_FLOOR_Y = -300;
 const GRID_SIZE = 21;
 const CELL_SIZE = 2;
-const ROCK_HEIGHT = 0.95;
+const ROCK_HEIGHT = 1.15;
 const DIG_ROCK_SECONDS = 2.5;
 const CENTER = Math.floor(GRID_SIZE / 2);
+
+function buildRockGeometry() {
+  const geometry = new THREE.BoxGeometry(CELL_SIZE * 1.04, ROCK_HEIGHT, CELL_SIZE * 1.04, 4, 1, 4);
+  geometry.translate(0, ROCK_HEIGHT / 2, 0);
+  const position = geometry.attributes.position;
+  const colors = new Float32Array(position.count * 3);
+  const half = (CELL_SIZE * 1.04) / 2;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    const isTop = y > ROCK_HEIGHT - 0.01;
+    const isRim = isTop && (Math.abs(x) > half - 0.01 || Math.abs(z) > half - 0.01);
+    if (isTop && !isRim) position.setY(i, y + Math.sin(x * 4.1 + z * 2.3) * 0.07 + Math.cos(x * 1.7 - z * 5.2) * 0.05);
+    const shade = isRim ? 1.25 : isTop ? 0.7 : 1.05 - (1 - y / ROCK_HEIGHT) * 0.35;
+    colors.set([shade, shade * 0.97, shade * 0.93], i * 3);
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
 function buildLadder(height) {
   const group = new THREE.Group();
@@ -58,8 +79,18 @@ export function createTunnels(scene, ground, savedTunnel) {
   floor.receiveShadow = true;
   underground.add(floor);
 
-  const rockGeometry = new THREE.BoxGeometry(CELL_SIZE, ROCK_HEIGHT, CELL_SIZE);
-  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, flatShading: true });
+  const rockGeometry = buildRockGeometry();
+  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, flatShading: true });
+  const outerRock = new THREE.Group();
+  const outerMaterial = new THREE.MeshBasicMaterial({ color: 0x0b0806 });
+  for (const [offsetX, offsetZ, width, depth] of [[0, -1, 1, 0], [0, 1, 1, 0], [-1, 0, 0, 1], [1, 0, 0, 1]]) {
+    const span = GRID_SIZE * CELL_SIZE;
+    const slab = new THREE.Mesh(new THREE.PlaneGeometry(width ? span + 400 : 200, depth ? span : 200), outerMaterial);
+    slab.rotation.x = -Math.PI / 2;
+    slab.position.set(offsetX * (span / 2 + 100), ROCK_HEIGHT, offsetZ * (span / 2 + 100));
+    outerRock.add(slab);
+  }
+  underground.add(outerRock);
   const rocks = new THREE.InstancedMesh(rockGeometry, rockMaterial, GRID_SIZE * GRID_SIZE);
   rocks.castShadow = true;
   rocks.receiveShadow = true;
@@ -88,15 +119,23 @@ export function createTunnels(scene, ground, savedTunnel) {
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 96;
     const context = canvas.getContext('2d');
-    context.font = '64px sans-serif';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText('🪜', 48, 52);
+    context.fillStyle = 'rgba(40, 24, 10, 0.85)';
+    context.beginPath();
+    context.arc(48, 48, 42, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = '#e8b86a';
+    context.lineWidth = 7;
+    context.lineCap = 'round';
+    context.beginPath();
+    context.moveTo(34, 18); context.lineTo(34, 80);
+    context.moveTo(62, 18); context.lineTo(62, 80);
+    for (let y = 28; y <= 72; y += 14) { context.moveTo(34, y); context.lineTo(62, y); }
+    context.stroke();
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
     sprite.renderOrder = 5;
-    sprite.scale.set(1.8, 1.8, 1);
+    sprite.scale.set(2.2, 2.2, 1);
     sprite.visible = false;
     scene.add(sprite);
     return sprite;
@@ -111,6 +150,7 @@ export function createTunnels(scene, ground, savedTunnel) {
   const task = { active: false, cell: null, progress: 0, seconds: 0, onDone: null, kind: 'dig' };
 
   const cellIndex = (column, row) => row * GRID_SIZE + column;
+  const wobbleOf = (column, row) => Math.sin(column * 31.7 + row * 17.3) * 0.5 + 0.5;
   const isEdge = (column, row) => column === 0 || row === 0 || column === GRID_SIZE - 1 || row === GRID_SIZE - 1;
   const cellCenter = (column, row) => ({ x: tunnel.x + (column - CENTER) * CELL_SIZE, z: tunnel.z + (row - CENTER) * CELL_SIZE });
 
@@ -132,14 +172,14 @@ export function createTunnels(scene, ground, savedTunnel) {
         } else {
           const wobble = Math.sin(column * 12.9 + row * 78.2) * 0.5 + 0.5;
           const wobbleB = Math.sin(column * 39.3 + row * 11.7) * 0.5 + 0.5;
-          const heightScale = 0.8 + wobble * 0.35;
-          dummy.position.set(center.x + (wobbleB - 0.5) * 0.12, TUNNEL_FLOOR_Y + (ROCK_HEIGHT * heightScale) / 2, center.z + (wobble - 0.5) * 0.12);
-          dummy.scale.set(1.02 + wobbleB * 0.06, heightScale, 1.02 + wobble * 0.06);
+          const heightScale = 0.9 + wobble * 0.2;
+          dummy.position.set(center.x, TUNNEL_FLOOR_Y, center.z);
+          dummy.scale.set(1, heightScale, 1);
           if (isEdge(column, row)) rockColor.setRGB(0.07, 0.06, 0.06);
           else rockColor.setRGB(0.1 + wobble * 0.012, 0.095 + wobble * 0.01, 0.09 + wobble * 0.008);
           rocks.setColorAt(index, rockColor);
         }
-        dummy.rotation.set(0, dug.has(index) ? 0 : (Math.sin(column * 5.1 + row * 3.7) * 0.07), 0);
+        dummy.rotation.set(0, dug.has(index) ? 0 : Math.floor(wobbleOf(column, row) * 4) * (Math.PI / 2), 0);
         dummy.updateMatrix();
         rocks.setMatrixAt(index, dummy.matrix);
       }
@@ -153,6 +193,7 @@ export function createTunnels(scene, ground, savedTunnel) {
     dug.clear();
     for (const index of tunnel.dug) dug.add(index);
     floor.position.set(tunnel.x, TUNNEL_FLOOR_Y, tunnel.z);
+    outerRock.position.set(tunnel.x, TUNNEL_FLOOR_Y, tunnel.z);
     ladder.position.set(tunnel.x, TUNNEL_FLOOR_Y, tunnel.z - 0.7);
     shaft.position.set(tunnel.x, TUNNEL_FLOOR_Y + 4.5, tunnel.z);
     entrance.group.position.set(tunnel.x, ground.heightAt(tunnel.x, tunnel.z), tunnel.z);

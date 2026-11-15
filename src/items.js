@@ -108,9 +108,9 @@ function buildItemMesh(type) {
 function buildHighlightRing() {
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.9, 1.15, 32).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.8, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }),
   );
-  ring.position.y = 0.06;
+  ring.position.y = 0.22;
   ring.renderOrder = 3;
   return ring;
 }

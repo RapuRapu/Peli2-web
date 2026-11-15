@@ -268,6 +268,29 @@ if (isScreenshotMode) {
 }
 
 const character = createCharacter(scene);
+const playerDisc = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(32, 32, 4, 32, 32, 31);
+  gradient.addColorStop(0, 'rgba(255, 250, 230, 0.55)');
+  gradient.addColorStop(0.7, 'rgba(255, 250, 230, 0.25)');
+  gradient.addColorStop(1, 'rgba(255, 250, 230, 0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 64, 64);
+  const texture = new THREE.CanvasTexture(canvas);
+  const disc = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  disc.rotation.x = -Math.PI / 2;
+  disc.renderOrder = 1;
+  scene.add(disc);
+  return disc;
+})();
+
+function updatePlayerDisc() {
+  playerDisc.visible = mode !== 'sailing';
+  if (!playerDisc.visible) return;
+  playerDisc.position.set(character.state.x, character.root.position.y + 0.06, character.state.z);
+}
 const poseSpawn = startPose.nearSloop ? nearestWalkablePoint(raftSite.x + Math.sin(wreckSpot.inwardHeading) * 10, raftSite.z + Math.cos(wreckSpot.inwardHeading) * 10) : startPose.nearPasture ? nearestWalkablePoint(nearPasture.x + 18, nearPasture.z + 12) : spawnPoint;
 const characterStart = save.character ?? { x: poseSpawn.x, z: poseSpawn.z, heading: wreckSpot.inwardHeading + Math.PI };
 character.place(characterStart.x, characterStart.z, characterStart.heading);
@@ -342,7 +365,7 @@ const treasure = createTreasure(scene, ground, save.caches);
 if (save.navy.state === 'landed') save.navy.state = 'coming';
 const tunnels = createTunnels(scene, ground, save.tunnel);
 const tunnelGround = { heightAt: () => TUNNEL_FLOOR_Y, floorY: TUNNEL_FLOOR_Y };
-const crabs = createCrabs(scene, ground, { tracks, items, beaches: [wreckSpot, westBeach, eastCove], savedBurrows: save.burrows, friendCount: save.crabFriends });
+const crabs = createCrabs(scene, ground, { isBlocked: walkGrid.isPointBlocked, tracks, items, beaches: [wreckSpot, westBeach, eastCove], savedBurrows: save.burrows, friendCount: save.crabFriends });
 
 function coastPointFrom(x, z) {
   const length = Math.hypot(x, z) || 1;
@@ -637,11 +660,12 @@ function updateNavy(deltaTime) {
     persist();
   }
   if (navy && save.navy.state === 'landed') navy.update(deltaTime, simulationTime, navyContext(), navyCallbacks);
-  if (save.navy.state === 'coming') hud.setNavy(`⚓ Navy lands in ${navyCountdownText()}`);
+  if (save.navy.state === 'coming') hud.setNavy(`⚓ Navy lands in ${navyCountdownText()}`, `⚓ ${navyCountdownText()}`);
   else if (save.navy.state === 'landed') {
     const remaining = navy?.remainingSearchSeconds();
     const inside = mode === 'onFoot' && navy?.contains(character.state.x, character.state.z);
-    hud.setNavy(remaining === null || remaining === undefined ? '⚓ Navy ashore' : `⚓ Navy searching ${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}${inside ? ' · you are inside!' : ''}`);
+    const clock = remaining === null || remaining === undefined ? null : `${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}`;
+    hud.setNavy(clock ? `⚓ Navy searching ${clock}${inside ? ' · you are inside!' : ''}` : '⚓ Navy ashore', clock ? `⚓ ${inside ? 'inside! ' : '🔍 '}${clock}` : '⚓ ashore');
   } else hud.setNavy(null);
 }
 
@@ -678,8 +702,8 @@ function updateCrabs(deltaTime) {
   }
   const untilMigration = crabs.secondsToMigration(save.worldTime);
   if (mode === 'underground') hud.setCrabs(null);
-  else if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!');
-  else if (untilMigration < 45) hud.setCrabs(`🦀 Crabs coming ${Math.ceil(untilMigration)}s`);
+  else if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!', '🦀 now!');
+  else if (untilMigration < 45) hud.setCrabs(`🦀 Crabs coming ${Math.ceil(untilMigration)}s`, `🦀 ${Math.ceil(untilMigration)}s`);
   else hud.setCrabs(null);
 }
 
@@ -1413,12 +1437,27 @@ function simulate(deltaTime) {
   }
 }
 
+let paused = false;
+
+function setPaused(value) {
+  if (paused === value) return;
+  paused = value;
+  hud.setPaused(paused);
+  if (paused) persist();
+}
+
+hud.onPause(setPaused);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !isScreenshotMode) setPaused(true);
+});
+
 function renderFrame(now) {
   const deltaTime = Math.min(0.05, (now - previousFrameTime) / 1000);
   previousFrameTime = now;
-  simulate(deltaTime);
+  if (!paused) simulate(deltaTime);
   updateCamera(deltaTime, false);
   updateTargetMarker(simulationTime);
+  updatePlayerDisc();
   renderer.render(scene, camera);
   updateHud();
   updateGuideArrow();
@@ -1485,6 +1524,7 @@ if (isScreenshotMode) {
   }
   updateCamera(0, true);
   updateTargetMarker(simulationTime);
+  updatePlayerDisc();
   renderer.render(scene, camera);
   updateHud();
   updateGuideArrow();
@@ -1501,4 +1541,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { performanceMonitor, raycaster, tunnels, tapUnderground, digTunnelEntrance, enterTunnel, climbOutOfTunnel, buryUnderground, toggleEntranceCover, crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { setPaused, isPaused: () => paused, performanceMonitor, raycaster, tunnels, tapUnderground, digTunnelEntrance, enterTunnel, climbOutOfTunnel, buryUnderground, toggleEntranceCover, crabs, interactWithCrab, digUpBurrow, coverDigPatch, getNavy: () => navy, ensureNavy, treasure, buryHere, digUpCache, tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
