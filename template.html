@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#9ec7db">
+<title>Peli 2 – purjehduskokeilu</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9ec7db; overscroll-behavior: none; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #perf { position: fixed; top: max(6px, env(safe-area-inset-top)); left: max(6px, env(safe-area-inset-left)); padding: 4px 7px;
+    font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #e8f4f8; background: rgba(8, 24, 34, 0.55); border-radius: 6px; white-space: pre; pointer-events: auto; }
+  #perf.compact { max-height: 15px; overflow: hidden; }
+  #hud { position: fixed; inset: 0; pointer-events: none; font-family: Georgia, 'Times New Roman', serif; color: #fff8e8; }
+  #hud .compass { position: absolute; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); width: 86px; text-align: center; }
+  #hud svg { width: 74px; height: 74px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+  #hud .dial { fill: rgba(20, 30, 36, 0.45); stroke: rgba(255, 248, 232, 0.8); stroke-width: 3; }
+  #hud .wind-arrow path { fill: none; stroke: #fff8e8; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+  #hud .readout { display: inline-block; margin-top: 3px; padding: 1px 9px; border-radius: 10px; background: rgba(20, 30, 36, 0.55); font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+  #hud .speed { font-size: 20px; font-weight: bold; }
+  #hud .status { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 8px;
+    background: rgba(60, 20, 10, 0.6); font-size: 18px; opacity: 0; transition: opacity .3s; }
+  #hud .status.visible { opacity: 1; }
+  #hud .hint { position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(70vw, 520px);
+    text-align: center; font-size: 15px; padding: 8px 12px; border-radius: 8px; background: rgba(20, 30, 36, 0.5); transition: opacity .6s; }
+  #hud .hint span { white-space: nowrap; }
+  #hud .hint.hidden { opacity: 0; }
+  @media (max-aspect-ratio: 1/1) { #hud .hint { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 120px); width: 80vw; } }
+  #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
+</style>
+</head>
+<body>
+<script>
+  window.addEventListener('error', function (event) {
+    var box = document.getElementById('fatal') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'fatal' }));
+    box.textContent = 'Virhe: ' + (event.message || event.error);
+  });
+</script>
+<script type="module">/*BUNDLE*/</script>
+</body>
+</html>

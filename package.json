@@ -1,0 +1,15 @@
+{
+  "name": "peli2-web",
+  "version": "0.1.0",
+  "description": "Peli 2 – selainkokeilu: purjehdus saaren ympärillä (Three.js, WebGL2)",
+  "scripts": {
+    "build": "node build.mjs",
+    "screenshots": "python3 shoot.py shots"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.187.0"
+  },
+  "private": true,
+  "type": "module"
+}
