@@ -10,13 +10,13 @@ function buildPrintTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 64;
   const context = canvas.getContext('2d');
-  const gradient = context.createRadialGradient(32, 32, 4, 32, 32, 30);
-  gradient.addColorStop(0, 'rgba(45, 30, 15, 0.95)');
-  gradient.addColorStop(0.7, 'rgba(45, 30, 15, 0.7)');
-  gradient.addColorStop(1, 'rgba(45, 30, 15, 0)');
-  context.fillStyle = gradient;
+  context.filter = 'blur(1.5px)';
+  context.fillStyle = 'rgba(92, 62, 32, 0.72)';
   context.beginPath();
-  context.ellipse(32, 32, 18, 30, 0, 0, Math.PI * 2);
+  context.ellipse(32, 22, 15, 19, 0, 0, Math.PI * 2);
+  context.fill();
+  context.beginPath();
+  context.ellipse(32, 50, 11, 10, 0, 0, Math.PI * 2);
   context.fill();
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -58,7 +58,9 @@ export function createTracks(scene, ground) {
       return;
     }
     footSide = -footSide;
-    addSingle(x + Math.cos(heading) * 0.14 * footSide, z - Math.sin(heading) * 0.14 * footSide, heading + footSide * 0.08, 0.22, 0.42, kind);
+    const sideOffset = 0.2 + (Math.random() - 0.5) * 0.05;
+    const along = (Math.random() - 0.5) * 0.12;
+    addSingle(x + Math.cos(heading) * sideOffset * footSide + Math.sin(heading) * along, z - Math.sin(heading) * sideOffset * footSide + Math.cos(heading) * along, heading + footSide * 0.12 + (Math.random() - 0.5) * 0.15, 0.3, 0.55, kind);
   }
 
   function addSingle(x, z, heading, width, length, kind) {

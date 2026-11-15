@@ -273,11 +273,11 @@ const playerDisc = (() => {
   canvas.width = canvas.height = 64;
   const context = canvas.getContext('2d');
   const gradient = context.createRadialGradient(32, 32, 4, 32, 32, 31);
-  gradient.addColorStop(0, 'rgba(255, 200, 80, 0)');
-  gradient.addColorStop(0.62, 'rgba(255, 190, 60, 0.05)');
-  gradient.addColorStop(0.78, 'rgba(255, 180, 40, 0.75)');
-  gradient.addColorStop(0.9, 'rgba(255, 180, 40, 0.35)');
-  gradient.addColorStop(1, 'rgba(255, 180, 40, 0)');
+  gradient.addColorStop(0, 'rgba(80, 220, 255, 0)');
+  gradient.addColorStop(0.6, 'rgba(80, 220, 255, 0.08)');
+  gradient.addColorStop(0.72, 'rgba(0, 210, 255, 1)');
+  gradient.addColorStop(0.88, 'rgba(0, 210, 255, 0.7)');
+  gradient.addColorStop(1, 'rgba(80, 220, 255, 0)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, 64, 64);
   const texture = new THREE.CanvasTexture(canvas);
@@ -662,7 +662,7 @@ function updateNavy(deltaTime) {
     persist();
   }
   if (navy && save.navy.state === 'landed') navy.update(deltaTime, simulationTime, navyContext(), navyCallbacks);
-  if (save.navy.state === 'coming') hud.setNavy(`⚓ Navy lands in ${navyCountdownText()}`, `⚓ ${navyCountdownText()}`);
+  if (save.navy.state === 'coming') hud.setNavy(`⚓ Navy lands in ${navyCountdownText()}`, `⚓ lands ${navyCountdownText()}`);
   else if (save.navy.state === 'landed') {
     const remaining = navy?.remainingSearchSeconds();
     const inside = mode === 'onFoot' && navy?.contains(character.state.x, character.state.z);

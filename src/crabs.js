@@ -242,7 +242,7 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
     const friendBadge = buildEmojiSprite('❤️', 1.5, 'rgba(255, 255, 255, 0.92)');
     friendBadge.visible = false;
     scene.add(friendBadge);
-    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0xff8fb8, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
     friendRing.rotation.x = -Math.PI / 2;
     friendRing.visible = false;
     scene.add(friendRing);

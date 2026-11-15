@@ -8,19 +8,16 @@ const DIG_ROCK_SECONDS = 2.5;
 const CENTER = Math.floor(GRID_SIZE / 2);
 
 function buildRockGeometry(seed) {
-  const geometry = new THREE.BoxGeometry(CELL_SIZE * 1.04, ROCK_HEIGHT, CELL_SIZE * 1.04, 2, 1, 2);
+  const geometry = new THREE.BoxGeometry(CELL_SIZE, ROCK_HEIGHT, CELL_SIZE);
   geometry.translate(0, ROCK_HEIGHT / 2, 0);
   const position = geometry.attributes.position;
   const colors = new Float32Array(position.count * 3);
-  const half = (CELL_SIZE * 1.04) / 2;
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i);
     const y = position.getY(i);
     const z = position.getZ(i);
     const isTop = y > ROCK_HEIGHT - 0.01;
-    const isRim = isTop && (Math.abs(x) > half - 0.01 || Math.abs(z) > half - 0.01);
-    if (isTop) position.setY(i, y + (x * (0.05 - seed * 0.04) + z * (seed * 0.03 - 0.02)) - (isRim ? 0.05 : 0) + Math.sin(x * 2.2 + z * 1.6 + seed * 3.1) * 0.03);
-    const shade = isRim ? 1.1 : isTop ? 0.78 : 1.05 - (1 - y / ROCK_HEIGHT) * 0.4;
+    const shade = isTop ? 0.8 : 1.0 - (1 - y / ROCK_HEIGHT) * 0.35;
     colors.set([shade, shade * 0.97, shade * 0.93], i * 3);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -79,15 +76,15 @@ export function createTunnels(scene, ground, savedTunnel) {
   floor.receiveShadow = true;
   underground.add(floor);
 
-  const ROCK_VARIANTS = 3;
+  const ROCK_VARIANTS = 1;
   const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95 });
   const outerRock = new THREE.Group();
   const outerMaterial = new THREE.MeshBasicMaterial({ color: 0x0b0806 });
   for (const [offsetX, offsetZ, width, depth] of [[0, -1, 1, 0], [0, 1, 1, 0], [-1, 0, 0, 1], [1, 0, 0, 1]]) {
     const span = GRID_SIZE * CELL_SIZE;
-    const slab = new THREE.Mesh(new THREE.PlaneGeometry(width ? span + 400 : 200, depth ? span : 200), outerMaterial);
+    const slab = new THREE.Mesh(new THREE.PlaneGeometry(width ? span + 4000 : 2000, depth ? span : 2000), outerMaterial);
     slab.rotation.x = -Math.PI / 2;
-    slab.position.set(offsetX * (span / 2 + 100), ROCK_HEIGHT, offsetZ * (span / 2 + 100));
+    slab.position.set(offsetX * (span / 2 + 1000), ROCK_HEIGHT, offsetZ * (span / 2 + 1000));
     outerRock.add(slab);
   }
   underground.add(outerRock);
@@ -158,7 +155,6 @@ export function createTunnels(scene, ground, savedTunnel) {
   const task = { active: false, cell: null, progress: 0, seconds: 0, onDone: null, kind: 'dig' };
 
   const cellIndex = (column, row) => row * GRID_SIZE + column;
-  const wobbleOf = (column, row) => Math.sin(column * 31.7 + row * 17.3) * 0.5 + 0.5;
   const isEdge = (column, row) => column === 0 || row === 0 || column === GRID_SIZE - 1 || row === GRID_SIZE - 1;
   const cellCenter = (column, row) => ({ x: tunnel.x + (column - CENTER) * CELL_SIZE, z: tunnel.z + (row - CENTER) * CELL_SIZE });
 
@@ -187,16 +183,17 @@ export function createTunnels(scene, ground, savedTunnel) {
           dummy.position.set(0, -1000, 0);
           dummy.scale.setScalar(0.001);
         } else {
-          const wobble = Math.sin(column * 12.9 + row * 78.2) * 0.5 + 0.5;
-          const wobbleB = Math.sin(column * 39.3 + row * 11.7) * 0.5 + 0.5;
-          const heightScale = 0.8 + wobble * 0.5;
+          const heightScale = 1;
           dummy.position.set(center.x, TUNNEL_FLOOR_Y, center.z);
           dummy.scale.set(1, heightScale, 1);
           if (isEdge(column, row)) rockColor.setRGB(0.07, 0.06, 0.06);
-          else rockColor.setRGB(0.095 + wobbleB * 0.03, 0.09 + wobbleB * 0.022, 0.085 + wobble * 0.015);
+          else {
+            const broad = 0.5 + 0.25 * Math.sin(column * 0.45 + row * 0.2) + 0.25 * Math.cos(row * 0.38 - column * 0.15);
+            rockColor.setRGB(0.085 + broad * 0.035, 0.078 + broad * 0.028, 0.07 + broad * 0.02);
+          }
           rocks.setColorAt(index, rockColor);
         }
-        dummy.rotation.set(0, dug.has(index) ? 0 : Math.floor(wobbleOf(column, row) * 4) * (Math.PI / 2), 0);
+        dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         rocks.setMatrixAt(index, dummy.matrix);
       }

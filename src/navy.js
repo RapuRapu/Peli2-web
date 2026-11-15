@@ -39,7 +39,7 @@ function buildBadge(emoji) {
 }
 
 function buildCircle() {
-  const material = new THREE.MeshBasicMaterial({ color: 0xe0301c, transparent: true, opacity: 0.92, depthTest: false, side: THREE.DoubleSide });
+  const material = new THREE.MeshBasicMaterial({ color: 0xe0301c, transparent: true, opacity: 0.92, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12, side: THREE.DoubleSide });
   const line = new THREE.Mesh(new THREE.BufferGeometry(), material);
   line.renderOrder = 4;
   line.frustumCulled = false;
@@ -61,11 +61,15 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
   for (let i = 0; i < MARINE_COUNT; i++) {
     const body = createCharacter(scene, { coat: RED_COAT, sash: WHITE, trousers: WHITE, hat: BLACK, scale: 1.2 });
     body.setVisible(false);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 20), new THREE.MeshBasicMaterial({ color: 0x1c2468, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 20), new THREE.MeshBasicMaterial({ color: 0x1a0e0c, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
     ring.rotation.x = -Math.PI / 2;
     ring.visible = false;
     scene.add(ring);
-    marines.push({ ring, body, state: 'boat', targets: [], digProgress: 0, trappedTimer: 0, target: null });
+    const badge = buildBadge('💂');
+    badge.scale.set(1.5, 1.5, 1);
+    badge.visible = false;
+    scene.add(badge);
+    marines.push({ badge, ring, body, state: 'boat', targets: [], digProgress: 0, trappedTimer: 0, target: null });
   }
 
   const circle = buildCircle();
@@ -362,7 +366,10 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
           search.state = 'done';
           boat.visible = false;
           setCircleVisible(false);
-          for (const marine of marines) marine.ring.visible = false;
+          for (const marine of marines) {
+            marine.ring.visible = false;
+            marine.badge.visible = false;
+          }
           callbacks.onDeparted?.(search.found);
         }
       }
@@ -377,7 +384,12 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
     for (const marine of marines) {
       const visible = marine.state !== 'gone' && marine.state !== 'boat' && search.state !== 'idle' && search.state !== 'done';
       marine.ring.visible = visible;
-      if (visible) marine.ring.position.set(marine.body.state.x, ground.heightAt(marine.body.state.x, marine.body.state.z) + 0.25, marine.body.state.z);
+      marine.badge.visible = visible;
+      if (visible) {
+        const groundY = ground.heightAt(marine.body.state.x, marine.body.state.z);
+        marine.ring.position.set(marine.body.state.x, groundY + 0.25, marine.body.state.z);
+        marine.badge.position.set(marine.body.state.x, groundY + 4.2, marine.body.state.z);
+      }
     }
   }
 

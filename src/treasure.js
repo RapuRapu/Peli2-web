@@ -87,7 +87,7 @@ export function createTreasure(scene, ground, savedCaches) {
     const marker = buildOwnerMarker(contents);
     marker.position.set(x, height + 2.4, z);
     const cache = { id, x, z, height, contents, buriedAt, patchVisible, underground, found, floorY, mound, marker };
-    mound.visible = patchVisible;
+    mound.visible = patchVisible && !underground;
     marker.visible = !found && contents !== 'empty';
     scene.add(mound, marker);
     caches.push(cache);

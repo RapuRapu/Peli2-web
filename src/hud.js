@@ -49,7 +49,7 @@ export function createHud() {
       <div class="navy-chip"></div>
       <div class="crab-chip"></div>
     </div>
-    <button class="pause-button" type="button" aria-label="Pause">⏸</button>
+    <button class="pause-button" type="button" aria-label="Pause"><svg width="16" height="18" viewBox="0 0 16 18"><rect x="1" y="1" width="5" height="16" rx="1.5" fill="currentColor"/><rect x="10" y="1" width="5" height="16" rx="1.5" fill="currentColor"/></svg></button>
     <div class="pause-menu">
       <div class="pause-card">
         <div class="pause-title">Paused</div>
@@ -293,7 +293,7 @@ export function createHud() {
     if (icon) element.querySelector('.icon').textContent = icon;
     const distanceLabel = element.querySelector('.distance');
     if (distanceLabel) distanceLabel.textContent = distance === null ? '' : `${Math.round(distance)} m`;
-    const top = 70;
+    const top = 112;
     const bottom = innerHeight - 110;
     const centerY = (top + bottom) / 2;
     const halfWidth = innerWidth / 2 - 40;
@@ -305,7 +305,7 @@ export function createHud() {
     const arrowY = centerY + directionY * scale;
     let clampedArrowY = arrowY;
     const onTopEdge = arrowY < top + 2;
-    if (onTopEdge) arrowX = Math.min(Math.max(arrowX, 305), innerWidth - 200);
+    if (onTopEdge) arrowX = Math.min(arrowX, innerWidth - 200);
     else if (arrowX < 60) clampedArrowY = Math.max(clampedArrowY, 120);
     else if (arrowX > innerWidth - 60) clampedArrowY = Math.max(clampedArrowY, statusStack.getBoundingClientRect().bottom + 34);
     element.style.transform = `translate(${arrowX - 24}px, ${clampedArrowY - 24}px)`;
