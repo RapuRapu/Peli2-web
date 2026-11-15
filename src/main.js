@@ -411,18 +411,32 @@ function tryRepairSloop() {
   persist();
 }
 
+function buildQuests() {
+  const repairSteps = Object.entries(REPAIR_REQUIREMENTS).map(([type, need]) => ({
+    label: `${ITEM_TYPES[type].icon} ${REPAIR_LABELS[type]}`,
+    have: save.sloopRepaired ? need : Math.min(need, save.inventory[type] ?? 0),
+    need,
+  }));
+  repairSteps.push({ label: '🔨 Korjaa slooppi rannalla', have: save.sloopRepaired ? 1 : 0, need: 1 });
+  return [
+    {
+      title: 'Korjaa slooppi',
+      description: 'Haaksirikko jätti sinut saarelle. Rannalla makaa vaurioitunut slooppi. Etsi saarelta tarvikkeet ja korjaa se.',
+      steps: repairSteps,
+      done: save.sloopRepaired,
+    },
+    {
+      title: 'Lähde merelle',
+      description: 'Slooppi on vesillä. Nouse laivaan ja purjehdi.',
+      steps: [{ label: '⚓ Nouse slooppiin', have: save.hasSailed ? 1 : 0, need: 1 }],
+      done: Boolean(save.hasSailed),
+      locked: !save.sloopRepaired,
+    },
+  ];
+}
+
 function updateObjective() {
-  if (!save.sloopRepaired) {
-    const parts = Object.entries(REPAIR_REQUIREMENTS).map(([type, required]) => {
-      const have = Math.min(required, save.inventory[type] ?? 0);
-      return `<span class="${have >= required ? 'done' : ''}">${ITEM_TYPES[type].icon} ${REPAIR_LABELS[type]} ${have}/${required}</span>`;
-    });
-    hud.setObjective(`<b>Korjaa slooppi</b><br>${parts.join(' · ')}`);
-  } else if (mode === 'onFoot' && !save.hasSailed) {
-    hud.setObjective('Slooppi on valmis – nouse laivaan!');
-  } else {
-    hud.setObjective(null);
-  }
+  hud.setQuests(buildQuests());
 }
 
 const guideTarget = new THREE.Vector3();

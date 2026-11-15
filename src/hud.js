@@ -16,7 +16,13 @@ export function createHud() {
       </svg>
       <div class="readout"><span class="speed">0.0</span> kn</div>
     </div>
-    <div class="objective"></div>
+    <button class="quest-chip" type="button"></button>
+    <div class="quest-log">
+      <div class="quest-panel">
+        <div class="quest-header"><span>📜 Tehtävät</span><button class="quest-close" type="button">✕</button></div>
+        <div class="quest-list"></div>
+      </div>
+    </div>
     <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span></div>
     <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🔨</span></div>
     <div class="inventory"></div>
@@ -36,10 +42,15 @@ export function createHud() {
   const toast = root.querySelector('.toast');
   const actionButton = root.querySelector('.action');
   const resetButton = root.querySelector('.reset');
-  const objective = root.querySelector('.objective');
+  const questChip = root.querySelector('.quest-chip');
+  const questLog = root.querySelector('.quest-log');
+  const questList = root.querySelector('.quest-list');
   const guideArrow = root.querySelector('.guide-arrow:not(.sloop)');
   const sloopArrow = root.querySelector('.guide-arrow.sloop');
-  let lastObjective = null;
+  let lastQuestSignature = null;
+  questChip.addEventListener('click', () => questLog.classList.add('open'));
+  questLog.addEventListener('click', (event) => { if (event.target === questLog) questLog.classList.remove('open'); });
+  root.querySelector('.quest-close').addEventListener('click', () => questLog.classList.remove('open'));
   let lastSpeedText = '';
   let lastStatus = '';
   let actionHandler = null;
@@ -63,7 +74,7 @@ export function createHud() {
       resetButton.classList.remove('armed');
     }, 3000);
   });
-  for (const element of [actionButton, resetButton]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
+  for (const element of [actionButton, resetButton, questChip, questLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
 
   let hintShownAt = performance.now();
   function setMode(mode) {
@@ -94,11 +105,24 @@ export function createHud() {
     actionButton.classList.toggle('disabled', disabled);
   }
 
-  function setObjective(html) {
-    if (html === lastObjective) return;
-    lastObjective = html;
-    objective.innerHTML = html ?? '';
-    objective.classList.toggle('visible', Boolean(html));
+  function setQuests(quests) {
+    const signature = JSON.stringify(quests);
+    if (signature === lastQuestSignature) return;
+    lastQuestSignature = signature;
+    const active = quests.find((quest) => !quest.done && !quest.locked);
+    if (active) {
+      const have = active.steps.reduce((sum, step) => sum + Math.min(step.have, step.need), 0);
+      const need = active.steps.reduce((sum, step) => sum + step.need, 0);
+      questChip.textContent = `📜 ${active.title} ${have}/${need}`;
+    } else {
+      questChip.textContent = '📜 Tehtävät';
+    }
+    questList.innerHTML = quests.filter((quest) => !quest.locked).map((quest) => `
+      <div class="quest ${quest.done ? 'done' : ''}">
+        <div class="quest-title">${quest.done ? '✔' : '◆'} ${quest.title}</div>
+        <div class="quest-description">${quest.description}</div>
+        ${quest.done ? '' : quest.steps.map((step) => `<div class="quest-step ${step.have >= step.need ? 'done' : ''}"><span>${step.label}</span><span>${step.have >= step.need ? '✔' : `${step.have}/${step.need}`}</span></div>`).join('')}
+      </div>`).join('');
   }
 
   function placeEdgeArrow(element, screenAngle, icon) {
@@ -149,5 +173,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setObjective, setGuideArrow, setSloopArrow };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow };
 }
