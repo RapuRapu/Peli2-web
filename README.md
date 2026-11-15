@@ -1,4 +1,4 @@
-# Peli 2 – selainkokeilu
+# Sea Of Crabs (Peli 2) – selainkokeilu
 
 Purjehduskokeilu: yksi saari, meri ja slooppi isometrisellä kameralla. Three.js + WebGL2, kaikki grafiikka generoidaan koodilla.
 
