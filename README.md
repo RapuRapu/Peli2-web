@@ -11,7 +11,11 @@ npm run build        # -> dist/index.html (yksi tiedosto)
 
 Avaa `dist/index.html` selaimessa.
 
-**Ohjaus:** kosketa merta = purjehdi sinne · pidä pohjassa = ohjaa · nipistä/rulla = zoomaa · A/D = käänny.
+**Ohjaus merellä:** kosketa merta = purjehdi sinne · pidä pohjassa = ohjaa · nipistä/rulla = zoomaa · A/D = käänny.
+
+**Ohjaus maissa:** kosketa = kävele sinne (reitinhaku kiertää esteet) · kosketa esinettä = hae se · ⚓-painike = laivaan / maihin.
+
+**Tallennus:** selaimen localStorage (`peli2-save`), automaattisesti 5 s välein, esinettä poimiessa ja sivulta poistuttaessa. ↺ (kahdesti) aloittaa alusta.
 
 ## Rakenne
 
@@ -22,6 +26,11 @@ Avaa `dist/index.html` selaimessa.
 | `src/ship.js` | Sloopin malli ja purjehdusfysiikka (tuulikulma, karilleajo, keinunta) |
 | `src/vegetation.js` | Palmut, lehtipuut, pensaat, kivet (instansoitu, ruuduttain kullattu) |
 | `src/wake.js` | Peräaalto |
+| `src/detailTerrain.js` | 1 m tarkkuuden maastopala pelaajan ympärillä (rakennetaan taustalla useassa ruudussa) |
+| `src/pathfinding.js` | 2 m ruudukko + A*, esteet kasvillisuudesta ja hylystä |
+| `src/character.js` | Merirosvohahmo ja kävelyanimaatio |
+| `src/items.js`, `src/wreck.js` | Kerättävät esineet ja haaksirikkoutunut laiva |
+| `src/save.js` | Versioitu tallennus |
 | `src/dolphins.js` | Delfiiniparvet: vaeltelu, laivan saattaminen keulassa, hypyt ja roiskeet |
 | `src/performance.js` | 60 fps -rajoitin, automaattinen resoluutio, FPS-mittari |
 | `src/hud.js` | Tuulinuoli, nopeus, vihjeet |
@@ -31,4 +40,4 @@ Avaa `dist/index.html` selaimessa.
 
 ## Kuvakaappaukset
 
-`dist/index.html?pose=1..7&hud` renderöi kiinteän kuvakulman (pose 7 = delfiinit saattavat laivaa). `&warmup=N` vaihtaa simuloidun alkuajan. `shoot.py` ajaa kuvakulmat headless-Chromella (Playwright).
+`dist/index.html?pose=1..7&hud` renderöi kiinteän kuvakulman (7 = delfiinit, 8–10 = maissa). `&warmup=N` vaihtaa simuloidun alkuajan. `shoot.py` ajaa kuvakulmat headless-Chromella (Playwright).

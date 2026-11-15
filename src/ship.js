@@ -58,7 +58,7 @@ function hullColorFor(y, sheer) {
   return HULL_WOOD;
 }
 
-function buildHullGeometry() {
+export function buildHullGeometry() {
   const lengthSteps = 36;
   const ringSteps = 18;
   const positions = [];
@@ -521,7 +521,7 @@ export function createShipController(ship, heightmap, wind) {
   const state = {
     x: 0, z: 0, heading: 0, speed: 0,
     targetX: 0, targetZ: 0, hasTarget: false, steeringHeld: false,
-    aground: false, angleOffWind: 0, windSide: 1,
+    aground: false, anchored: false, angleOffWind: 0, windSide: 1,
     boomAngle: 0.3, heel: 0, pitch: 0, roll: 0, bob: 0,
   };
 
@@ -569,7 +569,7 @@ export function createShipController(ship, heightmap, wind) {
     state.windSide = forwardX * windFromZ - forwardZ * windFromX > 0 ? 1 : -1;
 
     const efficiency = sailingEfficiency(state.angleOffWind);
-    let targetSpeed = Math.max(MIN_STEERAGE_SPEED, MAX_SPEED * efficiency * wind.strength);
+    let targetSpeed = state.anchored ? 0 : Math.max(MIN_STEERAGE_SPEED, MAX_SPEED * efficiency * wind.strength);
 
     const bowX = state.x + forwardX * ship.length * 0.45;
     const bowZ = state.z + forwardZ * ship.length * 0.45;

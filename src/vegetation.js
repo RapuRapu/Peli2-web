@@ -133,16 +133,42 @@ function buildRockGeometry() {
   });
 }
 
-function addSwayToMaterial(material, timeUniform, strength) {
+export const vegetationOcclusion = {
+  camera: { value: new THREE.Vector3() },
+  focus: { value: new THREE.Vector3() },
+  enabled: { value: 0 },
+};
+
+function configureVegetationMaterial(material, timeUniform, swayStrength, canopyHeight, canopyRadius) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.swayTime = timeUniform;
-    shader.vertexShader = 'uniform float swayTime;\n' + shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
+    shader.uniforms.occlusionCamera = vegetationOcclusion.camera;
+    shader.uniforms.occlusionFocus = vegetationOcclusion.focus;
+    shader.uniforms.occlusionEnabled = vegetationOcclusion.enabled;
+    shader.vertexShader = 'uniform float swayTime;\nvarying vec3 vegetationWorldPosition;\nvarying vec3 vegetationInstanceCanopy;\nvarying float vegetationInstanceReach;\n' + shader.vertexShader
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
        float swayPhase = swayTime * 1.4 + instanceMatrix[3].x * 0.07 + instanceMatrix[3].z * 0.05;
-       float swayAmount = ${strength.toFixed(4)} * transformed.y * transformed.y;
+       float swayAmount = ${swayStrength.toFixed(4)} * transformed.y * transformed.y;
        transformed.x += sin(swayPhase) * swayAmount;
-       transformed.z += cos(swayPhase * 0.8) * swayAmount * 0.6;`,
+       transformed.z += cos(swayPhase * 0.8) * swayAmount * 0.6;`)
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+       vegetationWorldPosition = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+       float instanceSize = length(instanceMatrix[1].xyz);
+       vegetationInstanceCanopy = (modelMatrix * instanceMatrix * vec4(0.0, ${canopyHeight.toFixed(2)}, 0.0, 1.0)).xyz;
+       vegetationInstanceReach = ${canopyRadius.toFixed(2)} * instanceSize;`);
+    shader.fragmentShader = 'uniform vec3 occlusionCamera;\nuniform vec3 occlusionFocus;\nuniform float occlusionEnabled;\nvarying vec3 vegetationWorldPosition;\nvarying vec3 vegetationInstanceCanopy;\nvarying float vegetationInstanceReach;\n' + shader.fragmentShader.replace(
+      '#include <clipping_planes_fragment>',
+      `#include <clipping_planes_fragment>
+       if (occlusionEnabled > 0.5) {
+         vec3 sightLine = occlusionFocus - occlusionCamera;
+         float along = clamp(dot(vegetationInstanceCanopy - occlusionCamera, sightLine) / dot(sightLine, sightLine), 0.0, 1.0);
+         float distanceToSightLine = length(vegetationInstanceCanopy - (occlusionCamera + sightLine * along));
+         if (distanceToSightLine < vegetationInstanceReach) {
+           vec2 ditherCell = mod(floor(gl_FragCoord.xy / 3.0), 4.0);
+           float bayer = mod(ditherCell.x * 2.0 + ditherCell.y * 3.0 + floor(ditherCell.x * 0.5) * 5.0 + floor(ditherCell.y * 0.5) * 7.0, 16.0) / 16.0;
+           if (bayer < 0.55) discard;
+         }
+       }`,
     );
   };
 }
@@ -177,17 +203,19 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   const rotation = new THREE.Quaternion();
   const scale = new THREE.Vector3();
   const euler = new THREE.Euler();
+  const obstacles = [];
 
   const palms = scatterOnIsland(heightmap, {
     seed: 11, count: 1400, minHeight: 1.2, maxHeight: 40, maxSlope: 0.45,
     accept: (x, z, height, slope, random) => random() < (height < 10 ? 1 : 0.25),
   });
   const palmMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
-  addSwayToMaterial(palmMaterial, swayTimeUniform, 0.0016);
+  configureVegetationMaterial(palmMaterial, swayTimeUniform, 0.0016, 9, 4.5);
   createTiledInstances(group, buildPalmGeometry(), palmMaterial, palms, (placement, matrix) => {
     euler.set((placement.random - 0.5) * 0.15, placement.random * Math.PI * 2 * 7.3, 0);
     rotation.setFromEuler(euler);
     const size = 0.75 + placement.random * 0.5;
+    obstacles.push({ x: placement.x, z: placement.z, radius: 0.45 * size, canopyRadius: 6 * size, canopyHeight: 10 * size });
     scale.set(size, size, size);
     position.set(placement.x, placement.y - 0.2, placement.z);
     matrix.compose(position, rotation, scale);
@@ -198,10 +226,12 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
     accept: (x, z, height, slope, random) => random() < smoothstep(2.5, 9, height),
   });
   const bushMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true });
+  configureVegetationMaterial(bushMaterial, swayTimeUniform, 0.002, 1.5, 1.2);
   const broadleafTrees = jungle.filter((placement) => placement.y > 10 && placement.random > 0.25);
   const shrubs = jungle.filter((placement) => !(placement.y > 10 && placement.random > 0.25));
   createTiledInstances(group, buildBroadleafTreeGeometry(), bushMaterial, broadleafTrees, (placement, matrix) => {
     const size = 3.2 + placement.random * 3.2;
+    obstacles.push({ x: placement.x, z: placement.z, radius: 0.22 * size });
     euler.set(0, placement.random * 40, 0);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.85 + placement.random * 0.35), size);
@@ -210,6 +240,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   }, { castShadow: true });
   createTiledInstances(group, buildBushGeometry(), bushMaterial, shrubs, (placement, matrix) => {
     const size = 1.6 + placement.random * 2.2;
+    obstacles.push({ x: placement.x, z: placement.z, radius: 0.6 * size });
     euler.set(0, placement.random * 40, 0);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.8 + placement.random * 0.4), size);
@@ -224,6 +255,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   const rockMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
   createTiledInstances(group, buildRockGeometry(), rockMaterial, rocks, (placement, matrix) => {
     const size = 1.0 + placement.random * placement.random * 5;
+    obstacles.push({ x: placement.x, z: placement.z, radius: 0.85 * size });
     euler.set(placement.random * 3, placement.random * 17, placement.random * 2);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.7 + placement.random * 0.5), size * (0.8 + placement.random * 0.3));
@@ -232,5 +264,5 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   }, { castShadow: true });
 
   scene.add(group);
-  return group;
+  return { group, obstacles };
 }

@@ -12,7 +12,7 @@ PORTRAIT = {'width': 412, 'height': 915}
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])
     for pose in poses:
-        viewport = PORTRAIT if pose == '6' else LANDSCAPE
+        viewport = PORTRAIT if pose in ('6', '10') else LANDSCAPE
         context = browser.new_context(viewport=viewport, device_scale_factor=2)
         page = context.new_page()
         errors = []
