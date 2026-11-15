@@ -24,6 +24,11 @@ const AUTOSAVE_INTERVAL_SECONDS = 5;
 const BOARDING_DISTANCE = 70;
 const LANDING_SEARCH_RADIUS = 80;
 const MAX_LANDING_SPEED = 2.6;
+const REPAIR_REQUIREMENTS = { plank: 4, rope: 2, barrel: 1, sailcloth: 1 };
+const REPAIR_LABELS = { plank: 'Lankut', rope: 'Köydet', barrel: 'Tynnyri', sailcloth: 'Purjekangas' };
+const REPAIR_DISTANCE = 16;
+const LAUNCH_SECONDS = 2.5;
+const BEACHED_ROLL = -0.7;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: isScreenshotMode });
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -114,13 +119,50 @@ const POSES = {
   8: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 44, warmup: 2 },
   9: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 28, warmup: 3, walkToItem: true },
   10: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 32, warmup: 2 },
+  11: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 44, warmup: 2, nearSloop: true },
 };
 
 const startPose = POSES[screenshotPose] || POSES[1];
 const anchorage = findOpenWater(startPose.angle, startPose.clearance);
 const wreckSpot = findBeach(BAY_ANGLE, 1);
 const wreck = createWreck(scene, ground, { x: wreckSpot.x, z: wreckSpot.z, heading: wreckSpot.tangentHeading + 0.3 });
-const walkGrid = createWalkGrid(ground, heightmap.worldSize, [...vegetation.obstacles, ...wreck.obstacles]);
+function shorePointNear(x, z) {
+  const outwardLength = Math.hypot(x, z) || 1;
+  const outwardX = x / outwardLength;
+  const outwardZ = z / outwardLength;
+  let best = { x, z };
+  let bestOffset = Infinity;
+  for (let offset = -30; offset <= 30; offset += 0.5) {
+    const candidateX = x + outwardX * offset;
+    const candidateZ = z + outwardZ * offset;
+    const height = ground.heightAt(candidateX, candidateZ);
+    if (height > 0.3 && height < 0.8 && Math.abs(offset) < Math.abs(bestOffset)) {
+      bestOffset = offset;
+      best = { x: candidateX, z: candidateZ };
+    }
+  }
+  return best;
+}
+
+function launchPointFrom(x, z) {
+  const outwardLength = Math.hypot(x, z) || 1;
+  let pointX = x;
+  let pointZ = z;
+  for (let step = 0; step < 200 && heightmap.heightAt(pointX, pointZ) > -3.2; step++) {
+    pointX += (x / outwardLength) * 2;
+    pointZ += (z / outwardLength) * 2;
+  }
+  return { x: pointX + (x / outwardLength) * 8, z: pointZ + (z / outwardLength) * 8 };
+}
+
+const beachedSloop = shorePointNear(
+  wreckSpot.x - Math.sin(wreckSpot.tangentHeading) * 34,
+  wreckSpot.z - Math.cos(wreckSpot.tangentHeading) * 34,
+);
+beachedSloop.heading = wreckSpot.tangentHeading + Math.PI;
+const sloopLaunchPoint = launchPointFrom(beachedSloop.x, beachedSloop.z);
+
+const walkGrid = createWalkGrid(ground, heightmap.worldSize, [...vegetation.obstacles, ...wreck.obstacles, { x: beachedSloop.x, z: beachedSloop.z, radius: 7 }]);
 
 function nearestWalkablePoint(x, z) {
   for (let radius = 0; radius < 30; radius += 1.5) {
@@ -140,15 +182,93 @@ const spawnPoint = nearestWalkablePoint(
   wreckSpot.z + Math.cos(wreckSpot.inwardHeading) * 2 + Math.cos(wreckSpot.tangentHeading) * 11,
 );
 
+
+function isReachableFromSpawn(x, z) {
+  const path = walkGrid.findPath(spawnPoint.x, spawnPoint.z, x, z);
+  const end = path[path.length - 1];
+  return Boolean(end) && Math.hypot(end.x - x, end.z - z) < 3;
+}
+
+function findJungleClearing(preferredDistance) {
+  const candidates = [];
+  for (let offsetZ = -320; offsetZ <= 320; offsetZ += 16) {
+    for (let offsetX = -320; offsetX <= 320; offsetX += 16) {
+      const x = spawnPoint.x + offsetX;
+      const z = spawnPoint.z + offsetZ;
+      const height = ground.heightAt(x, z);
+      if (height < 5 || height > 35 || ground.slopeAt(x, z) > 0.3 || !walkGrid.isPointWalkable(x, z)) continue;
+      candidates.push({ x, z, score: Math.abs(Math.hypot(offsetX, offsetZ) - preferredDistance) });
+    }
+  }
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates.slice(0, 12).find((candidate) => isReachableFromSpawn(candidate.x, candidate.z)) ?? spawnPoint;
+}
+
+const itemZones = [
+  { id: 'wreck-beach', ...wreckSpot, minRadius: 9, maxRadius: 30, minHeight: 0.3, maxHeight: 4, types: ['plank', 'rope', 'pouch'] },
+  { id: 'west-beach', ...findBeach(BAY_ANGLE + 1.3, 3), minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 5, types: ['plank', 'barrel', 'crate'] },
+  { id: 'east-cove', ...findBeach(BAY_ANGLE - 0.8, 3), minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 6, types: ['plank', 'rope', 'pouch'] },
+  { id: 'jungle-clearing', ...findJungleClearing(170), minRadius: 2, maxRadius: 22, minHeight: 3, maxHeight: 45, types: ['plank', 'sailcloth', 'pouch'] },
+];
+
 const save = isScreenshotMode ? createEmptySave() : loadSave();
-if (isScreenshotMode) save.mode = startPose.mode;
+if (isScreenshotMode) {
+  save.mode = startPose.mode;
+  save.sloopRepaired = startPose.mode === 'sailing';
+}
 
 const character = createCharacter(scene);
-const characterStart = save.character ?? { x: spawnPoint.x, z: spawnPoint.z, heading: wreckSpot.inwardHeading + Math.PI };
+const poseSpawn = startPose.nearSloop ? nearestWalkablePoint(beachedSloop.x + Math.sin(wreckSpot.inwardHeading) * 10, beachedSloop.z + Math.cos(wreckSpot.inwardHeading) * 10) : spawnPoint;
+const characterStart = save.character ?? { x: poseSpawn.x, z: poseSpawn.z, heading: wreckSpot.inwardHeading + Math.PI };
 character.place(characterStart.x, characterStart.z, characterStart.heading);
 
-const shipStart = save.ship ?? { x: anchorage.x, z: anchorage.z, heading: anchorage.tangentHeading };
+const defaultShipStart = isScreenshotMode && startPose.mode === 'sailing' ? { x: anchorage.x, z: anchorage.z, heading: anchorage.tangentHeading } : { x: sloopLaunchPoint.x, z: sloopLaunchPoint.z, heading: beachedSloop.heading };
+const shipStart = save.ship ?? defaultShipStart;
 shipController.place(shipStart.x, shipStart.z, shipStart.heading, save.mode === 'sailing' && !save.ship ? 5 : 0);
+const launch = { active: false, progress: 0 };
+ship.setDamaged(!save.sloopRepaired);
+
+const sloopMarker = (() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const context = canvas.getContext('2d');
+  context.fillStyle = 'rgba(40, 22, 8, 0.85)';
+  context.beginPath();
+  context.arc(64, 64, 56, 0, Math.PI * 2);
+  context.fill();
+  context.lineWidth = 7;
+  context.strokeStyle = '#ffb030';
+  context.stroke();
+  context.font = '64px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('🔨', 64, 68);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+  sprite.renderOrder = 5;
+  scene.add(sprite);
+  return sprite;
+})();
+
+function updateSloopMarker(time) {
+  sloopMarker.visible = !save.sloopRepaired && mode === 'onFoot';
+  if (!sloopMarker.visible) return;
+  const ready = missingRepairMaterials().length === 0;
+  const pulse = 1 + (ready ? 0.25 : 0.08) * Math.sin(time * (ready ? 6 : 3));
+  const size = cameraDistanceByMode.onFoot * 0.09 * pulse;
+  sloopMarker.scale.set(size, size, 1);
+  sloopMarker.position.set(beachedSloop.x, ground.heightAt(beachedSloop.x, beachedSloop.z) + 6 + Math.sin(time * 2) * 0.4, beachedSloop.z);
+}
+
+function placeBeachedSloop(progress) {
+  const x = beachedSloop.x + (sloopLaunchPoint.x - beachedSloop.x) * progress;
+  const z = beachedSloop.z + (sloopLaunchPoint.z - beachedSloop.z) * progress;
+  const beachedHeight = ground.heightAt(beachedSloop.x, beachedSloop.z) - 0.75;
+  const easedProgress = progress * progress * (3 - 2 * progress);
+  ship.root.position.set(x, beachedHeight * (1 - easedProgress), z);
+  ship.root.rotation.set(0, beachedSloop.heading, BEACHED_ROLL * (1 - easedProgress), 'YXZ');
+}
 
 const typicalOnFootPitch = 0.95;
 const canopyScreenShift = 1 / Math.tan(typicalOnFootPitch);
@@ -159,7 +279,7 @@ const canopiesAsSeenFromCamera = vegetation.obstacles
     z: obstacle.z - Math.cos(CAMERA_YAW) * obstacle.canopyHeight * canopyScreenShift,
     canopyRadius: obstacle.canopyRadius,
   }]);
-const items = createItems(scene, ground, walkGrid, wreckSpot, new Set(save.collectedItemIds), canopiesAsSeenFromCamera);
+const items = createItems(scene, ground, walkGrid, itemZones, new Set(save.collectedItemIds), canopiesAsSeenFromCamera, isReachableFromSpawn);
 
 function deepWaterAhead(x, z, heading, distance) {
   let pointX = x + Math.sin(heading) * distance;
@@ -205,10 +325,12 @@ function enterMode(nextMode) {
   detailTerrain.setEnabled(onFoot, character.state.x, character.state.z);
   hud.setMode(mode);
   hud.setAction(null, null);
+  updateObjective();
   updateCamera(0, true);
 }
 
 function boardShip() {
+  save.hasSailed = true;
   enterMode('sailing');
   hud.showToast('Laivaan!');
   persist();
@@ -245,13 +367,94 @@ function updateContextAction(deltaTime) {
   const shipState = shipController.state;
   if (mode === 'onFoot') {
     const characterState = character.state;
-    const nearShip = Math.hypot(characterState.x - shipState.x, characterState.z - shipState.z) < BOARDING_DISTANCE;
-    const atShore = ground.heightAt(characterState.x, characterState.z) < 1.6;
+    if (!save.sloopRepaired) {
+      const nearSloop = Math.hypot(characterState.x - beachedSloop.x, characterState.z - beachedSloop.z) < REPAIR_DISTANCE;
+      const missing = missingRepairMaterials();
+      const subtitle = missing.length ? 'Puuttuu: ' + missing.map(([type, count]) => `${REPAIR_LABELS[type]} ${count}`).join(', ') : 'Kaikki tarvikkeet mukana!';
+      hud.setAction(nearSloop ? '🔨 Korjaa slooppi' : null, tryRepairSloop, { subtitle, disabled: missing.length > 0 });
+      return;
+    }
+    if (launch.active) {
+      hud.setAction(null, null);
+      return;
+    }
+    const distanceToShip = Math.hypot(characterState.x - shipState.x, characterState.z - shipState.z);
+    const nearShip = distanceToShip < BOARDING_DISTANCE;
+    const atShore = distanceToShip < 40 || ground.heightAt(characterState.x, characterState.z) < 2.5;
     hud.setAction(nearShip && atShore ? '⚓ Soutaa slooppiin' : null, boardShip);
   } else {
     const landingPoint = shipState.speed < MAX_LANDING_SPEED ? findLandingSpot() : null;
     hud.setAction(landingPoint ? '⚓ Mene maihin' : null, landingPoint ? () => goAshore(landingPoint) : null);
   }
+}
+
+function missingRepairMaterials() {
+  return Object.entries(REPAIR_REQUIREMENTS)
+    .map(([type, required]) => [type, required - (save.inventory[type] ?? 0)])
+    .filter(([, missing]) => missing > 0);
+}
+
+function tryRepairSloop() {
+  const missing = missingRepairMaterials();
+  if (missing.length > 0) {
+    hud.showToast('Puuttuu: ' + missing.map(([type, count]) => `${REPAIR_LABELS[type]} ${count}`).join(', '));
+    return;
+  }
+  for (const [type, required] of Object.entries(REPAIR_REQUIREMENTS)) save.inventory[type] -= required;
+  save.sloopRepaired = true;
+  launch.active = true;
+  launch.progress = 0;
+  ship.setDamaged(false);
+  hud.setInventory(save.gold, save.inventory);
+  hud.showToast('Slooppi korjattu!');
+  updateObjective();
+  persist();
+}
+
+function updateObjective() {
+  if (!save.sloopRepaired) {
+    const parts = Object.entries(REPAIR_REQUIREMENTS).map(([type, required]) => {
+      const have = Math.min(required, save.inventory[type] ?? 0);
+      return `<span class="${have >= required ? 'done' : ''}">${ITEM_TYPES[type].icon} ${REPAIR_LABELS[type]} ${have}/${required}</span>`;
+    });
+    hud.setObjective(`<b>Korjaa slooppi</b><br>${parts.join(' · ')}`);
+  } else if (mode === 'onFoot' && !save.hasSailed) {
+    hud.setObjective('Slooppi on valmis – nouse laivaan!');
+  } else {
+    hud.setObjective(null);
+  }
+}
+
+const guideTarget = new THREE.Vector3();
+function updateGuideArrow() {
+  if (mode !== 'onFoot' || save.sloopRepaired) {
+    hud.setGuideArrow(null);
+    hud.setSloopArrow(null);
+    return;
+  }
+  const characterState = character.state;
+  const stillNeeded = (type) => (save.inventory[type] ?? 0) < (REPAIR_REQUIREMENTS[type] ?? 0);
+  let nearest = null;
+  let nearestDistance = Infinity;
+  for (const item of items.items) {
+    if (item.collected || !stillNeeded(item.type)) continue;
+    const distance = Math.hypot(item.x - characterState.x, item.z - characterState.z);
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = item;
+    }
+  }
+  hud.setGuideArrow(offScreenAngle(nearest ? nearest.x : beachedSloop.x, nearest ? nearest.z : beachedSloop.z), nearest ? ITEM_TYPES[nearest.type].icon : '🔨');
+  hud.setSloopArrow(nearest ? offScreenAngle(beachedSloop.x, beachedSloop.z) : null);
+}
+
+function offScreenAngle(x, z) {
+  guideTarget.set(x, ground.heightAt(x, z), z).project(camera);
+  const inFront = guideTarget.z < 1;
+  const onScreen = inFront && Math.abs(guideTarget.x) < 0.85 && guideTarget.y < 0.8 && guideTarget.y > -0.6;
+  if (onScreen) return null;
+  const sign = inFront ? 1 : -1;
+  return Math.atan2(guideTarget.y * sign * innerHeight, guideTarget.x * sign * innerWidth);
 }
 
 function collectItem(item) {
@@ -265,6 +468,7 @@ function collectItem(item) {
   }
   save.collectedItemIds.push(item.id);
   hud.setInventory(save.gold, save.inventory);
+  updateObjective();
   persist();
 }
 
@@ -516,8 +720,20 @@ const FIXED_STEP = 1 / 60;
 function simulate(deltaTime) {
   simulationTime += deltaTime;
   applyKeyboardSteering();
-  shipController.step(deltaTime, simulationTime);
   const state = shipController.state;
+  if (!save.sloopRepaired) {
+    placeBeachedSloop(0);
+  } else if (launch.active) {
+    launch.progress = Math.min(1, launch.progress + deltaTime / LAUNCH_SECONDS);
+    placeBeachedSloop(launch.progress);
+    if (launch.progress >= 1) {
+      launch.active = false;
+      shipController.place(sloopLaunchPoint.x, sloopLaunchPoint.z, beachedSloop.heading, 0);
+      state.anchored = mode === 'onFoot';
+    }
+  } else {
+    shipController.step(deltaTime, simulationTime);
+  }
   const sternOffset = ship.length * 0.48;
   wake.update(simulationTime, state.x - Math.sin(state.heading) * sternOffset, state.z - Math.cos(state.heading) * sternOffset, state.heading, state.speed);
   ocean.update(simulationTime, cameraFocus.x, cameraFocus.z);
@@ -533,7 +749,7 @@ function simulate(deltaTime) {
     character.update(deltaTime, ground);
     detailTerrain.update(character.state.x, character.state.z);
   }
-  items.update(deltaTime, simulationTime, onFoot ? character.state.x : null, character.state.z, collectItem);
+  items.update(deltaTime, simulationTime, onFoot ? character.state.x : null, character.state.z, collectItem, (type) => !save.sloopRepaired && (save.inventory[type] ?? 0) < (REPAIR_REQUIREMENTS[type] ?? 0));
   updateContextAction(deltaTime);
 
   autosaveTimer -= deltaTime;
@@ -551,6 +767,8 @@ function renderFrame(now) {
   updateTargetMarker(simulationTime);
   renderer.render(scene, camera);
   updateHud();
+  updateGuideArrow();
+  updateSloopMarker(simulationTime);
   performanceMonitor.recordFrame(now);
 }
 
@@ -561,6 +779,7 @@ document.addEventListener('visibilitychange', () => {
 
 hud.setInventory(save.gold, save.inventory);
 enterMode(mode);
+updateObjective();
 
 if (isScreenshotMode) {
   hud.setVisible(searchParameters.has('hud'));
@@ -588,6 +807,9 @@ if (isScreenshotMode) {
   updateTargetMarker(simulationTime);
   renderer.render(scene, camera);
   updateHud();
+  updateGuideArrow();
+  updateSloopMarker(simulationTime);
+  renderer.render(scene, camera);
   window.__frameReady = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
 } else {
   updateCamera(0, true);
@@ -597,4 +819,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { tryRepairSloop, beachedSloop, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };

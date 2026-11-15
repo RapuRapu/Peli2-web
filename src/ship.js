@@ -413,7 +413,8 @@ export function createShip(scene, sunDirection) {
       rigPoints.push(mastTop, new THREE.Vector3(side * hullHalfBeam(t), hullSheer(t), (t - 0.5) * HULL_LENGTH));
     }
   }
-  root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rigPoints), rigLineMaterial));
+  const standingRigging = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(rigPoints), rigLineMaterial);
+  root.add(standingRigging);
 
   const sheetPositions = new Float32Array(12);
   const sheetGeometry = new THREE.BufferGeometry();
@@ -427,8 +428,26 @@ export function createShip(scene, sunDirection) {
   const contactRing = createHullContactRing();
   root.add(contactRing);
 
+  const brokenMastStump = spar(4.2, 0.27, sparMaterial);
+  brokenMastStump.position.copy(mast.position);
+  brokenMastStump.rotation.z = 0.12;
+  brokenMastStump.visible = false;
+  root.add(brokenMastStump);
+
   root.scale.setScalar(VISUAL_SCALE);
   scene.add(root);
+
+  const hullHole = new THREE.Mesh(new THREE.CircleGeometry(1, 9), new THREE.MeshBasicMaterial({ color: 0x0d0805, side: THREE.DoubleSide }));
+  hullHole.scale.set(1.3, 0.8, 1);
+  hullHole.position.set(HALF_BEAM * 1.005, 0.9, -1.5);
+  hullHole.rotation.y = Math.PI / 2;
+  hullHole.visible = false;
+  root.add(hullHole);
+
+  function setDamaged(isDamaged) {
+    for (const part of [mast, mainsailPivot, jibPivot, flag, standingRigging, sheets, contactRing]) part.visible = !isDamaged;
+    for (const part of [brokenMastStump, hullHole]) part.visible = isDamaged;
+  }
 
   const sailShadow = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
@@ -497,7 +516,7 @@ export function createShip(scene, sunDirection) {
   }
 
   return {
-    root, mainsailPivot, jibPivot, flag, updateRigging, updateSailShadow,
+    root, mainsailPivot, jibPivot, flag, updateRigging, updateSailShadow, setDamaged,
     length: HULL_LENGTH * VISUAL_SCALE, halfBeam: HALF_BEAM * VISUAL_SCALE, draft: DRAFT,
     maxBoomAngle: MAX_BOOM_ANGLE,
   };

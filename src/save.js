@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'peli2-save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 export function createEmptySave() {
   return {
@@ -10,6 +10,8 @@ export function createEmptySave() {
     gold: 0,
     inventory: {},
     collectedItemIds: [],
+    sloopRepaired: false,
+    hasSailed: false,
   };
 }
 

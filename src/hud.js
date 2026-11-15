@@ -2,7 +2,7 @@ import { ITEM_TYPES } from './items.js';
 
 const HINTS = {
   sailing: '<span>Kosketa merta: purjehdi sinne</span> · <span>Pidä pohjassa: ohjaa</span> · <span>Nipistä: zoomaa</span>',
-  onFoot: '<span>Kosketa: kävele sinne</span> · <span>Kerää rannan tavarat</span> · <span>Nipistä: zoomaa</span>',
+  onFoot: '<span>Kosketa: kävele sinne</span> · <span>Kerää korjaustarvikkeet</span> · <span>Nipistä: zoomaa</span>',
 };
 
 export function createHud() {
@@ -16,6 +16,9 @@ export function createHud() {
       </svg>
       <div class="readout"><span class="speed">0.0</span> kn</div>
     </div>
+    <div class="objective"></div>
+    <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span></div>
+    <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🔨</span></div>
     <div class="inventory"></div>
     <button class="reset" type="button">↺</button>
     <div class="toast"></div>
@@ -33,6 +36,10 @@ export function createHud() {
   const toast = root.querySelector('.toast');
   const actionButton = root.querySelector('.action');
   const resetButton = root.querySelector('.reset');
+  const objective = root.querySelector('.objective');
+  const guideArrow = root.querySelector('.guide-arrow:not(.sloop)');
+  const sloopArrow = root.querySelector('.guide-arrow.sloop');
+  let lastObjective = null;
   let lastSpeedText = '';
   let lastStatus = '';
   let actionHandler = null;
@@ -77,13 +84,44 @@ export function createHud() {
     toastTimer = setTimeout(() => toast.classList.remove('visible'), 1600);
   }
 
-  function setAction(label, handler) {
+  function setAction(label, handler, { subtitle = null, disabled = false } = {}) {
     actionHandler = handler;
-    if (label === lastActionLabel) return;
-    lastActionLabel = label;
-    actionButton.textContent = label ?? '';
+    const signature = `${label}|${subtitle}|${disabled}`;
+    if (signature === lastActionLabel) return;
+    lastActionLabel = signature;
+    actionButton.innerHTML = label ? `${label}${subtitle ? `<small>${subtitle}</small>` : ''}` : '';
     actionButton.classList.toggle('visible', Boolean(label));
+    actionButton.classList.toggle('disabled', disabled);
   }
+
+  function setObjective(html) {
+    if (html === lastObjective) return;
+    lastObjective = html;
+    objective.innerHTML = html ?? '';
+    objective.classList.toggle('visible', Boolean(html));
+  }
+
+  function placeEdgeArrow(element, screenAngle, icon) {
+    if (screenAngle === null) {
+      element.classList.remove('visible');
+      return;
+    }
+    if (icon) element.querySelector('.icon').textContent = icon;
+    const top = 70;
+    const bottom = innerHeight - 110;
+    const centerY = (top + bottom) / 2;
+    const halfWidth = innerWidth / 2 - 40;
+    const halfHeight = (bottom - top) / 2;
+    const directionX = Math.cos(screenAngle);
+    const directionY = -Math.sin(screenAngle);
+    const scale = Math.min(halfWidth / Math.max(1e-3, Math.abs(directionX)), halfHeight / Math.max(1e-3, Math.abs(directionY)));
+    element.style.transform = `translate(${innerWidth / 2 + directionX * scale - 24}px, ${centerY + directionY * scale - 24}px)`;
+    element.querySelector('.chevron').style.transform = `rotate(${-screenAngle}rad)`;
+    element.classList.add('visible');
+  }
+
+  const setGuideArrow = (screenAngle, icon) => placeEdgeArrow(guideArrow, screenAngle, icon);
+  const setSloopArrow = (screenAngle) => placeEdgeArrow(sloopArrow, screenAngle, null);
 
   function onReset(handler) {
     resetHandler = handler;
@@ -111,5 +149,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setObjective, setGuideArrow, setSloopArrow };
 }

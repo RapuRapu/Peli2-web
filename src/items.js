@@ -7,6 +7,7 @@ export const ITEM_TYPES = {
   rope: { name: 'Köysi', icon: '🪢' },
   plank: { name: 'Lankku', icon: '🪵' },
   pouch: { name: 'Kukkaro', icon: '💰', gold: 25 },
+  sailcloth: { name: 'Purjekangas', icon: '🧵' },
 };
 
 const PICKUP_RADIUS = 2.0;
@@ -37,8 +38,14 @@ function buildItemMesh(type) {
   } else if (type === 'plank') {
     const plank = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 1.6), material(0xb8783a));
     plank.position.y = 0.06;
-    plank.rotation.y = 0.9;
+    plank.rotation.set(0, 0.9, 0);
     group.add(plank);
+  } else if (type === 'sailcloth') {
+    const folded = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.22, 0.7), material(0xece2c8));
+    folded.position.y = 0.11;
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 8).rotateZ(Math.PI / 2), material(0xddd0b0));
+    roll.position.set(0, 0.34, 0.1);
+    group.add(folded, roll);
   } else {
     const sack = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), material(0xb08a5a));
     sack.scale.set(1, 0.8, 1);
@@ -69,32 +76,36 @@ function buildHighlightRing() {
   return ring;
 }
 
-export function createItems(scene, ground, walkGrid, wreckPosition, collectedIds, canopies) {
+export function createItems(scene, ground, walkGrid, zones, collectedIds, canopies, isReachable) {
   const isUnderCanopy = (x, z) => canopies.some((canopy) => Math.hypot(canopy.x - x, canopy.z - z) < canopy.canopyRadius);
   const random = createRandom(31);
-  const layout = ['barrel', 'crate', 'rope', 'plank', 'pouch', 'barrel', 'rope', 'pouch'];
   const items = [];
-  for (let i = 0; i < layout.length; i++) {
-    let placed = null;
-    for (let attempt = 0; attempt < 200 && !placed; attempt++) {
-      const angle = random() * Math.PI * 2;
-      const distance = 9 + random() * 34;
-      const x = wreckPosition.x + Math.cos(angle) * distance;
-      const z = wreckPosition.z + Math.sin(angle) * distance;
-      const height = ground.heightAt(x, z);
-      if (height > 0.3 && height < 4 && walkGrid.isPointWalkable(x, z) && !isUnderCanopy(x, z)) placed = { x, z };
-    }
-    if (!placed) continue;
-    const id = `beach-item-${i}`;
-    const root = new THREE.Group();
-    root.add(buildItemMesh(layout[i]), buildHighlightRing());
-    root.scale.setScalar(ITEM_SCALE);
-    root.position.set(placed.x, ground.heightAt(placed.x, placed.z), placed.z);
-    root.rotation.y = random() * Math.PI * 2;
-    const collected = collectedIds.has(id);
-    root.visible = !collected;
-    scene.add(root);
-    items.push({ id, type: layout[i], x: placed.x, z: placed.z, root, collected, pickupTime: -1 });
+  const placedSoFar = [];
+  for (const zone of zones) {
+    zone.types.forEach((type, indexInZone) => {
+      let placed = null;
+      for (let attempt = 0; attempt < 400 && !placed; attempt++) {
+        const angle = random() * Math.PI * 2;
+        const distance = zone.minRadius + random() * (zone.maxRadius - zone.minRadius);
+        const x = zone.x + Math.cos(angle) * distance;
+        const z = zone.z + Math.sin(angle) * distance;
+        const height = ground.heightAt(x, z);
+        const tooCloseToAnother = placedSoFar.some((other) => Math.hypot(other.x - x, other.z - z) < 5);
+        if (height > zone.minHeight && height < zone.maxHeight && walkGrid.isPointWalkable(x, z) && !isUnderCanopy(x, z) && !tooCloseToAnother && isReachable(x, z)) placed = { x, z };
+      }
+      if (!placed) return;
+      placedSoFar.push(placed);
+      const id = `${zone.id}-${indexInZone}`;
+      const root = new THREE.Group();
+      root.add(buildItemMesh(type), buildHighlightRing());
+      root.scale.setScalar(ITEM_SCALE);
+      root.position.set(placed.x, ground.heightAt(placed.x, placed.z), placed.z);
+      root.rotation.y = random() * Math.PI * 2;
+      const collected = collectedIds.has(id);
+      root.visible = !collected;
+      scene.add(root);
+      items.push({ id, type, zone: zone.id, x: placed.x, z: placed.z, root, collected, pickupTime: -1 });
+    });
   }
 
   const ray = new THREE.Ray();
@@ -116,7 +127,7 @@ export function createItems(scene, ground, walkGrid, wreckPosition, collectedIds
     return best;
   }
 
-  function update(deltaTime, time, characterX, characterZ, onCollect) {
+  function update(deltaTime, time, characterX, characterZ, onCollect, isNeeded) {
     for (const item of items) {
       if (item.collected) {
         if (item.pickupTime >= 0) {
@@ -132,6 +143,7 @@ export function createItems(scene, ground, walkGrid, wreckPosition, collectedIds
         continue;
       }
       const ring = item.root.children[1];
+      ring.material.color.setHex(isNeeded(item.type) ? 0xffa020 : 0xf4ecd8);
       ring.material.opacity = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(time * 3 + item.x));
       if (characterX !== null && Math.hypot(characterX - item.x, characterZ - item.z) < PICKUP_RADIUS) {
         item.collected = true;

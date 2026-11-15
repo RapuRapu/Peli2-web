@@ -35,6 +35,17 @@
   #hud .toast.visible { opacity: 1; transform: translate(-50%, 0); }
   #hud .action { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 52px); padding: 12px 20px; border-radius: 26px; background: rgba(150, 90, 30, 0.88); font-size: 18px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,.4); display: none; }
   #hud .action.visible { display: block; }
+  #hud .action small { display: block; font-size: 13px; font-weight: normal; margin-top: 2px; }
+  #hud .action.disabled { background: rgba(70, 60, 50, 0.85); color: #d8d0c0; border-color: rgba(216, 208, 192, 0.5); }
+  #hud .objective { position: absolute; top: max(8px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 12px; background: rgba(60, 35, 15, 0.72); font-size: 15px; white-space: nowrap; display: none; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+  #hud .objective.visible { display: block; }
+  #hud .objective .done { color: #b8f08a; }
+  #hud .guide-arrow { position: absolute; left: 0; top: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(40, 22, 8, 0.8); border: 3px solid #ffb030; display: none; }
+  #hud .guide-arrow .icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  #hud .guide-arrow .chevron { position: absolute; inset: -14px; display: flex; align-items: center; justify-content: flex-end; font-size: 18px; color: #ffb030; }
+  #hud .guide-arrow.sloop { border-color: #f4ecd8; }
+  #hud .guide-arrow.visible { display: block; }
+  @media (max-aspect-ratio: 1/1) { #hud .objective { top: calc(max(8px, env(safe-area-inset-top)) + 70px); font-size: 14px; } }
   #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
 </style>
 </head>

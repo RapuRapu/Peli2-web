@@ -15,6 +15,8 @@ Avaa `dist/index.html` selaimessa.
 
 **Ohjaus maissa:** kosketa = kävele sinne (reitinhaku kiertää esteet) · kosketa esinettä = hae se · ⚓-painike = laivaan / maihin.
 
+**I näytös:** kerää saarelta 4 lankkua, 2 köyttä, tynnyri ja purjekangas (4 aluetta: hylyn ranta, länsiranta, itäpoukama, viidakon aukio), korjaa rannalla makaava slooppi ja purjehdi. Reunanuoli osoittaa lähimpään tarvittavaan tavaraan, 🔨-merkki slooppiin.
+
 **Tallennus:** selaimen localStorage (`peli2-save`), automaattisesti 5 s välein, esinettä poimiessa ja sivulta poistuttaessa. ↺ (kahdesti) aloittaa alusta.
 
 ## Rakenne
@@ -40,4 +42,4 @@ Avaa `dist/index.html` selaimessa.
 
 ## Kuvakaappaukset
 
-`dist/index.html?pose=1..7&hud` renderöi kiinteän kuvakulman (7 = delfiinit, 8–10 = maissa). `&warmup=N` vaihtaa simuloidun alkuajan. `shoot.py` ajaa kuvakulmat headless-Chromella (Playwright).
+`dist/index.html?pose=1..7&hud` renderöi kiinteän kuvakulman (7 = delfiinit, 8–10 = maissa, 11 = korjattava slooppi). `&warmup=N` vaihtaa simuloidun alkuajan. `shoot.py` ajaa kuvakulmat headless-Chromella (Playwright).
