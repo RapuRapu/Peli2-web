@@ -1,13 +1,12 @@
 import * as THREE from 'three';
 
-const WORK_SECONDS = { tree: 2.1, bush: 1.2 };
-const HITS = { tree: 3, bush: 2 };
-const YIELD = { tree: { type: 'wood', amount: 2 }, bush: { type: 'fiber', amount: 1 } };
+const WORK_SECONDS = { tree: 2.1, bush: 1.2, rock: 1.0 };
+const HITS = { tree: 3, bush: 2, rock: 1 };
 const FALL_SECONDS = 0.9;
 const STUMP_CAPACITY = 256;
 const CHIP_COUNT = 40;
 const WORK_REACH = 2.4;
-const TAP_RADIUS = { tree: 2.6, bush: 2.2 };
+const TAP_RADIUS = { tree: 2.6, bush: 2.2, rock: 2.2 };
 
 function buildStumpGeometry() {
   const stump = new THREE.CylinderGeometry(0.32, 0.42, 0.55, 8);
@@ -35,7 +34,7 @@ export function createHarvesting(scene, ground, walkGrid, harvestables, harveste
   const scale = new THREE.Vector3();
   const tilt = new THREE.Quaternion();
   const axis = new THREE.Vector3();
-  const chipColors = { tree: new THREE.Color(0x8a5424), bush: new THREE.Color(0x4f7a1a) };
+  const chipColors = { tree: new THREE.Color(0x8a5424), bush: new THREE.Color(0x4f7a1a), rock: new THREE.Color(0x8a8278) };
 
   const byId = new Map(harvestables.map((node) => [node.id, node]));
 
@@ -188,7 +187,7 @@ export function createHarvesting(scene, ground, walkGrid, harvestables, harveste
     work.progress += deltaTime / WORK_SECONDS[node.kind];
     const hitPhase = work.progress * HITS[node.kind];
     const swing = hitPhase - Math.floor(hitPhase);
-    character.setWorkPose(node.kind, swing);
+    character.setWorkPose(node.kind === 'rock' ? 'bush' : node.kind, swing);
     if (Math.floor(hitPhase) > work.hitsDone && work.hitsDone < HITS[node.kind]) {
       work.hitsDone++;
       spawnChips(node, node.kind === 'tree' ? 9 : 6);
@@ -209,7 +208,7 @@ export function createHarvesting(scene, ground, walkGrid, harvestables, harveste
       }
       work.node = null;
       work.phase = 'idle';
-      onHarvested(node, YIELD[node.kind]);
+      onHarvested(node, node.yields);
     }
     return null;
   }

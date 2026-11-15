@@ -588,7 +588,8 @@ export function createShipController(ship, heightmap, wind) {
     state.windSide = forwardX * windFromZ - forwardZ * windFromX > 0 ? 1 : -1;
 
     const efficiency = sailingEfficiency(state.angleOffWind);
-    let targetSpeed = state.anchored ? 0 : Math.max(MIN_STEERAGE_SPEED, MAX_SPEED * efficiency * wind.strength);
+    const maxSpeed = ship.maxSpeed ?? MAX_SPEED;
+    let targetSpeed = state.anchored ? 0 : Math.max(MIN_STEERAGE_SPEED, maxSpeed * efficiency * wind.strength);
 
     const bowX = state.x + forwardX * ship.length * 0.45;
     const bowZ = state.z + forwardZ * ship.length * 0.45;
@@ -635,7 +636,7 @@ export function createShipController(ship, heightmap, wind) {
     ship.mainsailPivot.rotation.y = state.boomAngle;
     ship.jibPivot.children[0].rotation.y = Math.max(-0.42, Math.min(0.42, state.boomAngle * 0.6));
     ship.updateSailShadow(state.x, state.z, state.heading, state.bob);
-    ship.updateRigging(state.boomAngle, state.windSide, time, Math.min(1, state.speed / MAX_SPEED));
+    ship.updateRigging(state.boomAngle, state.windSide, time, Math.min(1, state.speed / maxSpeed));
     ship.flag.rotation.y = Math.atan2(wind.directionX, wind.directionZ) - state.heading + Math.PI / 2 + Math.sin(time * 6) * 0.15;
   }
 

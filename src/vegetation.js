@@ -223,7 +223,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
     rotation.setFromEuler(euler);
     const size = 0.75 + placement.random * 0.5;
     placement.obstacle = { x: placement.x, z: placement.z, radius: 0.45 * size, canopyRadius: 6 * size, canopyHeight: 10 * size };
-    placement.harvest = { kind: 'tree', height: 10 * size, reach: 0.45 * size };
+    placement.harvest = { kind: 'tree', height: 10 * size, reach: 0.45 * size, yields: [{ type: 'wood', amount: 1 }, { type: 'fronds', amount: 2 }, { type: 'coconut', amount: 1 }] };
     obstacles.push(placement.obstacle);
     scale.set(size, size, size);
     position.set(placement.x, placement.y - 0.2, placement.z);
@@ -241,7 +241,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   createTiledInstances(group, buildBroadleafTreeGeometry(), bushMaterial, broadleafTrees, (placement, matrix) => {
     const size = 3.2 + placement.random * 3.2;
     placement.obstacle = { x: placement.x, z: placement.z, radius: 0.22 * size };
-    placement.harvest = { kind: 'tree', height: 2.2 * size, reach: 0.22 * size };
+    placement.harvest = { kind: 'tree', height: 2.2 * size, reach: 0.22 * size, yields: [{ type: 'wood', amount: 2 }] };
     obstacles.push(placement.obstacle);
     euler.set(0, placement.random * 40, 0);
     rotation.setFromEuler(euler);
@@ -252,7 +252,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   createTiledInstances(group, buildBushGeometry(), bushMaterial, shrubs, (placement, matrix) => {
     const size = 1.6 + placement.random * 2.2;
     placement.obstacle = { x: placement.x, z: placement.z, radius: 0.6 * size };
-    placement.harvest = { kind: 'bush', height: 1.2 * size, reach: 0.6 * size };
+    placement.harvest = { kind: 'bush', height: 1.2 * size, reach: 0.6 * size, yields: [{ type: 'fiber', amount: 2 }, { type: 'stick', amount: 1 }] };
     obstacles.push(placement.obstacle);
     euler.set(0, placement.random * 40, 0);
     rotation.setFromEuler(euler);
@@ -268,7 +268,9 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   const rockMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
   createTiledInstances(group, buildRockGeometry(), rockMaterial, rocks, (placement, matrix) => {
     const size = 1.0 + placement.random * placement.random * 5;
-    obstacles.push({ x: placement.x, z: placement.z, radius: 0.6 * size });
+    placement.obstacle = { x: placement.x, z: placement.z, radius: 0.6 * size };
+    placement.harvest = size < 2.2 ? { kind: 'rock', height: size * 0.8, reach: 0.6 * size, yields: [{ type: 'stone', amount: 2 }] } : null;
+    obstacles.push(placement.obstacle);
     euler.set(placement.random * 3, placement.random * 17, placement.random * 2);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.7 + placement.random * 0.5), size * (0.8 + placement.random * 0.3));
@@ -281,6 +283,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
     ...palms.map((placement, index) => ({ id: `palm-${index}`, placement })),
     ...broadleafTrees.map((placement, index) => ({ id: `tree-${index}`, placement })),
     ...shrubs.map((placement, index) => ({ id: `bush-${index}`, placement })),
+    ...rocks.map((placement, index) => ({ id: `rock-${index}`, placement })).filter(({ placement }) => placement.harvest),
   ].map(({ id, placement }) => ({
     id, x: placement.x, y: placement.y, z: placement.z, ...placement.harvest,
     obstacle: placement.obstacle, mesh: placement.instanceMesh, index: placement.instanceIndex, baseMatrix: placement.baseMatrix,

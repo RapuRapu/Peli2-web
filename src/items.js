@@ -1,16 +1,29 @@
 import * as THREE from 'three';
 import { createRandom } from './noise.js';
 
+export const ITEM_CATEGORIES = [
+  { id: 'resource', name: 'Raw materials' },
+  { id: 'food', name: 'Food' },
+  { id: 'crafted', name: 'Crafted' },
+  { id: 'tool', name: 'Tools' },
+];
+
 export const ITEM_TYPES = {
-  barrel: { name: 'Barrel', icon: '🛢️' },
-  crate: { name: 'Crate', icon: '📦' },
-  rope: { name: 'Rope', icon: '🪢' },
-  plank: { name: 'Plank', icon: '🪚' },
+  wood: { name: 'Wood', icon: '🪵', category: 'resource' },
+  fronds: { name: 'Palm fronds', icon: '🌴', category: 'resource' },
+  fiber: { name: 'Palm fiber', icon: '🌿', category: 'resource' },
+  stick: { name: 'Stick', icon: '🥢', category: 'resource' },
+  stone: { name: 'Stone', icon: '🪨', category: 'resource' },
+  hide: { name: 'Boar hide', icon: '🐗', category: 'resource' },
+  meat: { name: 'Raw meat', icon: '🍖', category: 'food', food: 30 },
+  coconut: { name: 'Coconut', icon: '🥥', category: 'food', food: 15 },
+  rope: { name: 'Rope', icon: '🪢', category: 'crafted' },
+  raftFrame: { name: 'Raft frame', icon: '🛶', category: 'crafted' },
+  hideSail: { name: 'Hide sail', icon: '⛵', category: 'crafted' },
+  paddle: { name: 'Paddle', icon: '🏏', category: 'crafted' },
+  axe: { name: 'Stone axe', icon: '🪓', category: 'tool' },
+  diggingStick: { name: 'Digging stick', icon: '🪏', category: 'tool' },
   pouch: { name: 'Coin pouch', icon: '💰', gold: 25 },
-  sailcloth: { name: 'Sailcloth', icon: '🧵' },
-  axe: { name: 'Axe', icon: '🪓', tool: true },
-  wood: { name: 'Wood', icon: '🪵' },
-  fiber: { name: 'Palm fiber', icon: '🌿' },
 };
 
 const PICKUP_RADIUS = 2.0;
@@ -26,6 +39,19 @@ function buildItemMesh(type) {
     const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.39, 0.035, 4, 14).rotateX(Math.PI / 2), material(0x2a2622));
     hoop.position.y = 0.75;
     group.add(barrel, hoop, hoop.clone().translateY(-0.55));
+  } else if (type === 'stone') {
+    const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28, 0), material(0x8a8680));
+    stone.scale.set(1, 0.65, 0.85);
+    stone.position.y = 0.16;
+    const pebble = new THREE.Mesh(new THREE.DodecahedronGeometry(0.16, 0), material(0x9a958c));
+    pebble.position.set(0.32, 0.09, 0.1);
+    group.add(stone, pebble);
+  } else if (type === 'stick') {
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 1.3, 5).rotateZ(Math.PI / 2), material(0x7a5430));
+    stick.position.y = 0.06;
+    const twig = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.4, 4).rotateZ(Math.PI / 2 - 0.6), material(0x7a5430));
+    twig.position.set(0.25, 0.14, 0);
+    group.add(stick, twig);
   } else if (type === 'crate') {
     const crate = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.65, 0.8), material(0x9a7448));
     crate.position.y = 0.32;

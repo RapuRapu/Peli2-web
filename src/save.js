@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'peli2-save';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 export function createEmptySave() {
   return {
@@ -10,10 +10,12 @@ export function createEmptySave() {
     gold: 0,
     inventory: {},
     collectedItemIds: [],
-    sloopRepaired: false,
+    raftBuilt: false,
     hasSailed: false,
-    hasAxe: false,
     harvestedIds: [],
+    traps: [],
+    hunger: 100,
+    stats: { trapsDug: 0, hidesGathered: 0 },
   };
 }
 

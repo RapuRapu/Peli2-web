@@ -1,8 +1,8 @@
-import { ITEM_TYPES } from './items.js';
+import { ITEM_TYPES, ITEM_CATEGORIES } from './items.js';
 
 const HINTS = {
   sailing: '<span>Tap the sea: sail there</span> · <span>Hold: steer</span> · <span>Pinch: zoom</span>',
-  onFoot: '<span>Tap: walk</span> · <span>Tap a tree: chop wood</span> · <span>Tap a bush: palm fiber</span>',
+  onFoot: '<span>Tap: walk</span> · <span>Tap trees, bushes, rocks: gather</span> · <span>🔨 Craft</span>',
 };
 
 export function createHud() {
@@ -18,10 +18,18 @@ export function createHud() {
     </div>
     <button class="quest-chip" type="button"></button>
     <button class="craft-chip" type="button">🔨 Craft</button>
+    <button class="bag-chip" type="button">🎒 Bag</button>
+    <div class="quest-log bag-log">
+      <div class="quest-panel">
+        <div class="quest-header"><span>🎒 Bag</span><button class="quest-close" type="button">✕</button></div>
+        <div class="hunger-row"><span>Food</span><div class="hunger-bar"><div class="hunger-fill"></div></div><span class="hunger-text"></span></div>
+        <div class="bag-list"></div>
+      </div>
+    </div>
     <div class="quest-log craft-log">
       <div class="quest-panel">
         <div class="quest-header"><span>🔨 Craft</span><button class="quest-close" type="button">✕</button></div>
-        <div class="quest-description">Planks and ropes are needed to repair the sloop. Chop trees for 🪵 wood and pull bushes for 🌿 palm fiber.</div>
+        <div class="quest-description">Turn raw materials into tools and raft parts. Chop trees 🪵🌴, pull bushes 🌿🥢, pick up stones 🪨, trap boars 🐗.</div>
         <div class="craft-list"></div>
       </div>
     </div>
@@ -32,8 +40,9 @@ export function createHud() {
       </div>
     </div>
     <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span></div>
-    <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">⚓</span></div>
+    <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🛶</span></div>
     <div class="inventory"></div>
+    <div class="hunger-chip"><span>🍗</span><div class="hunger-bar"><div class="hunger-fill"></div></div></div>
     <button class="reset" type="button">↺</button>
     <div class="toast"></div>
     <button class="action" type="button"></button>
@@ -51,7 +60,15 @@ export function createHud() {
   const actionButton = root.querySelector('.action');
   const resetButton = root.querySelector('.reset');
   const questChip = root.querySelector('.quest-chip');
-  const questLog = root.querySelector('.quest-log:not(.craft-log)');
+  const questLog = root.querySelector('.quest-log:not(.craft-log):not(.bag-log)');
+  const bagChip = root.querySelector('.bag-chip');
+  const bagLog = root.querySelector('.bag-log');
+  const bagList = root.querySelector('.bag-list');
+  const hungerFills = root.querySelectorAll('.hunger-fill');
+  const hungerText = root.querySelector('.hunger-text');
+  let eatHandler = null;
+  let lastBagSignature = null;
+  let lastHunger = -1;
   const craftChip = root.querySelector('.craft-chip');
   const craftLog = root.querySelector('.craft-log');
   const craftList = root.querySelector('.craft-list');
@@ -71,6 +88,13 @@ export function createHud() {
     if (button && !button.disabled) craftHandler?.(button.dataset.recipe);
   });
   craftLog.querySelector('.quest-close').addEventListener('click', () => craftLog.classList.remove('open'));
+  bagChip.addEventListener('click', () => bagLog.classList.add('open'));
+  bagLog.addEventListener('click', (event) => {
+    if (event.target === bagLog) bagLog.classList.remove('open');
+    const button = event.target.closest('[data-eat]');
+    if (button) eatHandler?.(button.dataset.eat);
+  });
+  bagLog.querySelector('.quest-close').addEventListener('click', () => bagLog.classList.remove('open'));
   let lastSpeedText = '';
   let lastStatus = '';
   let actionHandler = null;
@@ -94,19 +118,51 @@ export function createHud() {
       resetButton.classList.remove('armed');
     }, 3000);
   });
-  for (const element of [actionButton, resetButton, questChip, questLog, craftChip, craftLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
+  for (const element of [actionButton, resetButton, questChip, questLog, craftChip, craftLog, bagChip, bagLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
 
   let hintShownAt = performance.now();
   function setMode(mode) {
     compass.style.display = mode === 'sailing' ? '' : 'none';
     craftChip.style.display = mode === 'onFoot' ? '' : 'none';
+    bagChip.classList.toggle('shifted', mode !== 'onFoot');
     hint.innerHTML = HINTS[mode];
     hintShownAt = performance.now();
   }
 
   function setInventory(gold, counts) {
-    const entries = Object.entries(counts).filter(([type, count]) => count > 0 && ITEM_TYPES[type] && !ITEM_TYPES[type].tool);
-    inventory.innerHTML = `<span class="slot">💰 ${gold}</span>` + entries.map(([type, count]) => `<span class="slot">${ITEM_TYPES[type].icon} ${count}</span>`).join('');
+    inventory.innerHTML = `<span class="slot">💰 ${gold}</span>`;
+    const signature = JSON.stringify(counts);
+    if (signature === lastBagSignature) return;
+    lastBagSignature = signature;
+    const sections = ITEM_CATEGORIES.map((category) => {
+      const entries = Object.entries(counts).filter(([type, count]) => count > 0 && ITEM_TYPES[type]?.category === category.id);
+      if (entries.length === 0) return '';
+      return `<div class="bag-section">${category.name}</div><div class="bag-grid">` + entries.map(([type, count]) => {
+        const itemType = ITEM_TYPES[type];
+        const eat = itemType.food ? `<button type="button" data-eat="${type}">Eat</button>` : '';
+        return `<div class="bag-slot"><span class="bag-icon">${itemType.icon}</span><span class="bag-name">${itemType.name}</span><span class="bag-count">${category.id === 'tool' ? '' : '×' + count}</span>${eat}</div>`;
+      }).join('') + '</div>';
+    }).join('');
+    bagList.innerHTML = sections || '<div class="quest-description">Your bag is empty. Gather materials around the island.</div>';
+  }
+
+  function setHunger(fullness) {
+    const rounded = Math.round(fullness);
+    if (rounded === lastHunger) return;
+    lastHunger = rounded;
+    for (const fill of hungerFills) {
+      fill.style.width = `${rounded}%`;
+      fill.style.background = rounded > 50 ? '#8ac24a' : rounded > 20 ? '#e0a030' : '#d04a2a';
+    }
+    hungerText.textContent = rounded > 50 ? 'Fed' : rounded > 20 ? 'Peckish' : 'Hungry';
+  }
+
+  function closeMenus() {
+    for (const log of [questLog, craftLog, bagLog]) log.classList.remove('open');
+  }
+
+  function onEat(handler) {
+    eatHandler = handler;
   }
 
   function showToast(text) {
@@ -174,7 +230,7 @@ export function createHud() {
     lastCraftSignature = signature;
     craftList.innerHTML = recipes.map((recipe) => `
       <div class="recipe">
-        <div><div class="quest-title">${recipe.icon} ${recipe.name} <span class="owned">· have ${recipe.owned}</span></div><div class="quest-description">${recipe.costText}</div></div>
+        <div><div class="quest-title">${recipe.icon} ${recipe.name} ${recipe.owned === '' ? '' : `<span class="owned">· have ${recipe.owned}</span>`}</div><div class="quest-description">${recipe.costText}</div></div>
         <button type="button" data-recipe="${recipe.id}" ${recipe.canCraft ? '' : 'disabled'}>Craft</button>
       </div>`).join('');
   }
@@ -209,5 +265,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus };
 }

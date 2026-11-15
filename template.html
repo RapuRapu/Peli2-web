@@ -29,7 +29,7 @@
   #hud .inventory { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60vw; }
   #hud .slot { padding: 4px 9px; border-radius: 12px; background: rgba(20, 30, 36, 0.6); font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
   #hud button { pointer-events: auto; font-family: inherit; color: #fff8e8; border: 1.5px solid rgba(255, 248, 232, 0.7); cursor: pointer; }
-  #hud .reset { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); right: max(8px, env(safe-area-inset-right)); padding: 3px 10px; border-radius: 12px; background: rgba(20, 30, 36, 0.45); font-size: 14px; }
+  #hud .reset { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 72px); right: max(8px, env(safe-area-inset-right)); padding: 3px 10px; border-radius: 12px; background: rgba(20, 30, 36, 0.45); font-size: 14px; }
   #hud .reset.armed { background: rgba(120, 30, 20, 0.8); }
   #hud .toast { position: absolute; top: 14%; left: 50%; transform: translate(-50%, -6px); padding: 7px 16px; border-radius: 10px; background: rgba(20, 30, 36, 0.7); font-size: 18px; opacity: 0; transition: opacity .25s, transform .25s; }
   #hud .toast.visible { opacity: 1; transform: translate(-50%, 0); }
@@ -38,6 +38,20 @@
   #hud .action small { display: block; font-size: 13px; font-weight: normal; margin-top: 2px; }
   #hud .action.disabled { background: rgba(70, 60, 50, 0.85); color: #d8d0c0; border-color: rgba(216, 208, 192, 0.5); }
   #hud .quest-chip { position: absolute; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); max-width: 55vw; padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+  #hud .bag-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); left: calc(max(8px, env(safe-area-inset-left)) + 92px); padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; }
+  #hud .bag-chip.shifted { left: max(8px, env(safe-area-inset-left)); }
+  #hud .hunger-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); right: max(8px, env(safe-area-inset-right)); display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 12px; background: rgba(20, 30, 36, 0.6); font-size: 14px; }
+  #hud .hunger-bar { width: 60px; height: 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.45); overflow: hidden; }
+  #hud .hunger-fill { height: 100%; width: 100%; }
+  #hud .hunger-row { display: flex; align-items: center; gap: 8px; font-size: 15px; margin-bottom: 6px; }
+  #hud .hunger-row .hunger-bar { flex: 1; height: 10px; }
+  #hud .bag-section { font-weight: bold; font-size: 14px; margin: 10px 0 4px; opacity: 0.75; }
+  #hud .bag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  #hud .bag-slot { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 8px; background: rgba(120, 80, 40, 0.14); font-size: 15px; }
+  #hud .bag-icon { font-size: 22px; }
+  #hud .bag-name { flex: 1; }
+  #hud .bag-count { font-weight: bold; }
+  #hud .bag-slot button { padding: 4px 10px; border-radius: 12px; background: #9a5a1e; color: #fff8e8; border: none; font-size: 14px; }
   #hud .craft-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); left: max(8px, env(safe-area-inset-left)); padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; }
   #hud .recipe { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid rgba(90, 60, 30, 0.3); }
   #hud .recipe .owned { font-weight: normal; font-size: 14px; }
