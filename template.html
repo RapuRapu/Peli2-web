@@ -41,6 +41,9 @@
   #hud .bag-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); left: calc(max(8px, env(safe-area-inset-left)) + 92px); padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; }
   #hud .bag-chip.shifted { left: max(8px, env(safe-area-inset-left)); }
   #hud .tide-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 70px); right: max(8px, env(safe-area-inset-right)); padding: 4px 9px; border-radius: 12px; background: rgba(15, 50, 70, 0.65); font-size: 14px; font-variant-numeric: tabular-nums; }
+  #hud .navy-chip.danger { background: rgba(180, 28, 18, 0.9); animation: threat-pulse 1s ease-in-out infinite; }
+  #hud.in-danger::before { content: ''; position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 60px 10px rgba(200, 30, 20, 0.45); animation: danger-edge 1.6s ease-in-out infinite; }
+  @keyframes danger-edge { 50% { opacity: 0.45; } }
   #hud .crab-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 134px); right: max(8px, env(safe-area-inset-right)); padding: 4px 9px; border-radius: 12px; background: rgba(150, 60, 20, 0.75); font-size: 14px; font-variant-numeric: tabular-nums; }
   #hud .navy-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 102px); right: max(8px, env(safe-area-inset-right)); padding: 4px 9px; border-radius: 12px; background: rgba(28, 36, 104, 0.82); font-size: 14px; font-variant-numeric: tabular-nums; }
   #hud .hunger-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); right: max(8px, env(safe-area-inset-right)); display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 12px; background: rgba(20, 30, 36, 0.6); font-size: 14px; }

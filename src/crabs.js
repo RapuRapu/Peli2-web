@@ -151,7 +151,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     scene.add(mesh);
     const home = beachPointNear(beach.x, beach.z, 18);
     placeOnGround(mesh, home.x, home.z);
-    const alert = buildEmojiSprite('💰', 2.2, 'rgba(190, 30, 20, 0.88)');
+    const alert = buildEmojiSprite('💰', 2.2, 'rgba(110, 50, 160, 0.9)');
     alert.visible = false;
     scene.add(alert);
     return { index, mesh, alert, x: home.x, z: home.z, homeX: home.x, homeZ: home.z, heading: 0, state: 'idle', carrying: null, target: null, wanderTimer: 0, cooldown: 30 + random() * 60, beach };
@@ -168,7 +168,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     const friendBadge = buildEmojiSprite('❤️', 1.5, 'rgba(255, 255, 255, 0.92)');
     friendBadge.visible = false;
     scene.add(friendBadge);
-    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0x4aa8ff, transparent: true, opacity: 0.85, depthWrite: false }));
+    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
     friendRing.rotation.x = -Math.PI / 2;
     friendRing.visible = false;
     scene.add(friendRing);

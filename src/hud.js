@@ -186,6 +186,9 @@ export function createHud() {
   function setNavy(text) {
     if (text === lastNavyText) return;
     lastNavyText = text;
+    const inside = Boolean(text && text.includes('inside'));
+    navyChip.classList.toggle('danger', inside);
+    root.classList.toggle('in-danger', inside);
     navyChip.textContent = text ?? '';
     navyChip.style.display = text ? '' : 'none';
   }

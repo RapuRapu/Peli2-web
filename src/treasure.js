@@ -52,7 +52,7 @@ function buildOpenHoleMesh() {
   return group;
 }
 
-function buildOwnerMarker() {
+function buildOwnerMarker(contents) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 96;
   const context = canvas.getContext('2d');
@@ -60,7 +60,11 @@ function buildOwnerMarker() {
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.globalAlpha = 0.85;
-  context.fillText('📍', 48, 52);
+  context.fillStyle = 'rgba(255, 244, 214, 0.9)';
+  context.beginPath();
+  context.arc(48, 48, 40, 0, Math.PI * 2);
+  context.fill();
+  context.fillText(contents === 'decoy' ? '📦' : '👑', 48, 54);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
@@ -80,7 +84,7 @@ export function createTreasure(scene, ground, savedCaches) {
     const mound = buildMoundMesh();
     mound.position.set(x, height, z);
     mound.rotation.y = (x * 7.1 + z * 3.3) % (Math.PI * 2);
-    const marker = buildOwnerMarker();
+    const marker = buildOwnerMarker(contents);
     marker.position.set(x, height + 2.4, z);
     const cache = { id, x, z, height, contents, buriedAt, patchVisible, underground, found, floorY, mound, marker };
     mound.visible = patchVisible;

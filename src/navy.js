@@ -39,8 +39,8 @@ function buildBadge(emoji) {
 }
 
 function buildCircle() {
-  const material = new THREE.LineDashedMaterial({ color: 0xd02a1a, dashSize: 2.2, gapSize: 1.4, transparent: true, opacity: 0.9, depthTest: false });
-  const line = new THREE.LineLoop(new THREE.BufferGeometry(), material);
+  const material = new THREE.MeshBasicMaterial({ color: 0xe0301c, transparent: true, opacity: 0.92, depthTest: false, side: THREE.DoubleSide });
+  const line = new THREE.Mesh(new THREE.BufferGeometry(), material);
   line.renderOrder = 4;
   line.frustumCulled = false;
   line.visible = false;
@@ -70,7 +70,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
   fill.visible = false;
   fill.frustumCulled = false;
   scene.add(fill);
-  const anchorBadges = [0, 1, 2, 3].map(() => {
+  const anchorBadges = [0, 1, 2, 3, 4, 5, 6, 7].map(() => {
     const badge = buildBadge('⚓');
     badge.visible = false;
     scene.add(badge);
@@ -86,9 +86,26 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
       const z = search.centerZ + Math.sin(angle) * search.radius;
       points.push(new THREE.Vector3(x, Math.max(0.3, ground.heightAt(x, z)) + 0.6, z));
     }
+    const ribbon = [];
+    const dashCount = 80;
+    for (let dash = 0; dash < dashCount; dash += 1) {
+      const startAngle = (dash / dashCount) * Math.PI * 2;
+      const endAngle = startAngle + (Math.PI * 2 / dashCount) * 0.62;
+      const edge = (angle, offset) => {
+        const radius = search.radius + offset;
+        const x = search.centerX + Math.cos(angle) * radius;
+        const z = search.centerZ + Math.sin(angle) * radius;
+        return [x, Math.max(0.3, ground.heightAt(search.centerX + Math.cos(angle) * search.radius, search.centerZ + Math.sin(angle) * search.radius)) + 0.6, z];
+      };
+      const a = edge(startAngle, -0.45);
+      const b = edge(startAngle, 0.45);
+      const c = edge(endAngle, 0.45);
+      const d = edge(endAngle, -0.45);
+      ribbon.push(...a, ...b, ...c, ...a, ...c, ...d);
+    }
     circle.geometry.dispose();
-    circle.geometry = new THREE.BufferGeometry().setFromPoints(points);
-    circle.computeLineDistances();
+    circle.geometry = new THREE.BufferGeometry();
+    circle.geometry.setAttribute('position', new THREE.Float32BufferAttribute(ribbon, 3));
     const rings = 8;
     const segments = 64;
     const positions = [];
@@ -112,7 +129,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
     fill.geometry = new THREE.BufferGeometry();
     fill.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     anchorBadges.forEach((badge, index) => {
-      const angle = (index / 4) * Math.PI * 2 + 0.4;
+      const angle = (index / 8) * Math.PI * 2 + 0.4;
       const x = search.centerX + Math.cos(angle) * search.radius;
       const z = search.centerZ + Math.sin(angle) * search.radius;
       badge.position.set(x, Math.max(0.3, ground.heightAt(x, z)) + 2.2, z);
