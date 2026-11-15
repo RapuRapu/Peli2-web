@@ -2,7 +2,7 @@ import { ITEM_TYPES } from './items.js';
 
 const HINTS = {
   sailing: '<span>Tap the sea: sail there</span> · <span>Hold: steer</span> · <span>Pinch: zoom</span>',
-  onFoot: '<span>Tap: walk there</span> · <span>Gather repair materials</span> · <span>Pinch: zoom</span>',
+  onFoot: '<span>Tap: walk</span> · <span>Tap a tree: chop wood</span> · <span>Tap a bush: palm fiber</span>',
 };
 
 export function createHud() {
@@ -17,6 +17,14 @@ export function createHud() {
       <div class="readout"><span class="speed">0.0</span> kn</div>
     </div>
     <button class="quest-chip" type="button"></button>
+    <button class="craft-chip" type="button">🔨 Craft</button>
+    <div class="quest-log craft-log">
+      <div class="quest-panel">
+        <div class="quest-header"><span>🔨 Craft</span><button class="quest-close" type="button">✕</button></div>
+        <div class="quest-description">Planks and ropes are needed to repair the sloop. Chop trees for 🪵 wood and pull bushes for 🌿 palm fiber.</div>
+        <div class="craft-list"></div>
+      </div>
+    </div>
     <div class="quest-log">
       <div class="quest-panel">
         <div class="quest-header"><span>📜 Quests</span><button class="quest-close" type="button">✕</button></div>
@@ -24,7 +32,7 @@ export function createHud() {
       </div>
     </div>
     <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span></div>
-    <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🔨</span></div>
+    <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">⚓</span></div>
     <div class="inventory"></div>
     <button class="reset" type="button">↺</button>
     <div class="toast"></div>
@@ -43,14 +51,26 @@ export function createHud() {
   const actionButton = root.querySelector('.action');
   const resetButton = root.querySelector('.reset');
   const questChip = root.querySelector('.quest-chip');
-  const questLog = root.querySelector('.quest-log');
+  const questLog = root.querySelector('.quest-log:not(.craft-log)');
+  const craftChip = root.querySelector('.craft-chip');
+  const craftLog = root.querySelector('.craft-log');
+  const craftList = root.querySelector('.craft-list');
+  let craftHandler = null;
+  let lastCraftSignature = null;
   const questList = root.querySelector('.quest-list');
   const guideArrow = root.querySelector('.guide-arrow:not(.sloop)');
   const sloopArrow = root.querySelector('.guide-arrow.sloop');
   let lastQuestSignature = null;
   questChip.addEventListener('click', () => questLog.classList.add('open'));
   questLog.addEventListener('click', (event) => { if (event.target === questLog) questLog.classList.remove('open'); });
-  root.querySelector('.quest-close').addEventListener('click', () => questLog.classList.remove('open'));
+  questLog.querySelector('.quest-close').addEventListener('click', () => questLog.classList.remove('open'));
+  craftChip.addEventListener('click', () => craftLog.classList.add('open'));
+  craftLog.addEventListener('click', (event) => {
+    if (event.target === craftLog) craftLog.classList.remove('open');
+    const button = event.target.closest('[data-recipe]');
+    if (button && !button.disabled) craftHandler?.(button.dataset.recipe);
+  });
+  craftLog.querySelector('.quest-close').addEventListener('click', () => craftLog.classList.remove('open'));
   let lastSpeedText = '';
   let lastStatus = '';
   let actionHandler = null;
@@ -74,17 +94,18 @@ export function createHud() {
       resetButton.classList.remove('armed');
     }, 3000);
   });
-  for (const element of [actionButton, resetButton, questChip, questLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
+  for (const element of [actionButton, resetButton, questChip, questLog, craftChip, craftLog]) element.addEventListener('pointerdown', (event) => event.stopPropagation());
 
   let hintShownAt = performance.now();
   function setMode(mode) {
     compass.style.display = mode === 'sailing' ? '' : 'none';
+    craftChip.style.display = mode === 'onFoot' ? '' : 'none';
     hint.innerHTML = HINTS[mode];
     hintShownAt = performance.now();
   }
 
   function setInventory(gold, counts) {
-    const entries = Object.entries(counts).filter(([, count]) => count > 0);
+    const entries = Object.entries(counts).filter(([type, count]) => count > 0 && ITEM_TYPES[type] && !ITEM_TYPES[type].tool);
     inventory.innerHTML = `<span class="slot">💰 ${gold}</span>` + entries.map(([type, count]) => `<span class="slot">${ITEM_TYPES[type].icon} ${count}</span>`).join('');
   }
 
@@ -147,6 +168,21 @@ export function createHud() {
   const setGuideArrow = (screenAngle, icon) => placeEdgeArrow(guideArrow, screenAngle, icon);
   const setSloopArrow = (screenAngle) => placeEdgeArrow(sloopArrow, screenAngle, null);
 
+  function setRecipes(recipes) {
+    const signature = JSON.stringify(recipes);
+    if (signature === lastCraftSignature) return;
+    lastCraftSignature = signature;
+    craftList.innerHTML = recipes.map((recipe) => `
+      <div class="recipe">
+        <div><div class="quest-title">${recipe.icon} ${recipe.name} <span class="owned">· have ${recipe.owned}</span></div><div class="quest-description">${recipe.costText}</div></div>
+        <button type="button" data-recipe="${recipe.id}" ${recipe.canCraft ? '' : 'disabled'}>Craft</button>
+      </div>`).join('');
+  }
+
+  function onCraft(handler) {
+    craftHandler = handler;
+  }
+
   function onReset(handler) {
     resetHandler = handler;
   }
@@ -173,5 +209,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft };
 }

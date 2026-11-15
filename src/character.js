@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const CHARACTER_SCALE = 1.5;
-const WALK_SPEED = 4.2;
+const WALK_SPEED = 5.5;
 const TURN_RATE = 9;
 const ARRIVAL_DISTANCE = 0.4;
 
@@ -56,6 +56,16 @@ export function createCharacter(scene) {
   rightArm.position.set(0.29, shoulderHeight, 0);
   body.add(leftArm, rightArm);
 
+  const axe = new THREE.Group();
+  const handle = part(new THREE.CylinderGeometry(0.045, 0.05, 1.0, 6), new THREE.Color(0.55, 0.34, 0.15), 0, 0, 0);
+  const blade = part(new THREE.BoxGeometry(0.06, 0.34, 0.4), new THREE.Color(0.88, 0.9, 0.93), 0, 0.42, 0.17);
+  blade.material.emissive = new THREE.Color(0.15, 0.15, 0.17);
+  axe.add(handle, blade);
+  axe.position.set(0, -0.62, 0.12);
+  axe.rotation.x = Math.PI / 2;
+  axe.visible = false;
+  rightArm.add(axe);
+
   const contactShadow = new THREE.Mesh(
     new THREE.CircleGeometry(0.45, 16).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12, depthWrite: false }),
@@ -67,7 +77,7 @@ export function createCharacter(scene) {
   root.scale.setScalar(CHARACTER_SCALE);
   scene.add(root);
 
-  const state = { x: 0, z: 0, heading: 0, path: [], pathIndex: 0, walkPhase: 0, moving: false, time: 0 };
+  const state = { x: 0, z: 0, heading: 0, path: [], pathIndex: 0, walkPhase: 0, moving: false, time: 0, workKind: null, workSwing: 0 };
 
   function place(x, z, heading = state.heading) {
     state.x = x;
@@ -121,6 +131,18 @@ export function createCharacter(scene) {
     rightArm.rotation.x = swing * 0.8;
     leftArm.rotation.z = -0.08;
     rightArm.rotation.z = 0.08;
+    if (state.workKind === 'tree') {
+      const raise = state.workSwing < 0.6 ? state.workSwing / 0.6 : 1 - (state.workSwing - 0.6) / 0.4;
+      rightArm.rotation.x = -0.4 - raise * 2.2;
+      leftArm.rotation.x = -0.3 - raise * 1.6;
+      leftArm.rotation.z = 0.35;
+    } else if (state.workKind === 'bush') {
+      const pull = Math.sin(state.workSwing * Math.PI);
+      rightArm.rotation.x = -1.1 - pull * 0.5;
+      leftArm.rotation.x = -1.1 - (1 - pull) * 0.5;
+      body.rotation.x = 0.35;
+    }
+    if (state.workKind !== 'bush') body.rotation.x = 0;
     const breathing = state.moving ? 0 : Math.sin(state.time * 2.2) * 0.012;
     body.position.y = Math.abs(Math.cos(state.walkPhase)) * 0.05 * (state.moving ? 1 : 0) + breathing;
 
@@ -133,5 +155,14 @@ export function createCharacter(scene) {
     root.visible = visible;
   }
 
-  return { state, root, place, setPath, stop, update, setVisible };
+  function setWorkPose(kind, swing) {
+    state.workKind = kind;
+    state.workSwing = swing;
+  }
+
+  function setHasAxe(hasAxe) {
+    axe.visible = hasAxe;
+  }
+
+  return { state, root, place, setPath, stop, update, setVisible, setWorkPose, setHasAxe };
 }

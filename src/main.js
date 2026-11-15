@@ -12,6 +12,7 @@ import { createWalkGrid } from './pathfinding.js';
 import { createCharacter } from './character.js';
 import { createWreck } from './wreck.js';
 import { createItems, ITEM_TYPES } from './items.js';
+import { createHarvesting } from './harvesting.js';
 import { loadSave, writeSave, clearSave, createEmptySave } from './save.js';
 
 const searchParameters = new URLSearchParams(location.search);
@@ -26,6 +27,7 @@ const LANDING_SEARCH_RADIUS = 80;
 const MAX_LANDING_SPEED = 2.6;
 const REPAIR_REQUIREMENTS = { plank: 4, rope: 2, barrel: 1, sailcloth: 1 };
 const REPAIR_LABELS = { plank: 'Planks', rope: 'Ropes', barrel: 'Barrel', sailcloth: 'Sailcloth' };
+const RECIPES = { plank: { wood: 2 }, rope: { fiber: 3 } };
 const REPAIR_DISTANCE = 16;
 const LAUNCH_SECONDS = 2.5;
 const BEACHED_ROLL = -0.7;
@@ -120,6 +122,7 @@ const POSES = {
   9: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 28, warmup: 3, walkToItem: true },
   10: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 32, warmup: 2 },
   11: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 44, warmup: 2, nearSloop: true },
+  12: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 26, warmup: 0, chopNearestTree: true },
 };
 
 const startPose = POSES[screenshotPose] || POSES[1];
@@ -205,10 +208,11 @@ function findJungleClearing(preferredDistance) {
 }
 
 const itemZones = [
-  { id: 'wreck-beach', ...wreckSpot, minRadius: 9, maxRadius: 30, minHeight: 0.3, maxHeight: 4, types: ['plank', 'rope', 'pouch'] },
-  { id: 'west-beach', ...findBeach(BAY_ANGLE + 1.3, 3), minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 5, types: ['plank', 'barrel', 'crate'] },
-  { id: 'east-cove', ...findBeach(BAY_ANGLE - 0.8, 3), minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 6, types: ['plank', 'rope', 'pouch'] },
-  { id: 'jungle-clearing', ...findJungleClearing(170), minRadius: 2, maxRadius: 22, minHeight: 3, maxHeight: 45, types: ['plank', 'sailcloth', 'pouch'] },
+  { id: 'wreck-axe', ...spawnPoint, minRadius: 5, maxRadius: 12, minHeight: 0.3, maxHeight: 4, types: ['axe'] },
+  { id: 'wreck-beach', ...wreckSpot, minRadius: 9, maxRadius: 30, minHeight: 0.3, maxHeight: 4, types: ['plank', 'pouch'] },
+  { id: 'west-beach', ...findBeach(BAY_ANGLE + 1.3, 3), minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 5, types: ['barrel', 'crate', 'rope'] },
+  { id: 'east-cove', ...findBeach(BAY_ANGLE - 0.8, 3), minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 6, types: ['plank', 'pouch'] },
+  { id: 'jungle-clearing', ...findJungleClearing(170), minRadius: 2, maxRadius: 22, minHeight: 3, maxHeight: 45, types: ['sailcloth', 'pouch'] },
 ];
 
 const save = isScreenshotMode ? createEmptySave() : loadSave();
@@ -242,7 +246,7 @@ const sloopMarker = (() => {
   context.font = '64px sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillText('🔨', 64, 68);
+  context.fillText('⚓', 64, 68);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
@@ -280,6 +284,8 @@ const canopiesAsSeenFromCamera = vegetation.obstacles
     canopyRadius: obstacle.canopyRadius,
   }]);
 const items = createItems(scene, ground, walkGrid, itemZones, new Set(save.collectedItemIds), canopiesAsSeenFromCamera, isReachableFromSpawn);
+const harvesting = createHarvesting(scene, ground, walkGrid, vegetation.harvestables, save.harvestedIds);
+character.setHasAxe(save.hasAxe);
 
 function deepWaterAhead(x, z, heading, distance) {
   let pointX = x + Math.sin(heading) * distance;
@@ -420,10 +426,17 @@ function buildQuests() {
   repairSteps.push({ label: '🔨 Repair the sloop on the beach', have: save.sloopRepaired ? 1 : 0, need: 1 });
   return [
     {
+      title: 'Find a tool',
+      description: 'The shipwreck left you stranded on this island. Search the beach by the wreck for something useful.',
+      steps: [{ label: '🪓 Find an axe', have: save.hasAxe ? 1 : 0, need: 1 }],
+      done: save.hasAxe,
+    },
+    {
       title: 'Repair the sloop',
-      description: 'The shipwreck left you stranded on this island. A damaged sloop lies on the beach. Find materials around the island and repair it.',
+      description: 'A damaged sloop lies on the beach. Chop trees for wood and pull palm fiber from bushes, then craft planks and ropes (🔨 Craft). Find a barrel and sailcloth around the island.',
       steps: repairSteps,
       done: save.sloopRepaired,
+      locked: !save.hasAxe,
     },
     {
       title: 'Set sail',
@@ -458,7 +471,13 @@ function updateGuideArrow() {
       nearest = item;
     }
   }
-  hud.setGuideArrow(offScreenAngle(nearest ? nearest.x : beachedSloop.x, nearest ? nearest.z : beachedSloop.z), nearest ? ITEM_TYPES[nearest.type].icon : '🔨');
+  if (!save.hasAxe) nearest = items.items.find((item) => item.type === 'axe' && !item.collected) ?? nearest;
+  if (!nearest && missingRepairMaterials().length > 0) {
+    hud.setGuideArrow(null);
+    hud.setSloopArrow(offScreenAngle(beachedSloop.x, beachedSloop.z));
+    return;
+  }
+  hud.setGuideArrow(offScreenAngle(nearest ? nearest.x : beachedSloop.x, nearest ? nearest.z : beachedSloop.z), nearest ? ITEM_TYPES[nearest.type].icon : '⚓');
   hud.setSloopArrow(nearest ? offScreenAngle(beachedSloop.x, beachedSloop.z) : null);
 }
 
@@ -476,15 +495,49 @@ function collectItem(item) {
   if (itemType.gold) {
     save.gold += itemType.gold;
     hud.showToast(`+${itemType.gold} gold`);
+  } else if (itemType.tool) {
+    save.hasAxe = true;
+    character.setHasAxe(true);
+    hud.showToast('Found an axe! Tap a tree to chop it');
   } else {
     save.inventory[item.type] = (save.inventory[item.type] ?? 0) + 1;
     hud.showToast(`+1 ${itemType.name}`);
   }
   save.collectedItemIds.push(item.id);
-  hud.setInventory(save.gold, save.inventory);
-  updateObjective();
+  refreshInventoryViews();
   persist();
 }
+
+function onHarvested(node, harvestYield) {
+  save.inventory[harvestYield.type] = (save.inventory[harvestYield.type] ?? 0) + harvestYield.amount;
+  save.harvestedIds.push(node.id);
+  hud.showToast(`+${harvestYield.amount} ${ITEM_TYPES[harvestYield.type].icon} ${ITEM_TYPES[harvestYield.type].name}`);
+  refreshInventoryViews();
+  persist();
+}
+
+function refreshInventoryViews() {
+  hud.setInventory(save.gold, save.inventory);
+  hud.setRecipes(Object.entries(RECIPES).map(([id, cost]) => ({
+    id,
+    name: REPAIR_LABELS[id],
+    icon: ITEM_TYPES[id].icon,
+    owned: save.inventory[id] ?? 0,
+    costText: Object.entries(cost).map(([type, amount]) => `${ITEM_TYPES[type].icon} ${ITEM_TYPES[type].name} ${Math.min(save.inventory[type] ?? 0, amount)}/${amount}`).join(', '),
+    canCraft: Object.entries(cost).every(([type, amount]) => (save.inventory[type] ?? 0) >= amount),
+  })));
+  updateObjective();
+}
+
+hud.onCraft((recipeId) => {
+  const cost = RECIPES[recipeId];
+  if (!Object.entries(cost).every(([type, amount]) => (save.inventory[type] ?? 0) >= amount)) return;
+  for (const [type, amount] of Object.entries(cost)) save.inventory[type] -= amount;
+  save.inventory[recipeId] = (save.inventory[recipeId] ?? 0) + 1;
+  hud.showToast(`Crafted ${ITEM_TYPES[recipeId].icon} ${ITEM_TYPES[recipeId].name}`);
+  refreshInventoryViews();
+  persist();
+});
 
 hud.onReset(() => {
   clearSave();
@@ -519,7 +572,26 @@ function walkTowardScreenPoint(clientX, clientY, isNewTouch) {
   aimRayAt(clientX, clientY);
   let targetX;
   let targetZ;
+  if (!isNewTouch && harvesting.isBusy()) return;
   const tappedItem = items.itemUnderRay(raycaster.ray);
+  const tappedNode = tappedItem ? null : harvesting.nodeUnderRay(raycaster.ray);
+  harvesting.cancel();
+  character.setWorkPose(null, 0);
+  if (tappedNode && isNewTouch) {
+    if (tappedNode.kind === 'tree' && !save.hasAxe) {
+      hud.showToast('You need an axe – search near the wreck');
+      return;
+    }
+    const characterState = character.state;
+    const standPoint = harvesting.approachPoint(tappedNode, characterState.x, characterState.z);
+    walkTarget.x = standPoint.x;
+    walkTarget.z = standPoint.z;
+    walkTarget.active = true;
+    character.setPath(walkGrid.findPath(characterState.x, characterState.z, standPoint.x, standPoint.z));
+    harvesting.begin(tappedNode);
+    interactedInMode.onFoot = true;
+    return;
+  }
   if (tappedItem) {
     targetX = tappedItem.x;
     targetZ = tappedItem.z;
@@ -761,6 +833,7 @@ function simulate(deltaTime) {
   const onFoot = mode === 'onFoot';
   if (onFoot) {
     character.update(deltaTime, ground);
+    if (harvesting.update(deltaTime, character, onHarvested) === 'unreachable') hud.showToast("Can't reach that");
     detailTerrain.update(character.state.x, character.state.z);
   }
   items.update(deltaTime, simulationTime, onFoot ? character.state.x : null, character.state.z, collectItem, (type) => !save.sloopRepaired && (save.inventory[type] ?? 0) < (REPAIR_REQUIREMENTS[type] ?? 0));
@@ -791,13 +864,25 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') persist();
 });
 
-hud.setInventory(save.gold, save.inventory);
+refreshInventoryViews();
 enterMode(mode);
-updateObjective();
 
 if (isScreenshotMode) {
   hud.setVisible(searchParameters.has('hud'));
   performanceMonitor.setVisible(false);
+  if (startPose.chopNearestTree) {
+    save.hasAxe = true;
+    character.setHasAxe(true);
+    const tree = vegetation.harvestables.filter((node) => node.kind === 'tree').reduce((best, node) => {
+      const distance = Math.hypot(node.x - character.state.x, node.z - character.state.z);
+      return !best || distance < best.distance ? { node, distance } : best;
+    }, null).node;
+    const standPoint = harvesting.approachPoint(tree, tree.x - 4, tree.z + 4);
+    character.place(standPoint.x, standPoint.z);
+    harvesting.begin(tree);
+    refreshInventoryViews();
+    for (let i = 0; i < 70; i++) simulate(FIXED_STEP);
+  }
   if (startPose.walkToItem) {
     const nearestItem = items.items.reduce((best, item) => {
       const distance = Math.hypot(item.x - character.state.x, item.z - character.state.z);
@@ -833,4 +918,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { tryRepairSloop, beachedSloop, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { harvesting, vegetation, tryRepairSloop, beachedSloop, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };

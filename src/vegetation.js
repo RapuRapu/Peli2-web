@@ -163,10 +163,14 @@ function configureVegetationMaterial(material, timeUniform, swayStrength, canopy
          vec3 sightLine = occlusionFocus - occlusionCamera;
          float along = clamp(dot(vegetationInstanceCanopy - occlusionCamera, sightLine) / dot(sightLine, sightLine), 0.0, 1.0);
          float distanceToSightLine = length(vegetationInstanceCanopy - (occlusionCamera + sightLine * along));
-         if (distanceToSightLine < vegetationInstanceReach) {
-           vec2 ditherCell = mod(floor(gl_FragCoord.xy / 3.0), 4.0);
+         float fragmentAlong = clamp(dot(vegetationWorldPosition - occlusionCamera, sightLine) / dot(sightLine, sightLine), 0.0, 1.0);
+         float fragmentToSightLine = length(vegetationWorldPosition - (occlusionCamera + sightLine * fragmentAlong));
+         bool aboveHead = vegetationWorldPosition.y > occlusionFocus.y + 1.6 && vColor.g > vColor.r * 1.15;
+         if (distanceToSightLine < vegetationInstanceReach && aboveHead && fragmentToSightLine < 4.5) {
+           vec2 ditherCell = mod(floor(gl_FragCoord.xy), 4.0);
            float bayer = mod(ditherCell.x * 2.0 + ditherCell.y * 3.0 + floor(ditherCell.x * 0.5) * 5.0 + floor(ditherCell.y * 0.5) * 7.0, 16.0) / 16.0;
-           if (bayer < 0.55) discard;
+           float fade = 1.0 - smoothstep(2.5, 4.5, fragmentToSightLine);
+           if (bayer < 0.7 * fade) discard;
          }
        }`,
     );
@@ -187,6 +191,9 @@ function createTiledInstances(group, geometry, material, placements, composeMatr
     tilePlacements.forEach((placement, index) => {
       composeMatrix(placement, matrix);
       instances.setMatrixAt(index, matrix);
+      placement.instanceMesh = instances;
+      placement.instanceIndex = index;
+      placement.baseMatrix = matrix.clone();
       const tint = 0.85 + placement.random * 0.3;
       instances.setColorAt(index, instanceColor.setRGB(tint, tint * (0.95 + placement.random * 0.1), tint));
     });
@@ -210,12 +217,14 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
     accept: (x, z, height, slope, random) => random() < (height < 10 ? 1 : 0.25),
   });
   const palmMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
-  configureVegetationMaterial(palmMaterial, swayTimeUniform, 0.0016, 9, 4.5);
+  configureVegetationMaterial(palmMaterial, swayTimeUniform, 0.0016, 9, 6.5);
   createTiledInstances(group, buildPalmGeometry(), palmMaterial, palms, (placement, matrix) => {
     euler.set((placement.random - 0.5) * 0.15, placement.random * Math.PI * 2 * 7.3, 0);
     rotation.setFromEuler(euler);
     const size = 0.75 + placement.random * 0.5;
-    obstacles.push({ x: placement.x, z: placement.z, radius: 0.45 * size, canopyRadius: 6 * size, canopyHeight: 10 * size });
+    placement.obstacle = { x: placement.x, z: placement.z, radius: 0.45 * size, canopyRadius: 6 * size, canopyHeight: 10 * size };
+    placement.harvest = { kind: 'tree', height: 10 * size, reach: 0.45 * size };
+    obstacles.push(placement.obstacle);
     scale.set(size, size, size);
     position.set(placement.x, placement.y - 0.2, placement.z);
     matrix.compose(position, rotation, scale);
@@ -231,7 +240,9 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   const shrubs = jungle.filter((placement) => !(placement.y > 10 && placement.random > 0.25));
   createTiledInstances(group, buildBroadleafTreeGeometry(), bushMaterial, broadleafTrees, (placement, matrix) => {
     const size = 3.2 + placement.random * 3.2;
-    obstacles.push({ x: placement.x, z: placement.z, radius: 0.22 * size });
+    placement.obstacle = { x: placement.x, z: placement.z, radius: 0.22 * size };
+    placement.harvest = { kind: 'tree', height: 2.2 * size, reach: 0.22 * size };
+    obstacles.push(placement.obstacle);
     euler.set(0, placement.random * 40, 0);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.85 + placement.random * 0.35), size);
@@ -240,7 +251,9 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   }, { castShadow: true });
   createTiledInstances(group, buildBushGeometry(), bushMaterial, shrubs, (placement, matrix) => {
     const size = 1.6 + placement.random * 2.2;
-    obstacles.push({ x: placement.x, z: placement.z, radius: 0.6 * size });
+    placement.obstacle = { x: placement.x, z: placement.z, radius: 0.6 * size };
+    placement.harvest = { kind: 'bush', height: 1.2 * size, reach: 0.6 * size };
+    obstacles.push(placement.obstacle);
     euler.set(0, placement.random * 40, 0);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.8 + placement.random * 0.4), size);
@@ -255,7 +268,7 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   const rockMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true });
   createTiledInstances(group, buildRockGeometry(), rockMaterial, rocks, (placement, matrix) => {
     const size = 1.0 + placement.random * placement.random * 5;
-    obstacles.push({ x: placement.x, z: placement.z, radius: 0.85 * size });
+    obstacles.push({ x: placement.x, z: placement.z, radius: 0.6 * size });
     euler.set(placement.random * 3, placement.random * 17, placement.random * 2);
     rotation.setFromEuler(euler);
     scale.set(size, size * (0.7 + placement.random * 0.5), size * (0.8 + placement.random * 0.3));
@@ -264,5 +277,13 @@ export function createVegetation(scene, heightmap, swayTimeUniform) {
   }, { castShadow: true });
 
   scene.add(group);
-  return { group, obstacles };
+  const harvestables = [
+    ...palms.map((placement, index) => ({ id: `palm-${index}`, placement })),
+    ...broadleafTrees.map((placement, index) => ({ id: `tree-${index}`, placement })),
+    ...shrubs.map((placement, index) => ({ id: `bush-${index}`, placement })),
+  ].map(({ id, placement }) => ({
+    id, x: placement.x, y: placement.y, z: placement.z, ...placement.harvest,
+    obstacle: placement.obstacle, mesh: placement.instanceMesh, index: placement.instanceIndex, baseMatrix: placement.baseMatrix,
+  }));
+  return { group, obstacles, harvestables };
 }

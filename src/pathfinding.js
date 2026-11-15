@@ -1,6 +1,8 @@
 const CELL_SIZE = 2;
-const MAX_EXPANSIONS = 60000;
-const MAX_WALKABLE_SLOPE = 0.85;
+const MAX_EXPANSIONS = 150000;
+const HEURISTIC_WEIGHT = 1.4;
+const SLOPE_SAMPLE_DISTANCE = 2;
+const MAX_WALKABLE_SLOPE = 1.0;
 const MIN_WALKABLE_HEIGHT = -0.6;
 const DIAGONAL_COST = Math.SQRT2;
 
@@ -11,8 +13,16 @@ export function createWalkGrid(ground, worldSize, obstacles) {
   const walkableCache = new Int8Array(cellCount).fill(-1);
   const blocked = new Uint8Array(cellCount);
 
-  for (const obstacle of obstacles) {
-    const reach = obstacle.radius + 0.6;
+  function baseSlopeAt(x, z) {
+    const d = SLOPE_SAMPLE_DISTANCE;
+    return Math.hypot(ground.baseHeightAt(x + d, z) - ground.baseHeightAt(x - d, z), ground.baseHeightAt(x, z + d) - ground.baseHeightAt(x, z - d)) / (2 * d);
+  }
+
+  const activeObstacles = new Set(obstacles);
+  for (const obstacle of obstacles) markObstacle(obstacle);
+
+  function markObstacle(obstacle) {
+    const reach = obstacle.radius + 0.4;
     const minColumn = Math.floor((obstacle.x - reach + halfWorld) / CELL_SIZE);
     const maxColumn = Math.floor((obstacle.x + reach + halfWorld) / CELL_SIZE);
     const minRow = Math.floor((obstacle.z - reach + halfWorld) / CELL_SIZE);
@@ -23,6 +33,24 @@ export function createWalkGrid(ground, worldSize, obstacles) {
         const centerZ = (row + 0.5) * CELL_SIZE - halfWorld;
         if (Math.hypot(centerX - obstacle.x, centerZ - obstacle.z) < reach) blocked[row * gridSize + column] = 1;
       }
+    }
+  }
+
+  function removeObstacle(obstacle) {
+    if (!activeObstacles.delete(obstacle)) return;
+    const reach = obstacle.radius + 0.4;
+    const minColumn = Math.max(0, Math.floor((obstacle.x - reach + halfWorld) / CELL_SIZE));
+    const maxColumn = Math.min(gridSize - 1, Math.floor((obstacle.x + reach + halfWorld) / CELL_SIZE));
+    const minRow = Math.max(0, Math.floor((obstacle.z - reach + halfWorld) / CELL_SIZE));
+    const maxRow = Math.min(gridSize - 1, Math.floor((obstacle.z + reach + halfWorld) / CELL_SIZE));
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let column = minColumn; column <= maxColumn; column++) {
+        blocked[row * gridSize + column] = 0;
+        walkableCache[row * gridSize + column] = -1;
+      }
+    }
+    for (const other of activeObstacles) {
+      if (Math.abs(other.x - obstacle.x) < reach + other.radius + 2 && Math.abs(other.z - obstacle.z) < reach + other.radius + 2) markObstacle(other);
     }
   }
 
@@ -37,7 +65,7 @@ export function createWalkGrid(ground, worldSize, obstacles) {
     if (walkableCache[index] === -1) {
       const x = cellCenterX(column);
       const z = cellCenterZ(row);
-      const walkable = !blocked[index] && ground.heightAt(x, z) > MIN_WALKABLE_HEIGHT && ground.slopeAt(x, z) < MAX_WALKABLE_SLOPE;
+      const walkable = !blocked[index] && ground.heightAt(x, z) > MIN_WALKABLE_HEIGHT && baseSlopeAt(x, z) < MAX_WALKABLE_SLOPE;
       walkableCache[index] = walkable ? 1 : 0;
     }
     return walkableCache[index] === 1;
@@ -121,7 +149,7 @@ export function createWalkGrid(ground, worldSize, obstacles) {
     const heuristic = (column, row) => {
       const dx = Math.abs(column - goal[0]);
       const dz = Math.abs(row - goal[1]);
-      return (dx + dz + (DIAGONAL_COST - 2) * Math.min(dx, dz)) * 1.001;
+      return (dx + dz + (DIAGONAL_COST - 2) * Math.min(dx, dz)) * HEURISTIC_WEIGHT;
     };
     visitStamp[startIndex] = stamp;
     costSoFar[startIndex] = 0;
@@ -197,5 +225,5 @@ export function createWalkGrid(ground, worldSize, obstacles) {
     return smoothed;
   }
 
-  return { findPath, isPointWalkable };
+  return { findPath, isPointWalkable, removeObstacle };
 }

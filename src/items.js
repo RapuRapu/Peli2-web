@@ -5,9 +5,12 @@ export const ITEM_TYPES = {
   barrel: { name: 'Barrel', icon: '🛢️' },
   crate: { name: 'Crate', icon: '📦' },
   rope: { name: 'Rope', icon: '🪢' },
-  plank: { name: 'Plank', icon: '🪵' },
+  plank: { name: 'Plank', icon: '🪚' },
   pouch: { name: 'Coin pouch', icon: '💰', gold: 25 },
   sailcloth: { name: 'Sailcloth', icon: '🧵' },
+  axe: { name: 'Axe', icon: '🪓', tool: true },
+  wood: { name: 'Wood', icon: '🪵' },
+  fiber: { name: 'Palm fiber', icon: '🌿' },
 };
 
 const PICKUP_RADIUS = 2.0;
@@ -40,6 +43,12 @@ function buildItemMesh(type) {
     plank.position.y = 0.06;
     plank.rotation.set(0, 0.9, 0);
     group.add(plank);
+  } else if (type === 'axe') {
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.1, 6).rotateZ(Math.PI / 2), material(0x8a5a2c));
+    handle.position.y = 0.06;
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.34), material(0x9a9ca0));
+    blade.position.set(0.5, 0.06, 0.12);
+    group.add(handle, blade);
   } else if (type === 'sailcloth') {
     const folded = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.22, 0.7), material(0xece2c8));
     folded.position.y = 0.11;
