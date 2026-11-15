@@ -61,7 +61,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
   for (let i = 0; i < MARINE_COUNT; i++) {
     const body = createCharacter(scene, { coat: RED_COAT, sash: WHITE, trousers: WHITE, hat: BLACK, scale: 1.2 });
     body.setVisible(false);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false }));
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 20), new THREE.MeshBasicMaterial({ color: 0x1c2468, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
     ring.rotation.x = -Math.PI / 2;
     ring.visible = false;
     scene.add(ring);
@@ -70,7 +70,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
 
   const circle = buildCircle();
   scene.add(circle);
-  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xd02a1a, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
+  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xd02a1a, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
   fill.visible = false;
   fill.frustumCulled = false;
   scene.add(fill);
@@ -377,7 +377,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
     for (const marine of marines) {
       const visible = marine.state !== 'gone' && marine.state !== 'boat' && search.state !== 'idle' && search.state !== 'done';
       marine.ring.visible = visible;
-      if (visible) marine.ring.position.set(marine.body.state.x, ground.heightAt(marine.body.state.x, marine.body.state.z) + 0.08, marine.body.state.z);
+      if (visible) marine.ring.position.set(marine.body.state.x, ground.heightAt(marine.body.state.x, marine.body.state.z) + 0.25, marine.body.state.z);
     }
   }
 

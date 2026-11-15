@@ -7,8 +7,8 @@ const ROCK_HEIGHT = 1.15;
 const DIG_ROCK_SECONDS = 2.5;
 const CENTER = Math.floor(GRID_SIZE / 2);
 
-function buildRockGeometry() {
-  const geometry = new THREE.BoxGeometry(CELL_SIZE * 1.04, ROCK_HEIGHT, CELL_SIZE * 1.04, 4, 1, 4);
+function buildRockGeometry(seed) {
+  const geometry = new THREE.BoxGeometry(CELL_SIZE * 1.04, ROCK_HEIGHT, CELL_SIZE * 1.04, 2, 1, 2);
   geometry.translate(0, ROCK_HEIGHT / 2, 0);
   const position = geometry.attributes.position;
   const colors = new Float32Array(position.count * 3);
@@ -19,8 +19,8 @@ function buildRockGeometry() {
     const z = position.getZ(i);
     const isTop = y > ROCK_HEIGHT - 0.01;
     const isRim = isTop && (Math.abs(x) > half - 0.01 || Math.abs(z) > half - 0.01);
-    if (isTop && !isRim) position.setY(i, y + Math.sin(x * 4.1 + z * 2.3) * 0.07 + Math.cos(x * 1.7 - z * 5.2) * 0.05);
-    const shade = isRim ? 1.25 : isTop ? 0.7 : 1.05 - (1 - y / ROCK_HEIGHT) * 0.35;
+    if (isTop) position.setY(i, y + (x * (0.05 - seed * 0.04) + z * (seed * 0.03 - 0.02)) - (isRim ? 0.05 : 0) + Math.sin(x * 2.2 + z * 1.6 + seed * 3.1) * 0.03);
+    const shade = isRim ? 1.1 : isTop ? 0.78 : 1.05 - (1 - y / ROCK_HEIGHT) * 0.4;
     colors.set([shade, shade * 0.97, shade * 0.93], i * 3);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -79,8 +79,8 @@ export function createTunnels(scene, ground, savedTunnel) {
   floor.receiveShadow = true;
   underground.add(floor);
 
-  const rockGeometry = buildRockGeometry();
-  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95, flatShading: true });
+  const ROCK_VARIANTS = 3;
+  const rockMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.95 });
   const outerRock = new THREE.Group();
   const outerMaterial = new THREE.MeshBasicMaterial({ color: 0x0b0806 });
   for (const [offsetX, offsetZ, width, depth] of [[0, -1, 1, 0], [0, 1, 1, 0], [-1, 0, 0, 1], [1, 0, 0, 1]]) {
@@ -91,21 +91,29 @@ export function createTunnels(scene, ground, savedTunnel) {
     outerRock.add(slab);
   }
   underground.add(outerRock);
-  const rocks = new THREE.InstancedMesh(rockGeometry, rockMaterial, GRID_SIZE * GRID_SIZE);
-  rocks.castShadow = true;
-  rocks.receiveShadow = true;
-  underground.add(rocks);
+  const rockSets = Array.from({ length: ROCK_VARIANTS }, (_, seed) => {
+    const set = new THREE.InstancedMesh(buildRockGeometry(seed), rockMaterial, GRID_SIZE * GRID_SIZE);
+    set.castShadow = true;
+    set.receiveShadow = true;
+    underground.add(set);
+    return set;
+  });
 
   const ladder = buildLadder(5);
   underground.add(ladder);
-  const shaftGeometry = new THREE.CylinderGeometry(0.5, 1.4, 9, 16, 6, true);
-  const shaftAlpha = new Float32Array(shaftGeometry.attributes.position.count * 4);
-  for (let i = 0; i < shaftGeometry.attributes.position.count; i++) {
-    const heightFraction = (shaftGeometry.attributes.position.getY(i) + 4.5) / 9;
-    shaftAlpha.set([1, 0.95, 0.75, 0.2 * Math.min(1, heightFraction * 6) * (1 - heightFraction) ** 2], i * 4);
-  }
-  shaftGeometry.setAttribute('color', new THREE.BufferAttribute(shaftAlpha, 4));
-  const shaft = new THREE.Mesh(shaftGeometry, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
+  const shaft = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    const context = canvas.getContext('2d');
+    const gradient = context.createRadialGradient(32, 32, 2, 32, 32, 31);
+    gradient.addColorStop(0, 'rgba(255, 220, 150, 0.55)');
+    gradient.addColorStop(1, 'rgba(255, 200, 120, 0)');
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 64, 64);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(4.5, 4.5), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    glow.rotation.x = -Math.PI / 2;
+    return glow;
+  })();
   underground.add(shaft);
 
   const torch = new THREE.PointLight(0xffa850, 40, 34, 1.2);
@@ -166,17 +174,26 @@ export function createTunnels(scene, ground, savedTunnel) {
       for (let column = 0; column < GRID_SIZE; column++) {
         const index = cellIndex(column, row);
         const center = cellCenter(column, row);
+        const variant = Math.floor((Math.sin(column * 7.31 + row * 3.17) * 0.5 + 0.5) * ROCK_VARIANTS * 0.999);
+        for (let other = 0; other < ROCK_VARIANTS; other++) {
+          if (other === variant && !dug.has(index)) continue;
+          dummy.position.set(0, -1000, 0);
+          dummy.scale.setScalar(0.001);
+          dummy.updateMatrix();
+          rockSets[other].setMatrixAt(index, dummy.matrix);
+        }
+        const rocks = rockSets[variant];
         if (dug.has(index)) {
           dummy.position.set(0, -1000, 0);
           dummy.scale.setScalar(0.001);
         } else {
           const wobble = Math.sin(column * 12.9 + row * 78.2) * 0.5 + 0.5;
           const wobbleB = Math.sin(column * 39.3 + row * 11.7) * 0.5 + 0.5;
-          const heightScale = 0.9 + wobble * 0.2;
+          const heightScale = 0.8 + wobble * 0.5;
           dummy.position.set(center.x, TUNNEL_FLOOR_Y, center.z);
           dummy.scale.set(1, heightScale, 1);
           if (isEdge(column, row)) rockColor.setRGB(0.07, 0.06, 0.06);
-          else rockColor.setRGB(0.1 + wobble * 0.012, 0.095 + wobble * 0.01, 0.09 + wobble * 0.008);
+          else rockColor.setRGB(0.095 + wobbleB * 0.03, 0.09 + wobbleB * 0.022, 0.085 + wobble * 0.015);
           rocks.setColorAt(index, rockColor);
         }
         dummy.rotation.set(0, dug.has(index) ? 0 : Math.floor(wobbleOf(column, row) * 4) * (Math.PI / 2), 0);
@@ -184,8 +201,10 @@ export function createTunnels(scene, ground, savedTunnel) {
         rocks.setMatrixAt(index, dummy.matrix);
       }
     }
-    rocks.instanceMatrix.needsUpdate = true;
-    if (rocks.instanceColor) rocks.instanceColor.needsUpdate = true;
+    for (const rocks of rockSets) {
+      rocks.instanceMatrix.needsUpdate = true;
+      if (rocks.instanceColor) rocks.instanceColor.needsUpdate = true;
+    }
   }
 
   function build(spec) {
@@ -195,7 +214,7 @@ export function createTunnels(scene, ground, savedTunnel) {
     floor.position.set(tunnel.x, TUNNEL_FLOOR_Y, tunnel.z);
     outerRock.position.set(tunnel.x, TUNNEL_FLOOR_Y, tunnel.z);
     ladder.position.set(tunnel.x, TUNNEL_FLOOR_Y, tunnel.z - 0.7);
-    shaft.position.set(tunnel.x, TUNNEL_FLOOR_Y + 4.5, tunnel.z);
+    shaft.position.set(tunnel.x, TUNNEL_FLOOR_Y + 0.05, tunnel.z);
     entrance.group.position.set(tunnel.x, ground.heightAt(tunnel.x, tunnel.z), tunnel.z);
     entrance.group.visible = true;
     entranceBadge.position.set(tunnel.x, ground.heightAt(tunnel.x, tunnel.z) + 2.6, tunnel.z);

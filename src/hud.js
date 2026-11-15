@@ -48,8 +48,8 @@ export function createHud() {
       <div class="tide-chip"></div>
       <div class="navy-chip"></div>
       <div class="crab-chip"></div>
-      <button class="pause-button" type="button" aria-label="Pause">⏸</button>
     </div>
+    <button class="pause-button" type="button" aria-label="Pause">⏸</button>
     <div class="pause-menu">
       <div class="pause-card">
         <div class="pause-title">Paused</div>
@@ -73,6 +73,7 @@ export function createHud() {
   const toast = root.querySelector('.toast');
   const actionButton = root.querySelector('.action');
   const resetButton = root.querySelector('.reset');
+  const statusStack = root.querySelector('.status-stack');
   const pauseButton = root.querySelector('.pause-button');
   const pauseMenu = root.querySelector('.pause-menu');
   const resumeButton = root.querySelector('.resume');
@@ -303,8 +304,10 @@ export function createHud() {
     let arrowX = innerWidth / 2 + directionX * scale;
     const arrowY = centerY + directionY * scale;
     let clampedArrowY = arrowY;
-    if (arrowX < 390) clampedArrowY = Math.max(clampedArrowY, 205);
-    if (arrowX > innerWidth - 230) clampedArrowY = Math.max(clampedArrowY, innerWidth < 560 ? 300 : 280);
+    const onTopEdge = arrowY < top + 2;
+    if (onTopEdge) arrowX = Math.min(Math.max(arrowX, 305), innerWidth - 200);
+    else if (arrowX < 60) clampedArrowY = Math.max(clampedArrowY, 120);
+    else if (arrowX > innerWidth - 60) clampedArrowY = Math.max(clampedArrowY, statusStack.getBoundingClientRect().bottom + 34);
     element.style.transform = `translate(${arrowX - 24}px, ${clampedArrowY - 24}px)`;
     element.querySelector('.chevron').style.transform = `rotate(${-screenAngle}rad)`;
     element.classList.add('visible');

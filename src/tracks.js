@@ -49,13 +49,16 @@ export function createTracks(scene, ground) {
     prints.setMatrixAt(index, matrix);
   }
 
+  let footSide = 1;
+
   function add(x, z, heading, kind) {
     if (kind === 'boar') {
       const jitter = (Math.random() - 0.5) * 0.5;
       for (const side of [-1, 1]) addSingle(x + Math.cos(heading) * 0.07 * side, z - Math.sin(heading) * 0.07 * side, heading + jitter + side * 0.12, 0.13, 0.32, kind);
       return;
     }
-    addSingle(x, z, heading, 0.32, 0.55, kind);
+    footSide = -footSide;
+    addSingle(x + Math.cos(heading) * 0.14 * footSide, z - Math.sin(heading) * 0.14 * footSide, heading + footSide * 0.08, 0.22, 0.42, kind);
   }
 
   function addSingle(x, z, heading, width, length, kind) {

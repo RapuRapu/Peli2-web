@@ -215,9 +215,19 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
     const home = beachPointNear(beach.x, beach.z, 18);
     placeOnGround(mesh, home.x, home.z);
     const alert = buildEmojiSprite('💰', 2.2, 'rgba(110, 50, 160, 0.9)');
+    const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineDashedMaterial({ color: 0xb070ff, dashSize: 0.8, gapSize: 0.5, depthTest: false, transparent: true, opacity: 0.95 }));
+    trail.renderOrder = 4;
+    trail.frustumCulled = false;
+    trail.visible = false;
+    scene.add(trail);
+    const goalRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.25, 24), new THREE.MeshBasicMaterial({ color: 0xb070ff, transparent: true, opacity: 0.9, depthTest: false }));
+    goalRing.rotation.x = -Math.PI / 2;
+    goalRing.renderOrder = 4;
+    goalRing.visible = false;
+    scene.add(goalRing);
     alert.visible = false;
     scene.add(alert);
-    return { index, mesh, movingUniform, alert, x: home.x, z: home.z, homeX: home.x, homeZ: home.z, heading: 0, state: 'idle', carrying: null, target: null, wanderTimer: 0, cooldown: 30 + random() * 60, beach };
+    return { index, mesh, movingUniform, alert, trail, goalRing, x: home.x, z: home.z, homeX: home.x, homeZ: home.z, heading: 0, state: 'idle', carrying: null, target: null, wanderTimer: 0, cooldown: 30 + random() * 60, beach };
   });
 
   const diggers = beaches.map((beach) => {
@@ -232,7 +242,7 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
     const friendBadge = buildEmojiSprite('❤️', 1.5, 'rgba(255, 255, 255, 0.92)');
     friendBadge.visible = false;
     scene.add(friendBadge);
-    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false }));
+    const friendRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
     friendRing.rotation.x = -Math.PI / 2;
     friendRing.visible = false;
     scene.add(friendRing);
@@ -275,15 +285,17 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
     return phase < MIGRATION_SECONDS ? 0 : MIGRATION_PERIOD - phase;
   }
 
-  function spawnMigrant(state, playerX, playerZ) {
+  const migrationGroup = { x: 0, z: 0 };
+
+  function spawnMigrant(state) {
     for (let attempt = 0; attempt < 30; attempt++) {
       const angle = random() * Math.PI * 2;
-      const distance = 6 + random() * 55;
-      const x = playerX + Math.cos(angle) * distance;
-      const z = playerZ + Math.sin(angle) * distance;
+      const distance = Math.sqrt(random()) * 18;
+      const x = migrationGroup.x + Math.cos(angle) * distance;
+      const z = migrationGroup.z + Math.sin(angle) * distance;
       const height = ground.heightAt(x, z);
       if (height > tide.level - 0.1 && height < BEACH_TOP && !isBlocked(x, z)) {
-        Object.assign(state, { x, z, speed: 1.6 + random() * 1.4, alive: true, phase: random() * 10 });
+        Object.assign(state, { x, z, speed: 2.1 + random() * 0.6, alive: true, phase: random() * 10 });
         return;
       }
     }
@@ -386,6 +398,18 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
         return { stashed: loot };
       }
     }
+    const fleeing = thief.state === 'fleeing' && thief.carrying;
+    thief.trail.visible = fleeing;
+    thief.goalRing.visible = fleeing;
+    if (fleeing) {
+      const lift = 0.35;
+      const start = new THREE.Vector3(thief.x, ground.heightAt(thief.x, thief.z) + lift, thief.z);
+      const end = new THREE.Vector3(thief.target.x, ground.heightAt(thief.target.x, thief.target.z) + lift, thief.target.z);
+      thief.trail.geometry.setFromPoints([start, end]);
+      thief.trail.computeLineDistances();
+      thief.goalRing.position.set(thief.target.x, ground.heightAt(thief.target.x, thief.target.z) + 0.15, thief.target.z);
+      thief.goalRing.scale.setScalar(1 + 0.15 * Math.sin(time * 5));
+    }
     if (thief.alert.visible) thief.alert.position.set(thief.x, thief.mesh.position.y + 3.0 + Math.sin(time * 6) * 0.15, thief.z);
     poseCrab(thief, time, moving);
     return null;
@@ -406,7 +430,7 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
         moveToward(digger, targetX, targetZ, Math.min(FRIEND_SPEED, remaining * 2.5), deltaTime);
       }
       digger.friendBadge.position.set(digger.x, digger.mesh.position.y + 1.9, digger.z);
-      digger.friendRing.position.set(digger.x, digger.mesh.position.y + 0.06, digger.z);
+      digger.friendRing.position.set(digger.x, digger.mesh.position.y + 0.2, digger.z);
       digger.eraseTimer -= deltaTime;
       if (digger.eraseTimer <= 0) {
         digger.eraseTimer = 0.4;
@@ -432,17 +456,30 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
     if (active && !migrationWasActive) {
       started = true;
       migrants.visible = true;
-      for (const state of migrantStates) spawnMigrant(state, playerX, playerZ);
+      const startLength = Math.hypot(playerX, playerZ) || 1;
+      migrationGroup.x = playerX + (playerZ / startLength) * 30;
+      migrationGroup.z = playerZ - (playerX / startLength) * 30;
+      for (const state of migrantStates) spawnMigrant(state);
     }
     if (!active && migrationWasActive) migrants.visible = false;
     migrationWasActive = active;
     if (!active) return started;
-    const length = Math.hypot(playerX, playerZ) || 1;
-    const tangentX = -playerZ / length;
-    const tangentZ = playerX / length;
+    const length = Math.hypot(migrationGroup.x, migrationGroup.z) || 1;
+    const tangentX = -migrationGroup.z / length;
+    const tangentZ = migrationGroup.x / length;
+    migrationGroup.x += tangentX * 2.4 * deltaTime;
+    migrationGroup.z += tangentZ * 2.4 * deltaTime;
+    const groupHeight = ground.heightAt(migrationGroup.x, migrationGroup.z);
+    if (groupHeight > 1.8) {
+      migrationGroup.x *= 1 + 0.4 * deltaTime / length;
+      migrationGroup.z *= 1 + 0.4 * deltaTime / length;
+    } else if (groupHeight < tide.level) {
+      migrationGroup.x *= 1 - 0.4 * deltaTime / length;
+      migrationGroup.z *= 1 - 0.4 * deltaTime / length;
+    }
     for (let i = 0; i < MIGRATION_COUNT; i++) {
       const state = migrantStates[i];
-      if (!state.alive || Math.hypot(state.x - playerX, state.z - playerZ) > 70) spawnMigrant(state, playerX, playerZ);
+      if (!state.alive || Math.hypot(state.x - migrationGroup.x, state.z - migrationGroup.z) > 24) spawnMigrant(state);
       if (!state.alive) {
         dummy.position.set(0, -500, 0);
         dummy.scale.setScalar(0.001);
@@ -460,7 +497,7 @@ export function createCrabs(scene, ground, { isBlocked = () => false, tracks, it
         const height = ground.heightAt(state.x, state.z);
         if (height > BEACH_TOP + 0.5) state.alive = false;
         dummy.position.set(state.x, Math.max(height, tide.level - 0.15) + Math.abs(Math.sin(time * 16 + state.phase)) * 0.04, state.z);
-        dummy.rotation.set(0, Math.atan2(tangentX, tangentZ) + Math.PI / 2 + Math.sin(time * 3 + state.phase) * 0.3, 0);
+        dummy.rotation.set(0, Math.atan2(tangentX, tangentZ) + Math.PI / 2 + Math.sin(time * 3 + state.phase) * 0.08, 0);
         dummy.scale.setScalar(0.62);
       }
       dummy.updateMatrix();

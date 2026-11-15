@@ -183,7 +183,7 @@ export function createItems(scene, ground, walkGrid, zones, collectedIds, canopi
       }
       if (item.carried) continue;
       const ring = item.root.children[1];
-      ring.material.color.setHex(isNeeded(item.type) ? 0xffa020 : 0xf4ecd8);
+      ring.material.color.setHex(isNeeded(item.type) ? 0xffa020 : 0xd8c27a);
       ring.material.opacity = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(time * 3 + item.x));
       if (characterX !== null && Math.hypot(characterX - item.x, characterZ - item.z) < PICKUP_RADIUS) {
         item.collected = true;

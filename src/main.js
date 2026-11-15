@@ -273,9 +273,11 @@ const playerDisc = (() => {
   canvas.width = canvas.height = 64;
   const context = canvas.getContext('2d');
   const gradient = context.createRadialGradient(32, 32, 4, 32, 32, 31);
-  gradient.addColorStop(0, 'rgba(255, 250, 230, 0.55)');
-  gradient.addColorStop(0.7, 'rgba(255, 250, 230, 0.25)');
-  gradient.addColorStop(1, 'rgba(255, 250, 230, 0)');
+  gradient.addColorStop(0, 'rgba(255, 200, 80, 0)');
+  gradient.addColorStop(0.62, 'rgba(255, 190, 60, 0.05)');
+  gradient.addColorStop(0.78, 'rgba(255, 180, 40, 0.75)');
+  gradient.addColorStop(0.9, 'rgba(255, 180, 40, 0.35)');
+  gradient.addColorStop(1, 'rgba(255, 180, 40, 0)');
   context.fillStyle = gradient;
   context.fillRect(0, 0, 64, 64);
   const texture = new THREE.CanvasTexture(canvas);
@@ -289,7 +291,7 @@ const playerDisc = (() => {
 function updatePlayerDisc() {
   playerDisc.visible = mode !== 'sailing';
   if (!playerDisc.visible) return;
-  playerDisc.position.set(character.state.x, character.root.position.y + 0.06, character.state.z);
+  playerDisc.position.set(character.state.x, (mode === 'underground' ? character.root.position.y : ground.heightAt(character.state.x, character.state.z)) + 0.2, character.state.z);
 }
 const poseSpawn = startPose.nearSloop ? nearestWalkablePoint(raftSite.x + Math.sin(wreckSpot.inwardHeading) * 10, raftSite.z + Math.cos(wreckSpot.inwardHeading) * 10) : startPose.nearPasture ? nearestWalkablePoint(nearPasture.x + 18, nearPasture.z + 12) : spawnPoint;
 const characterStart = save.character ?? { x: poseSpawn.x, z: poseSpawn.z, heading: wreckSpot.inwardHeading + Math.PI };
@@ -665,7 +667,7 @@ function updateNavy(deltaTime) {
     const remaining = navy?.remainingSearchSeconds();
     const inside = mode === 'onFoot' && navy?.contains(character.state.x, character.state.z);
     const clock = remaining === null || remaining === undefined ? null : `${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}`;
-    hud.setNavy(clock ? `⚓ Navy searching ${clock}${inside ? ' · you are inside!' : ''}` : '⚓ Navy ashore', clock ? `⚓ ${inside ? 'inside! ' : '🔍 '}${clock}` : '⚓ ashore');
+    hud.setNavy(clock ? `⚓ Searching ${clock}${inside ? ' · inside!' : ''}` : '⚓ Navy ashore', clock ? `⚓ ${inside ? 'inside! ' : '🔍 '}${clock}` : '⚓ ashore');
   } else hud.setNavy(null);
 }
 
@@ -702,7 +704,7 @@ function updateCrabs(deltaTime) {
   }
   const untilMigration = crabs.secondsToMigration(save.worldTime);
   if (mode === 'underground') hud.setCrabs(null);
-  else if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!', '🦀 now!');
+  else if (crabs.migrationActive()) hud.setCrabs('🦀 Crab migration!', '🦀 migration');
   else if (untilMigration < 45) hud.setCrabs(`🦀 Crabs coming ${Math.ceil(untilMigration)}s`, `🦀 ${Math.ceil(untilMigration)}s`);
   else hud.setCrabs(null);
 }
