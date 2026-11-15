@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tide } from './tide.js';
 
 const GRAVITY = 9.81;
 
@@ -28,7 +29,7 @@ WAVE_DEFINITIONS.forEach((wave, index) => {
 });
 
 export function waveHeightAt(worldX, worldZ, time) {
-  let height = 0;
+  let height = tide.level;
   for (let i = 0; i < WAVE_COUNT; i++) {
     const phase = waveNumber[i] * (waveDirectionX[i] * worldX + waveDirectionZ[i] * worldZ) - waveAngularSpeed[i] * time;
     height += waveAmplitude[i] * Math.sin(phase);
@@ -39,6 +40,7 @@ export function waveHeightAt(worldX, worldZ, time) {
 const vertexShader = /* glsl */ `
   #define WAVE_COUNT ${WAVE_COUNT}
   uniform float time;
+  uniform float seaLevel;
   uniform vec4 waves[WAVE_COUNT];
   uniform float amplitudes[WAVE_COUNT];
   varying vec3 worldPosition;
@@ -48,7 +50,7 @@ const vertexShader = /* glsl */ `
   void main() {
     vec4 world = modelMatrix * vec4(position, 1.0);
     vec2 horizontal = world.xz;
-    vec3 displaced = vec3(horizontal.x, 0.0, horizontal.y);
+    vec3 displaced = vec3(horizontal.x, seaLevel, horizontal.y);
     vec2 slope = vec2(0.0);
     float crest = 0.0;
     for (int i = 0; i < WAVE_COUNT; i++) {
@@ -189,6 +191,7 @@ export function createOcean({ seabedTexture, terrainWorldSize, lighting }) {
 
   const uniforms = {
     time: { value: 0 },
+    seaLevel: { value: 0 },
     waves: { value: waveUniformVectors },
     amplitudes: { value: Array.from(waveAmplitude) },
     seabedHeights: { value: seabedTexture },
@@ -212,6 +215,7 @@ export function createOcean({ seabedTexture, terrainWorldSize, lighting }) {
 
   function update(time, focusX, focusZ) {
     uniforms.time.value = time;
+    uniforms.seaLevel.value = tide.level;
     mesh.position.x = Math.round(focusX / gridCellSize) * gridCellSize;
     mesh.position.z = Math.round(focusZ / gridCellSize) * gridCellSize;
   }

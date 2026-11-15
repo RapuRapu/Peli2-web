@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { waveHeightAt } from './ocean.js';
+import { tide } from './tide.js';
 import { createRandom, smoothstep } from './noise.js';
 
 const BODY_LENGTH = 3.2;
@@ -248,7 +249,7 @@ export function createDolphins(scene, heightmap, podHomes, { waterColor, seed = 
     pod.roamPhase += deltaTime * 0.04;
     const [centerX, centerZ] = podCenter(pod);
     const distanceToShip = Math.hypot(ship.x - centerX, ship.z - centerZ);
-    const shipInDeepWater = heightmap.heightAt(ship.x, ship.z) < SHIP_TOO_SHALLOW_DEPTH;
+    const shipInDeepWater = heightmap.heightAt(ship.x, ship.z) - tide.level < SHIP_TOO_SHALLOW_DEPTH;
 
     if (pod.state === POD_ROAMING && pod.cooldown === 0 && distanceToShip < TRIGGER_DISTANCE && ship.speed > MIN_SHIP_SPEED_TO_TRIGGER && shipInDeepWater) {
       pod.state = POD_APPROACHING;
@@ -302,7 +303,7 @@ export function createDolphins(scene, heightmap, podHomes, { waterColor, seed = 
     let desiredHeading = towardTarget + Math.sin(time * 0.7 + index * 1.9) * 0.12;
     const lookAheadX = dolphin.x + Math.sin(dolphin.heading) * 10;
     const lookAheadZ = dolphin.z + Math.cos(dolphin.heading) * 10;
-    if (heightmap.heightAt(lookAheadX, lookAheadZ) > MIN_SAFE_DEPTH) {
+    if (heightmap.heightAt(lookAheadX, lookAheadZ) - tide.level > MIN_SAFE_DEPTH) {
       const leftDepth = heightmap.heightAt(dolphin.x + Math.sin(dolphin.heading + 0.9) * 10, dolphin.z + Math.cos(dolphin.heading + 0.9) * 10);
       const rightDepth = heightmap.heightAt(dolphin.x + Math.sin(dolphin.heading - 0.9) * 10, dolphin.z + Math.cos(dolphin.heading - 0.9) * 10);
       desiredHeading = dolphin.heading + (leftDepth < rightDepth ? 1.2 : -1.2);

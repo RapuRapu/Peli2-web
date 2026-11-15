@@ -39,9 +39,10 @@ export function createHud() {
         <div class="quest-list"></div>
       </div>
     </div>
-    <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span></div>
+    <div class="guide-arrow"><span class="chevron">➤</span><span class="icon"></span><span class="distance"></span></div>
     <div class="guide-arrow sloop"><span class="chevron">➤</span><span class="icon">🛶</span></div>
     <div class="inventory"></div>
+    <div class="tide-chip"></div>
     <div class="hunger-chip"><span>🍗</span><div class="hunger-bar"><div class="hunger-fill"></div></div></div>
     <button class="reset" type="button">↺</button>
     <div class="toast"></div>
@@ -69,6 +70,8 @@ export function createHud() {
   let eatHandler = null;
   let lastBagSignature = null;
   let lastHunger = -1;
+  const tideChip = root.querySelector('.tide-chip');
+  let lastTideText = '';
   const craftChip = root.querySelector('.craft-chip');
   const craftLog = root.querySelector('.craft-log');
   const craftList = root.querySelector('.craft-list');
@@ -157,6 +160,15 @@ export function createHud() {
     hungerText.textContent = rounded > 50 ? 'Fed' : rounded > 20 ? 'Peckish' : 'Hungry';
   }
 
+  function setTide({ rising, secondsToExtreme }) {
+    const minutes = Math.floor(secondsToExtreme / 60);
+    const seconds = Math.floor(secondsToExtreme % 60).toString().padStart(2, '0');
+    const text = `🌊 ${rising ? 'Rising · high' : 'Falling · low'} in ${minutes}:${seconds}`;
+    if (text === lastTideText) return;
+    lastTideText = text;
+    tideChip.textContent = text;
+  }
+
   function closeMenus() {
     for (const log of [questLog, craftLog, bagLog]) log.classList.remove('open');
   }
@@ -202,12 +214,14 @@ export function createHud() {
       </div>`).join('');
   }
 
-  function placeEdgeArrow(element, screenAngle, icon) {
+  function placeEdgeArrow(element, screenAngle, icon, distance = null) {
     if (screenAngle === null) {
       element.classList.remove('visible');
       return;
     }
     if (icon) element.querySelector('.icon').textContent = icon;
+    const distanceLabel = element.querySelector('.distance');
+    if (distanceLabel) distanceLabel.textContent = distance === null ? '' : `${Math.round(distance)} m`;
     const top = 70;
     const bottom = innerHeight - 110;
     const centerY = (top + bottom) / 2;
@@ -221,7 +235,7 @@ export function createHud() {
     element.classList.add('visible');
   }
 
-  const setGuideArrow = (screenAngle, icon) => placeEdgeArrow(guideArrow, screenAngle, icon);
+  const setGuideArrow = (screenAngle, icon, distance) => placeEdgeArrow(guideArrow, screenAngle, icon, distance);
   const setSloopArrow = (screenAngle) => placeEdgeArrow(sloopArrow, screenAngle, null);
 
   function setRecipes(recipes) {
@@ -265,5 +279,5 @@ export function createHud() {
     root.style.display = visible ? '' : 'none';
   }
 
-  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus };
+  return { update, setVisible, setMode, setInventory, showToast, setAction, onReset, setQuests, setGuideArrow, setSloopArrow, setRecipes, onCraft, setHunger, onEat, closeMenus, setTide };
 }

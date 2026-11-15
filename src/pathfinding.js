@@ -3,7 +3,10 @@ const MAX_EXPANSIONS = 150000;
 const HEURISTIC_WEIGHT = 1.4;
 const SLOPE_SAMPLE_DISTANCE = 2;
 const MAX_WALKABLE_SLOPE = 1.0;
-const MIN_WALKABLE_HEIGHT = -0.6;
+import { tide } from './tide.js';
+
+const LOWEST_EVER_WALKABLE_HEIGHT = -1.6;
+const MAX_WADING_DEPTH = 0.45;
 const DIAGONAL_COST = Math.SQRT2;
 
 export function createWalkGrid(ground, worldSize, obstacles) {
@@ -12,6 +15,7 @@ export function createWalkGrid(ground, worldSize, obstacles) {
   const cellCount = gridSize * gridSize;
   const walkableCache = new Int8Array(cellCount).fill(-1);
   const blocked = new Uint8Array(cellCount);
+  const cellHeights = new Float32Array(cellCount);
 
   function baseSlopeAt(x, z) {
     const d = SLOPE_SAMPLE_DISTANCE;
@@ -65,10 +69,11 @@ export function createWalkGrid(ground, worldSize, obstacles) {
     if (walkableCache[index] === -1) {
       const x = cellCenterX(column);
       const z = cellCenterZ(row);
-      const walkable = !blocked[index] && ground.heightAt(x, z) > MIN_WALKABLE_HEIGHT && baseSlopeAt(x, z) < MAX_WALKABLE_SLOPE;
+      cellHeights[index] = ground.heightAt(x, z);
+      const walkable = !blocked[index] && cellHeights[index] > LOWEST_EVER_WALKABLE_HEIGHT && baseSlopeAt(x, z) < MAX_WALKABLE_SLOPE;
       walkableCache[index] = walkable ? 1 : 0;
     }
-    return walkableCache[index] === 1;
+    return walkableCache[index] === 1 && cellHeights[index] > tide.level - MAX_WADING_DEPTH;
   }
 
   function isPointWalkable(x, z) {

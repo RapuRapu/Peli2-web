@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { waveHeightAt } from './ocean.js';
+import { tide } from './tide.js';
 import { smoothstep } from './noise.js';
 
 const HULL_LENGTH = 18;
@@ -593,8 +594,8 @@ export function createShipController(ship, heightmap, wind) {
 
     const bowX = state.x + forwardX * ship.length * 0.45;
     const bowZ = state.z + forwardZ * ship.length * 0.45;
-    const bowSeabed = heightmap.heightAt(bowX, bowZ);
-    const centerSeabed = heightmap.heightAt(state.x, state.z);
+    const bowSeabed = heightmap.heightAt(bowX, bowZ) - tide.level;
+    const centerSeabed = heightmap.heightAt(state.x, state.z) - tide.level;
     state.aground = bowSeabed > -ship.draft || centerSeabed > -ship.draft;
     if (state.aground) {
       targetSpeed = 0;

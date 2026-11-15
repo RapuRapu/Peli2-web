@@ -4,7 +4,9 @@ import { createRandom } from './noise.js';
 const BOAR_COUNT = 8;
 const WANDER_SPEED = 1.4;
 const FLEE_SPEED = 5.0;
-const FLEE_TRIGGER_DISTANCE = 12;
+const FLEE_TRIGGER_DISTANCE = 9;
+const MAX_WANDER_HEIGHT = 10;
+const PRINT_SPACING = 1.4;
 const FLEE_RELEASE_DISTANCE = 24;
 const HOME_RADIUS = 45;
 const TRAP_ATTRACTION_RADIUS = 55;
@@ -98,7 +100,7 @@ function buildTrapMesh() {
   return { group, cover, marker };
 }
 
-export function createWildlife(scene, ground, walkGrid, homeAreas, savedTraps) {
+export function createWildlife(scene, ground, walkGrid, homeAreas, savedTraps, tracks) {
   const random = createRandom(4242);
   const traps = [];
   const boars = [];
@@ -163,7 +165,7 @@ export function createWildlife(scene, ground, walkGrid, homeAreas, savedTraps) {
     for (let attempt = 0; attempt < 10; attempt++) {
       const x = boar.homeX + (random() - 0.5) * HOME_RADIUS * 2;
       const z = boar.homeZ + (random() - 0.5) * HOME_RADIUS * 2;
-      if (walkGrid.isPointWalkable(x, z)) {
+      if (walkGrid.isPointWalkable(x, z) && ground.heightAt(x, z) < MAX_WANDER_HEIGHT) {
         boar.targetX = x;
         boar.targetZ = z;
         return;
@@ -184,6 +186,12 @@ export function createWildlife(scene, ground, walkGrid, homeAreas, savedTraps) {
         boar.heading += turn * Math.min(1, deltaTime * 8);
         boar.x += Math.sin(boar.heading) * speed * deltaTime;
         boar.z += Math.cos(boar.heading) * speed * deltaTime;
+        boar.printDistance = (boar.printDistance ?? 0) + speed * deltaTime;
+        if (tracks && boar.printDistance > PRINT_SPACING) {
+          boar.printDistance = 0;
+          boar.printSide = -(boar.printSide ?? 1);
+          tracks.add(boar.x + Math.cos(boar.heading) * 0.18 * boar.printSide, boar.z - Math.sin(boar.heading) * 0.18 * boar.printSide, boar.heading, 'boar');
+        }
         return true;
       }
     }

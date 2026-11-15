@@ -15,6 +15,8 @@ import { createItems, ITEM_TYPES } from './items.js';
 import { createHarvesting } from './harvesting.js';
 import { createRaft, buildRaftDeck } from './raft.js';
 import { createWildlife } from './wildlife.js';
+import { createTracks } from './tracks.js';
+import { tide, setTideTime, tideStatus } from './tide.js';
 import { RECIPES, RAFT_PARTS, REARM_FRONDS, HUNGER_DRAIN_PER_SECOND, recipeViews, missingRaftParts, buildQuests, canAfford, spend, hasTool } from './survival.js';
 import { loadSave, writeSave, clearSave, createEmptySave } from './save.js';
 
@@ -123,6 +125,7 @@ const POSES = {
   11: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 44, warmup: 2, nearSloop: true },
   12: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 26, warmup: 0, chopNearestTree: true },
   13: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 30, warmup: 1, trappedBoar: true },
+  14: { mode: 'onFoot', angle: BAY_ANGLE, clearance: 70, distance: 40, warmup: 30, nearPasture: true },
 };
 
 const startPose = POSES[screenshotPose] || POSES[1];
@@ -215,24 +218,46 @@ function findJungleClearing(preferredDistance) {
 const westBeach = findBeach(BAY_ANGLE + 1.3, 3);
 const eastCove = findBeach(BAY_ANGLE - 0.8, 3);
 const jungleClearing = findJungleClearing(170);
-const nearJungle = findJungleClearing(70);
+function findOpenGround(preferredDistance, avoid = []) {
+  const canopyCenters = vegetation.obstacles.filter((obstacle) => obstacle.canopyRadius);
+  const candidates = [];
+  for (let offsetZ = -300; offsetZ <= 300; offsetZ += 12) {
+    for (let offsetX = -300; offsetX <= 300; offsetX += 12) {
+      const x = spawnPoint.x + offsetX;
+      const z = spawnPoint.z + offsetZ;
+      const height = ground.heightAt(x, z);
+      if (height < 1.6 || height > 7 || ground.slopeAt(x, z) > 0.25 || !walkGrid.isPointWalkable(x, z)) continue;
+      if (avoid.some((point) => Math.hypot(point.x - x, point.z - z) < 70)) continue;
+      const shade = canopyCenters.filter((canopy) => Math.hypot(canopy.x - x, canopy.z - z) < 10).length;
+      candidates.push({ x, z, score: Math.abs(Math.hypot(offsetX, offsetZ) - preferredDistance) + shade * 12 });
+    }
+  }
+  candidates.sort((a, b) => a.score - b.score);
+  return candidates.slice(0, 15).find((candidate) => isReachableFromSpawn(candidate.x, candidate.z)) ?? spawnPoint;
+}
+
+const nearPasture = findOpenGround(65);
+const farPasture = findOpenGround(150, [nearPasture]);
 
 const itemZones = [
-  { id: 'start', ...spawnPoint, minRadius: 4, maxRadius: 14, minHeight: 0.3, maxHeight: 4, types: ['stone', 'stick', 'stone'] },
-  { id: 'wreck-beach', ...wreckSpot, minRadius: 9, maxRadius: 30, minHeight: 0.3, maxHeight: 4, types: ['pouch'] },
-  { id: 'west-beach', ...westBeach, minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 5, types: ['pouch', 'stone'] },
-  { id: 'east-cove', ...eastCove, minRadius: 3, maxRadius: 26, minHeight: 0.3, maxHeight: 6, types: ['pouch', 'stone'] },
+  { id: 'start', ...spawnPoint, minRadius: 4, maxRadius: 14, minHeight: 1.1, maxHeight: 4, types: ['stone', 'stick', 'stone'] },
+  { id: 'wreck-beach', ...wreckSpot, minRadius: 9, maxRadius: 30, minHeight: 1.1, maxHeight: 4, types: ['pouch'] },
+  { id: 'west-beach', ...westBeach, minRadius: 3, maxRadius: 26, minHeight: 1.1, maxHeight: 5, types: ['pouch', 'stone'] },
+  { id: 'east-cove', ...eastCove, minRadius: 3, maxRadius: 26, minHeight: 1.1, maxHeight: 6, types: ['pouch', 'stone'] },
   { id: 'jungle-clearing', ...jungleClearing, minRadius: 2, maxRadius: 22, minHeight: 3, maxHeight: 45, types: ['pouch'] },
 ];
 
 const save = isScreenshotMode ? createEmptySave() : loadSave();
 if (isScreenshotMode) {
   save.mode = startPose.mode;
+  const tideParameter = searchParameters.get('tide');
+  save.worldTime = tideParameter === 'high' ? 60 : tideParameter === 'low' ? 180 : 0;
+  setTideTime(save.worldTime);
   save.raftBuilt = startPose.mode === 'sailing';
 }
 
 const character = createCharacter(scene);
-const poseSpawn = startPose.nearSloop ? nearestWalkablePoint(raftSite.x + Math.sin(wreckSpot.inwardHeading) * 10, raftSite.z + Math.cos(wreckSpot.inwardHeading) * 10) : spawnPoint;
+const poseSpawn = startPose.nearSloop ? nearestWalkablePoint(raftSite.x + Math.sin(wreckSpot.inwardHeading) * 10, raftSite.z + Math.cos(wreckSpot.inwardHeading) * 10) : startPose.nearPasture ? nearestWalkablePoint(nearPasture.x + 18, nearPasture.z + 12) : spawnPoint;
 const characterStart = save.character ?? { x: poseSpawn.x, z: poseSpawn.z, heading: wreckSpot.inwardHeading + Math.PI };
 character.place(characterStart.x, characterStart.z, characterStart.heading);
 
@@ -301,7 +326,8 @@ const canopiesAsSeenFromCamera = vegetation.obstacles
   }]);
 const items = createItems(scene, ground, walkGrid, itemZones, new Set(save.collectedItemIds), canopiesAsSeenFromCamera, isReachableFromSpawn);
 const harvesting = createHarvesting(scene, ground, walkGrid, vegetation.harvestables, save.harvestedIds);
-const wildlife = createWildlife(scene, ground, walkGrid, [nearJungle, jungleClearing, inlandFrom(westBeach, 40), inlandFrom(eastCove, 40)], save.traps);
+const tracks = createTracks(scene, ground);
+const wildlife = createWildlife(scene, ground, walkGrid, [nearPasture, farPasture, nearPasture, inlandFrom(westBeach, 30), inlandFrom(eastCove, 30)], save.traps, tracks);
 
 function deepWaterAhead(x, z, heading, distance) {
   let pointX = x + Math.sin(heading) * distance;
@@ -376,7 +402,7 @@ function findLandingSpot() {
       const x = shipState.x + Math.cos(angle) * radius;
       const z = shipState.z + Math.sin(angle) * radius;
       const height = ground.heightAt(x, z);
-      if (height > 0.35 && height < 2.5 && walkGrid.isPointWalkable(x, z)) return { x, z };
+      if (height > tide.level + 0.35 && height < tide.level + 2.5 && walkGrid.isPointWalkable(x, z)) return { x, z };
     }
   }
   return null;
@@ -434,7 +460,14 @@ function updateObjective() {
 
 const guideTarget = new THREE.Vector3();
 function updateGuideArrow() {
-  hud.setGuideArrow(null);
+  const hunting = mode === 'onFoot' && hasTool(save, 'axe') && save.stats.hidesGathered < 2;
+  const nearestBoar = hunting ? wildlife.boars
+    .filter((boar) => boar.state !== 'gone' && boar.state !== 'trapped')
+    .reduce((best, boar) => {
+      const distance = Math.hypot(boar.x - character.state.x, boar.z - character.state.z);
+      return !best || distance < best.distance ? { boar, distance } : best;
+    }, null) : null;
+  hud.setGuideArrow(nearestBoar ? offScreenAngle(nearestBoar.boar.x, nearestBoar.boar.z) : null, '🐗', nearestBoar?.distance ?? null);
   const partsReady = !save.raftBuilt && missingRaftParts(save).length === 0;
   hud.setSloopArrow(mode === 'onFoot' && partsReady ? offScreenAngle(raftSite.x, raftSite.z) : null);
 }
@@ -869,12 +902,32 @@ function updateHud() {
 }
 
 let simulationTime = 0;
+const footprintState = { distance: 0, side: 1, lastX: 0, lastZ: 0, initialized: false };
+
+function leaveFootprints() {
+  const characterState = character.state;
+  if (!footprintState.initialized) {
+    Object.assign(footprintState, { lastX: characterState.x, lastZ: characterState.z, initialized: true });
+    return;
+  }
+  footprintState.distance += Math.hypot(characterState.x - footprintState.lastX, characterState.z - footprintState.lastZ);
+  footprintState.lastX = characterState.x;
+  footprintState.lastZ = characterState.z;
+  if (footprintState.distance < 0.75) return;
+  footprintState.distance = 0;
+  footprintState.side = -footprintState.side;
+  const heading = characterState.heading;
+  tracks.add(characterState.x + Math.cos(heading) * 0.2 * footprintState.side, characterState.z - Math.sin(heading) * 0.2 * footprintState.side, heading, 'player');
+}
 let previousFrameTime = performance.now();
 let autosaveTimer = AUTOSAVE_INTERVAL_SECONDS;
 const FIXED_STEP = 1 / 60;
 
 function simulate(deltaTime) {
   simulationTime += deltaTime;
+  save.worldTime += deltaTime;
+  setTideTime(save.worldTime);
+  tracks.update(deltaTime);
   applyKeyboardSteering();
   const state = shipController.state;
   if (!save.raftBuilt) {
@@ -903,6 +956,7 @@ function simulate(deltaTime) {
   const onFoot = mode === 'onFoot';
   if (onFoot) {
     character.update(deltaTime, ground);
+    leaveFootprints(deltaTime);
     if (harvesting.update(deltaTime, character, onHarvested) === 'unreachable') hud.showToast("Can't reach that");
     updateGroundTask(deltaTime);
     detailTerrain.update(character.state.x, character.state.z);
@@ -930,6 +984,7 @@ function renderFrame(now) {
   updateGuideArrow();
   updateRaftSiteMarker(simulationTime);
   hud.setHunger(save.hunger);
+  hud.setTide(tideStatus());
   performanceMonitor.recordFrame(now);
 }
 
@@ -944,6 +999,10 @@ enterMode(mode);
 if (isScreenshotMode) {
   hud.setVisible(searchParameters.has('hud'));
   performanceMonitor.setVisible(false);
+  if (startPose.nearPasture) {
+    save.inventory.axe = 1;
+    refreshInventoryViews();
+  }
   if (startPose.trappedBoar) {
     const trapSpot = nearestWalkablePoint(character.state.x + 6, character.state.z - 3);
     const trap = wildlife.addTrap(trapSpot.x, trapSpot.z);
@@ -991,6 +1050,7 @@ if (isScreenshotMode) {
   updateGuideArrow();
   updateRaftSiteMarker(simulationTime);
   hud.setHunger(save.hunger);
+  hud.setTide(tideStatus());
   renderer.render(scene, camera);
   window.__frameReady = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
 } else {
@@ -1001,4 +1061,4 @@ if (isScreenshotMode) {
   });
 }
 
-window.__debug = { wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };
+window.__debug = { tracks, tide, wildlife, groundTask, trapPlacement, digTrapAt, interactWithTrap, harvesting, vegetation, tryBuildRaft, raftSite, launch, boardShip, shipController, heightmap, ground, renderer, scene, camera, dolphins, simulate, character, walkGrid, items, save, enterMode, getMode: () => mode };

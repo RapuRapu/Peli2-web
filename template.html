@@ -29,7 +29,7 @@
   #hud .inventory { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 60vw; }
   #hud .slot { padding: 4px 9px; border-radius: 12px; background: rgba(20, 30, 36, 0.6); font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
   #hud button { pointer-events: auto; font-family: inherit; color: #fff8e8; border: 1.5px solid rgba(255, 248, 232, 0.7); cursor: pointer; }
-  #hud .reset { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 72px); right: max(8px, env(safe-area-inset-right)); padding: 3px 10px; border-radius: 12px; background: rgba(20, 30, 36, 0.45); font-size: 14px; }
+  #hud .reset { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 104px); right: max(8px, env(safe-area-inset-right)); padding: 3px 10px; border-radius: 12px; background: rgba(20, 30, 36, 0.45); font-size: 14px; }
   #hud .reset.armed { background: rgba(120, 30, 20, 0.8); }
   #hud .toast { position: absolute; top: 14%; left: 50%; transform: translate(-50%, -6px); padding: 7px 16px; border-radius: 10px; background: rgba(20, 30, 36, 0.7); font-size: 18px; opacity: 0; transition: opacity .25s, transform .25s; }
   #hud .toast.visible { opacity: 1; transform: translate(-50%, 0); }
@@ -40,6 +40,7 @@
   #hud .quest-chip { position: absolute; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); max-width: 55vw; padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
   #hud .bag-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); left: calc(max(8px, env(safe-area-inset-left)) + 92px); padding: 5px 12px; border-radius: 12px; background: rgba(60, 35, 15, 0.78); font-size: 15px; }
   #hud .bag-chip.shifted { left: max(8px, env(safe-area-inset-left)); }
+  #hud .tide-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 70px); right: max(8px, env(safe-area-inset-right)); padding: 4px 9px; border-radius: 12px; background: rgba(15, 50, 70, 0.65); font-size: 14px; font-variant-numeric: tabular-nums; }
   #hud .hunger-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 38px); right: max(8px, env(safe-area-inset-right)); display: flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 12px; background: rgba(20, 30, 36, 0.6); font-size: 14px; }
   #hud .hunger-bar { width: 60px; height: 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.45); overflow: hidden; }
   #hud .hunger-fill { height: 100%; width: 100%; }
@@ -68,10 +69,11 @@
   #hud .quest-description { font-size: 14px; margin: 3px 0 6px; }
   #hud .quest-step { display: flex; justify-content: space-between; font-size: 15px; padding: 2px 0; }
   #hud .quest-step.done { color: #3d7a1c; text-decoration: line-through; }
-  #hud .guide-arrow { position: absolute; left: 0; top: 0; width: 48px; height: 48px; border-radius: 50%; background: rgba(40, 22, 8, 0.8); border: 3px solid #ffb030; display: none; }
+  #hud .guide-arrow { position: absolute; left: 0; top: 0; width: 48px; height: 48px; border-radius: 50%; background: #f2a030; border: 3px solid #fff4dc; box-shadow: 0 2px 8px rgba(0,0,0,.5); display: none; }
+  #hud .guide-arrow .distance { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); font-size: 13px; font-weight: bold; white-space: nowrap; text-shadow: 0 1px 3px #000; }
   #hud .guide-arrow .icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-  #hud .guide-arrow .chevron { position: absolute; inset: -14px; display: flex; align-items: center; justify-content: flex-end; font-size: 18px; color: #ffb030; }
-  #hud .guide-arrow.sloop { border-color: #f4ecd8; }
+  #hud .guide-arrow .chevron { position: absolute; inset: -22px; display: flex; align-items: center; justify-content: flex-end; font-size: 26px; color: #f2a030; -webkit-text-stroke: 1.5px #3a2008; }
+  #hud .guide-arrow.sloop { background: rgba(40, 22, 8, 0.85); border-color: #f4ecd8; }
   #hud .guide-arrow.visible { display: block; }
   #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
 </style>
