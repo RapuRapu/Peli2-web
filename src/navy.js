@@ -66,7 +66,7 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
 
   const circle = buildCircle();
   scene.add(circle);
-  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xd02a1a, transparent: true, opacity: 0.17, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+  const fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xd02a1a, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
   fill.visible = false;
   fill.frustumCulled = false;
   scene.add(fill);
@@ -346,9 +346,13 @@ export function createNavy(scene, ground, walkGrid, { tracks, treasure, wildlife
     }
   }
 
+  function contains(x, z) {
+    return search.state === 'searching' && Math.hypot(x - search.centerX, z - search.centerZ) < search.radius;
+  }
+
   function remainingSearchSeconds() {
     return search.state === 'searching' ? Math.max(0, SEARCH_SECONDS - search.timer) : null;
   }
 
-  return { search, marines, land, update, remainingSearchSeconds, boat };
+  return { search, marines, land, update, remainingSearchSeconds, contains, boat };
 }

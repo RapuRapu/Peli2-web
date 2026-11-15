@@ -53,7 +53,7 @@ export function createTunnels(scene, ground, savedTunnel) {
   underground.visible = false;
   scene.add(underground);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE), new THREE.MeshStandardMaterial({ color: 0xd9b27a, roughness: 1 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * CELL_SIZE, GRID_SIZE * CELL_SIZE), new THREE.MeshStandardMaterial({ color: 0xd9b27a, emissive: 0x3a2610, roughness: 1 }));
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   underground.add(floor);
@@ -67,11 +67,11 @@ export function createTunnels(scene, ground, savedTunnel) {
 
   const ladder = buildLadder(5);
   underground.add(ladder);
-  const shaftGeometry = new THREE.CylinderGeometry(0.7, 1.5, 9, 16, 4, true);
+  const shaftGeometry = new THREE.CylinderGeometry(0.5, 1.4, 9, 16, 6, true);
   const shaftAlpha = new Float32Array(shaftGeometry.attributes.position.count * 4);
   for (let i = 0; i < shaftGeometry.attributes.position.count; i++) {
     const heightFraction = (shaftGeometry.attributes.position.getY(i) + 4.5) / 9;
-    shaftAlpha.set([1, 0.95, 0.75, 0.22 * (1 - heightFraction) ** 1.5], i * 4);
+    shaftAlpha.set([1, 0.95, 0.75, 0.2 * Math.min(1, heightFraction * 6) * (1 - heightFraction) ** 2], i * 4);
   }
   shaftGeometry.setAttribute('color', new THREE.BufferAttribute(shaftAlpha, 4));
   const shaft = new THREE.Mesh(shaftGeometry, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false }));
@@ -136,7 +136,7 @@ export function createTunnels(scene, ground, savedTunnel) {
           dummy.position.set(center.x + (wobbleB - 0.5) * 0.12, TUNNEL_FLOOR_Y + (ROCK_HEIGHT * heightScale) / 2, center.z + (wobble - 0.5) * 0.12);
           dummy.scale.set(1.02 + wobbleB * 0.06, heightScale, 1.02 + wobble * 0.06);
           if (isEdge(column, row)) rockColor.setRGB(0.07, 0.06, 0.06);
-          else rockColor.setRGB(0.16 + wobble * 0.05, 0.13 + wobbleB * 0.04, 0.11 + wobble * 0.03);
+          else rockColor.setRGB(0.1 + wobble * 0.03, 0.095 + wobbleB * 0.025, 0.09 + wobble * 0.02);
           rocks.setColorAt(index, rockColor);
         }
         dummy.rotation.set(0, dug.has(index) ? 0 : (Math.sin(column * 5.1 + row * 3.7) * 0.07), 0);

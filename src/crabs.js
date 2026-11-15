@@ -65,10 +65,16 @@ function buildCrabGeometry(shellColor, { hermit = false, bigClaws = false } = {}
   return mergeGeometries(parts);
 }
 
-function buildEmojiSprite(emoji, size) {
+function buildEmojiSprite(emoji, size, backing = null) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 96;
   const context = canvas.getContext('2d');
+  if (backing) {
+    context.fillStyle = backing;
+    context.beginPath();
+    context.arc(48, 48, 42, 0, Math.PI * 2);
+    context.fill();
+  }
   context.font = '64px sans-serif';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
@@ -100,7 +106,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
   const random = createRandom(4242);
   const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
   const hermitGeometry = buildCrabGeometry(0x7a3fa8, { hermit: true });
-  const diggerGeometry = buildCrabGeometry(0xc8261c, { bigClaws: true });
+  const diggerGeometry = buildCrabGeometry(0x2f78c4, { bigClaws: true });
   const migrantGeometry = buildCrabGeometry(0xe0582a);
 
   function placeOnGround(object, x, z, lift = 0) {
@@ -159,7 +165,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
     const spot = beachPointNear(beach.x, beach.z, 22);
     placeOnGround(mesh, spot.x, spot.z);
     const heart = buildEmojiSprite('🥥', 1.3);
-    const friendBadge = buildEmojiSprite('❤️', 0.9);
+    const friendBadge = buildEmojiSprite('❤️', 1.5, 'rgba(255, 255, 255, 0.92)');
     friendBadge.visible = false;
     scene.add(friendBadge);
     heart.visible = false;
@@ -317,7 +323,7 @@ export function createCrabs(scene, ground, { tracks, items, beaches, savedBurrow
         moving = true;
         moveToward(digger, targetX, targetZ, Math.min(FRIEND_SPEED, remaining * 2.5), deltaTime);
       }
-      digger.friendBadge.position.set(digger.x, digger.mesh.position.y + 1.3, digger.z);
+      digger.friendBadge.position.set(digger.x, digger.mesh.position.y + 1.9, digger.z);
       digger.eraseTimer -= deltaTime;
       if (digger.eraseTimer <= 0) {
         digger.eraseTimer = 0.4;

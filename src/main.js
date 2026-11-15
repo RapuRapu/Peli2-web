@@ -312,7 +312,7 @@ function updateRaftSiteMarker(time) {
   if (!raftSiteMarker.visible) return;
   const ready = missingRaftParts(save).length === 0;
   const pulse = 1 + (ready ? 0.25 : 0.08) * Math.sin(time * (ready ? 6 : 3));
-  const size = cameraDistanceByMode.onFoot * 0.09 * pulse;
+  const size = cameraDistanceByMode.onFoot * 0.065 * pulse;
   raftSiteMarker.scale.set(size, size, 1);
   raftSiteMarker.position.set(raftSite.x, ground.heightAt(raftSite.x, raftSite.z) + 6 + Math.sin(time * 2) * 0.4, raftSite.z);
 }
@@ -640,7 +640,8 @@ function updateNavy(deltaTime) {
   if (save.navy.state === 'coming') hud.setNavy(`⚓ Navy lands in ${navyCountdownText()}`);
   else if (save.navy.state === 'landed') {
     const remaining = navy?.remainingSearchSeconds();
-    hud.setNavy(remaining === null || remaining === undefined ? '⚓ Navy ashore' : `⚓ Navy searching ${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}`);
+    const inside = mode === 'onFoot' && navy?.contains(character.state.x, character.state.z);
+    hud.setNavy(remaining === null || remaining === undefined ? '⚓ Navy ashore' : `⚓ Navy searching ${Math.floor(remaining / 60)}:${Math.floor(remaining % 60).toString().padStart(2, '0')}${inside ? ' · you are inside!' : ''}`);
   } else hud.setNavy(null);
 }
 
