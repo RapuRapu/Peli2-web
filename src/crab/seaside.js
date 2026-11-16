@@ -1,0 +1,243 @@
+import * as THREE from 'three';
+
+export const WORLD_SIZE = 256;
+
+export const lighting = {
+  sunDirection: new THREE.Vector3(-0.42, 0.6, 0.68).normalize(),
+  sunColor: new THREE.Color(1.0, 0.86, 0.66),
+  horizonColor: new THREE.Color(0.74, 0.78, 0.8),
+  zenithColor: new THREE.Color(0.24, 0.46, 0.78),
+  hazeColor: new THREE.Color(0.62, 0.72, 0.8),
+  hazeDensity: 0.0015,
+};
+
+export const seaUniforms = {
+  uSeaLevel: { value: 0 },
+  uWetLevel: { value: 0 },
+  uTime: { value: 0 },
+  uNoise: { value: null },
+  uRetained: { value: null },
+  uWorldSize: { value: WORLD_SIZE },
+  uSunDirection: { value: lighting.sunDirection },
+  uSunColor: { value: lighting.sunColor },
+  uHorizonColor: { value: lighting.horizonColor },
+  uZenithColor: { value: lighting.zenithColor },
+};
+
+export const SEA_LEVELS_GLSL = /* glsl */ `
+uniform float uSeaLevel;
+uniform float uWetLevel;
+uniform float uTime;
+uniform sampler2D uNoise;
+uniform sampler2D uRetained;
+uniform float uWorldSize;
+uniform vec3 uSunDirection;
+uniform vec3 uSunColor;
+uniform vec3 uHorizonColor;
+uniform vec3 uZenithColor;
+
+float retainedLevel(vec2 xz) {
+  return texture2D(uRetained, xz / uWorldSize + 0.5).r;
+}
+float waterLevelAt(vec2 xz) {
+  return max(uSeaLevel, retainedLevel(xz));
+}
+vec3 skyColor(vec3 direction) {
+  float height = clamp(direction.y, 0.0, 1.0);
+  vec3 color = mix(uHorizonColor, uZenithColor, pow(height, 0.5));
+  float towardSun = max(dot(direction, uSunDirection), 0.0);
+  return color + uSunColor * (pow(towardSun, 48.0) * 0.5 + pow(towardSun, 6.0) * 0.12);
+}
+`;
+
+export const SEA_COMMON_GLSL = /* glsl */ `
+${SEA_LEVELS_GLSL}
+float causticLines(vec2 point) {
+  vec2 drift = (texture2D(uNoise, point * 0.019 + uTime * 0.009).rg - 0.5) * 0.14;
+  float first = texture2D(uNoise, point * 0.047 + drift + vec2(uTime * 0.011, uTime * 0.006), 1.2).r;
+  float second = texture2D(uNoise, point * 0.066 - drift + vec2(-uTime * 0.008, uTime * 0.01) + 0.37, 1.2).g;
+  float ridgeA = clamp(1.0 - abs(first - 0.5) * 9.0, 0.0, 1.0);
+  float ridgeB = clamp(1.0 - abs(second - 0.5) * 9.0, 0.0, 1.0);
+  return ridgeA * ridgeA * 0.55 + ridgeB * ridgeB * 0.4 + ridgeA * ridgeB * 0.9;
+}
+`;
+
+const VERTEX_WORLD_GLSL = /* glsl */ `
+#include <project_vertex>
+vec4 seaWorldPosition = vec4(transformed, 1.0);
+#ifdef USE_INSTANCING
+  seaWorldPosition = instanceMatrix * seaWorldPosition;
+#endif
+vSeaWorld = (modelMatrix * seaWorldPosition).xyz;
+`;
+
+const WET_COLOR_GLSL = /* glsl */ `
+#include <color_fragment>
+vec3 seaPool = texture2D(uRetained, vSeaWorld.xz / uWorldSize + 0.5).rgb;
+float seaDepth = max(uSeaLevel, seaPool.r) - vSeaWorld.y;
+float seaWetEdge = (texture2D(uNoise, vSeaWorld.xz * 0.027).r - 0.5) * 0.9;
+float seaPoolWeight = smoothstep(0.22, 0.5, seaPool.g);
+float seaWetLine = mix(uWetLevel, max(uWetLevel, seaPool.b + 0.3), seaPoolWeight);
+float seaAboveWater = vSeaWorld.y - mix(uSeaLevel, max(uSeaLevel, seaPool.b), seaPoolWeight);
+float seaWet = 1.0 - smoothstep(0.0, 0.55, vSeaWorld.y - seaWetLine - seaWetEdge);
+`;
+
+const SAND_FUNCTIONS_GLSL = /* glsl */ `
+const vec2 RIPPLE_DIRECTION = vec2(0.52, 2.7);
+vec2 sandRippleSlope(vec2 point, float height) {
+  float broad = texture2D(uNoise, point * 0.009).r;
+  float bend = texture2D(uNoise, point * 0.037 + 0.2).g;
+  float patches = smoothstep(0.42, 0.62, texture2D(uNoise, point * 0.017 + 0.6).g);
+  float nearWater = 1.0 - smoothstep(-0.6, 1.6, height - uWetLevel);
+  float phase = dot(point, RIPPLE_DIRECTION) + broad * 14.0 + bend * 3.0;
+  return RIPPLE_DIRECTION * cos(phase) * 0.05 * mix(patches, 1.0, 0.25) * mix(0.5, 1.0, nearWater);
+}
+`;
+
+const SAND_COLOR_GLSL = /* glsl */ `
+vec2 sandPoint = vSeaWorld.xz;
+float sandGrain = texture2D(uNoise, sandPoint * 0.83).a;
+float sandFleck = texture2D(uNoise, sandPoint * 1.57 + 0.31).g;
+float sandDrift = texture2D(uNoise, sandPoint * 0.021 + 0.4).r;
+diffuseColor.rgb *= 0.9 + 0.16 * sandGrain;
+diffuseColor.rgb *= 0.86 + 0.3 * sandDrift;
+float sandShellFleck = smoothstep(0.86, 0.9, texture2D(uNoise, sandPoint * 0.47 + 0.13).a) * step(0.55, texture2D(uNoise, sandPoint * 0.033).g);
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.86, 0.8), sandShellFleck * 0.7);
+diffuseColor.rgb *= 1.0 - 0.2 * smoothstep(0.72, 0.8, sandFleck);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.16, 1.1, 1.0), (1.0 - smoothstep(0.2, 0.24, sandFleck)) * 0.5);
+`;
+
+const SAND_NORMAL_GLSL = /* glsl */ `
+#include <normal_fragment_maps>
+{
+  vec3 sandWorldNormal = inverseTransformDirection(normal, viewMatrix);
+  vec2 rippleSlope = sandRippleSlope(vSeaWorld.xz, vSeaWorld.y);
+  sandWorldNormal = normalize(sandWorldNormal - vec3(rippleSlope.x, 0.0, rippleSlope.y));
+  normal = normalize((viewMatrix * vec4(sandWorldNormal, 0.0)).xyz);
+}
+`;
+
+const WET_ROUGHNESS_GLSL = /* glsl */ `
+#include <roughnessmap_fragment>
+float seaGloss = seaWet * (1.0 - smoothstep(-0.05, 0.25, seaDepth)) * (1.0 - smoothstep(0.05, 1.1, seaAboveWater)) * WET_GLOSS;
+diffuseColor.rgb *= mix(1.0, WET_DARKENING, seaWet);
+roughnessFactor = mix(roughnessFactor, WET_ROUGHNESS, seaGloss);
+`;
+
+const CAUSTICS_GLSL = /* glsl */ `
+if (seaDepth > 0.0) {
+  vec3 seaWorldNormal = inverseTransformDirection(normal, viewMatrix);
+  vec2 causticPoint = vSeaWorld.xz - uSunDirection.xz * (seaDepth / max(uSunDirection.y, 0.25));
+  #ifdef SEA_CHROMATIC_CAUSTICS
+    vec3 caustic = vec3(causticLines(causticPoint + 0.03), causticLines(causticPoint), causticLines(causticPoint - 0.03));
+  #else
+    vec3 caustic = vec3(causticLines(causticPoint));
+  #endif
+  float causticReach = smoothstep(0.05, 0.9, seaDepth) * exp(-seaDepth * 0.16);
+  float causticFacing = clamp(dot(seaWorldNormal, uSunDirection) * 1.4 + 0.15, 0.0, 1.0);
+  outgoingLight *= exp(-vec3(0.05, 0.014, 0.01) * seaDepth);
+  outgoingLight += diffuseColor.rgb * vec3(0.05, 0.2, 0.22) * smoothstep(0.0, 1.2, seaDepth);
+  float causticVariation = 0.45 + 1.1 * texture2D(uNoise, causticPoint * 0.023 + uTime * 0.006).r;
+  outgoingLight += diffuseColor.rgb * mix(uSunColor, vec3(1.0), 0.55) * caustic * (CAUSTIC_STRENGTH * causticReach * causticFacing * causticVariation);
+}
+#ifdef SEA_SAND
+{
+  vec3 sparkleView = normalize(vViewPosition);
+  vec3 sparkleSun = normalize((viewMatrix * vec4(uSunDirection, 0.0)).xyz);
+  float sparkleSeed = texture2D(uNoise, vSeaWorld.xz * 2.3).a * texture2D(uNoise, vSeaWorld.xz * 1.3 + 0.5).g;
+  float sparkleAlign = pow(max(dot(reflect(-sparkleSun, normal), sparkleView), 0.0), 14.0);
+  outgoingLight += uSunColor * smoothstep(0.52, 0.6, sparkleSeed) * sparkleAlign * 2.6 * (1.0 - smoothstep(-0.2, 0.2, seaDepth));
+}
+#endif
+#ifdef SEA_GLOW
+  #ifdef SEA_GLOW_PULSE
+    outgoingLight += diffuseColor.rgb * SEA_GLOW * (0.5 + 1.1 * pow(0.5 + 0.5 * sin(uTime * 2.4), 2.0));
+  #else
+    outgoingLight += diffuseColor.rgb * SEA_GLOW;
+  #endif
+#endif
+#include <opaque_fragment>
+#ifdef SEA_SAND
+  gl_FragColor.a = 0.0;
+#endif
+`;
+
+const ROCK_FUNCTIONS_GLSL = /* glsl */ `
+float rockRelief(vec2 sideways) {
+  float lumps = texture2D(uNoise, sideways * 0.07).r;
+  float pits = texture2D(uNoise, sideways * 0.41 + 0.3).g;
+  float grit = texture2D(uNoise, sideways * 1.3 + 0.7).a;
+  return lumps * 0.9 + pits * 0.3 + grit * 0.04;
+}
+`;
+
+const ROCK_COLOR_GLSL = /* glsl */ `
+vec2 rockPoint = vSeaWorld.xz + vSeaWorld.y * vec2(0.37, 0.61);
+float rockMottle = texture2D(uNoise, rockPoint * 0.11).r;
+float rockSpeckle = texture2D(uNoise, rockPoint * 0.9).a;
+diffuseColor.rgb *= 0.9 + 0.2 * texture2D(uNoise, rockPoint * 1.3 + 0.7).a;
+float rockStrata = texture2D(uNoise, vec2(vSeaWorld.y * 0.19 + rockMottle * 0.25, rockPoint.x * 0.013)).g;
+diffuseColor.rgb *= 0.8 + 0.32 * rockMottle;
+diffuseColor.rgb *= 0.82 + 0.36 * texture2D(uNoise, rockPoint * 0.031 + 0.2).g;
+diffuseColor.rgb *= 0.86 + 0.3 * rockStrata;
+diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.7, 0.68, 0.56), smoothstep(0.8, 0.92, rockSpeckle) * 0.4);
+`;
+
+const ROCK_NORMAL_GLSL = /* glsl */ `
+#include <normal_fragment_maps>
+{
+  vec2 reliefPoint = vSeaWorld.xz + vSeaWorld.y * vec2(0.37, 0.61);
+  float reliefHere = rockRelief(reliefPoint);
+  vec2 reliefSlope = vec2(rockRelief(reliefPoint + vec2(0.05, 0.0)) - reliefHere, rockRelief(reliefPoint + vec2(0.0, 0.05)) - reliefHere) / 0.05;
+  vec3 reliefGradient = vec3(reliefSlope.x, 0.37 * reliefSlope.x + 0.61 * reliefSlope.y, reliefSlope.y);
+  vec3 rockWorldNormal = inverseTransformDirection(normal, viewMatrix);
+  rockWorldNormal = normalize(rockWorldNormal - (reliefGradient - rockWorldNormal * dot(reliefGradient, rockWorldNormal)) * 0.36);
+  normal = normalize((viewMatrix * vec4(rockWorldNormal, 0.0)).xyz);
+}
+`;
+
+const SURFACES = {
+  sand: { functions: SAND_FUNCTIONS_GLSL, color: SAND_COLOR_GLSL, normal: SAND_NORMAL_GLSL },
+  rock: { functions: ROCK_FUNCTIONS_GLSL, color: ROCK_COLOR_GLSL, normal: ROCK_NORMAL_GLSL },
+};
+
+function injectVertexMotion(vertexShader, vertexMotion) {
+  if (!vertexMotion) return vertexShader;
+  return vertexShader
+    .replace('#include <common>', `#include <common>\n${vertexMotion.declarations}`)
+    .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>\n${vertexMotion.normalCode || ''}`)
+    .replace('#include <color_vertex>', `#include <color_vertex>\n${vertexMotion.colorCode || ''}`)
+    .replace('#include <begin_vertex>', `#include <begin_vertex>\n${vertexMotion.code}`);
+}
+
+export function createMotionDepthMaterial(vertexMotion) {
+  const material = new THREE.MeshDepthMaterial();
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, seaUniforms, vertexMotion.uniforms || {});
+    shader.vertexShader = injectVertexMotion(shader.vertexShader, { ...vertexMotion, normalCode: '', colorCode: '' });
+  };
+  material.customProgramCacheKey = () => `seaside-depth|${vertexMotion.key}`;
+  return material;
+}
+
+export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null } = {}) {
+  const surfaceCode = surface ? SURFACES[surface] : null;
+  material.defines = { ...(material.defines || {}), WET_DARKENING: wetDarkening.toFixed(3), WET_ROUGHNESS: wetRoughness.toFixed(3), CAUSTIC_STRENGTH: causticStrength.toFixed(3), WET_GLOSS: wetGloss.toFixed(3) };
+  if (surface === 'sand') material.defines.SEA_SAND = '';
+  if (chromaticCaustics) material.defines.SEA_CHROMATIC_CAUSTICS = '';
+  if (glow > 0) material.defines.SEA_GLOW = glow.toFixed(3);
+  if (glowPulse) material.defines.SEA_GLOW_PULSE = '';
+  material.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {});
+    shader.vertexShader = injectVertexMotion(shader.vertexShader.replace('#include <project_vertex>', VERTEX_WORLD_GLSL), vertexMotion)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vSeaWorld;\n${SEA_COMMON_GLSL}${surfaceCode ? surfaceCode.functions : ''}`)
+      .replace('#include <color_fragment>', WET_COLOR_GLSL + (surfaceCode ? surfaceCode.color : ''))
+      .replace('#include <roughnessmap_fragment>', WET_ROUGHNESS_GLSL)
+      .replace('#include <opaque_fragment>', CAUSTICS_GLSL);
+    if (surfaceCode) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', surfaceCode.normal);
+  };
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}`;
+  return material;
+}

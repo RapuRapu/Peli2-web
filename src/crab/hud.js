@@ -1,0 +1,109 @@
+import { RESOURCE_TYPES } from './resources.js';
+import { QUALITY_LEVELS } from './quality.js';
+
+function element(tag, className, parent, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+export function createHud(activeQualityName) {
+  const root = element('div', '', document.body);
+  root.id = 'hud';
+
+  const topLeft = element('div', 'top-left', root);
+  const pauseButton = element('button', 'pause-button', topLeft);
+  pauseButton.setAttribute('aria-label', 'Pause');
+  pauseButton.innerHTML = '<svg viewBox="0 0 14 16"><rect x="1" y="1" width="4" height="14" rx="1" fill="#fff8e8"/><rect x="9" y="1" width="4" height="14" rx="1" fill="#fff8e8"/></svg>';
+  const goal = element('div', 'chip goal', topLeft);
+
+  const topRight = element('div', 'top-right', root);
+  const inventory = element('div', 'inventory', topRight);
+  const slots = {};
+  for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
+    slots[type] = element('div', 'chip slot', inventory, `${definition.icon} 0`);
+    slots[type].title = definition.label;
+  }
+  const tide = element('div', 'chip tide', topRight);
+  const tideLabel = element('span', '', tide, '🌊');
+  const tideFill = element('div', 'tide-fill', element('div', 'tide-gauge', tide));
+
+  const toastBox = element('div', 'toast', root);
+  const hint = element('div', 'hint hidden', root);
+
+  const pauseMenu = element('div', 'pause-menu', root);
+  const pauseCard = element('div', 'pause-card', pauseMenu);
+  element('div', 'pause-title', pauseCard, 'Paused');
+  const resumeButton = element('button', 'resume', pauseCard, 'Resume');
+  element('div', 'pause-note', pauseCard, 'Graphics (reloads the game)');
+  const qualityRow = element('div', 'quality-row', pauseCard);
+  const qualityButtons = Object.entries(QUALITY_LEVELS).map(([name, level]) => {
+    const button = element('button', name === activeQualityName ? 'active' : '', qualityRow, level.label);
+    button.dataset.quality = name;
+    return button;
+  });
+  const resetButton = element('button', 'reset', pauseCard, 'Start over');
+  element('div', 'pause-note', pauseCard, 'The game saves on its own.');
+
+  let pauseListener = () => {};
+  let resetListener = () => {};
+  let qualityListener = () => {};
+  let toastTimer = 0;
+  let resetArmed = false;
+
+  pauseButton.addEventListener('click', () => pauseListener(true));
+  resumeButton.addEventListener('click', () => pauseListener(false));
+  resetButton.addEventListener('click', () => {
+    if (!resetArmed) {
+      resetArmed = true;
+      resetButton.classList.add('armed');
+      resetButton.textContent = 'Tap again to erase progress';
+      return;
+    }
+    resetListener();
+  });
+  for (const button of qualityButtons) button.addEventListener('click', () => qualityListener(button.dataset.quality));
+
+  return {
+    onPause: (listener) => { pauseListener = listener; },
+    onReset: (listener) => { resetListener = listener; },
+    onQuality: (listener) => { qualityListener = listener; },
+    setPaused(paused) {
+      pauseMenu.classList.toggle('visible', paused);
+      resetArmed = false;
+      resetButton.classList.remove('armed');
+      resetButton.textContent = 'Start over';
+    },
+    setInventory(counts, bumpedType) {
+      for (const [type, definition] of Object.entries(RESOURCE_TYPES)) slots[type].textContent = `${definition.icon} ${counts[type] || 0}`;
+      if (bumpedType) {
+        slots[bumpedType].classList.remove('bump');
+        void slots[bumpedType].offsetWidth;
+        slots[bumpedType].classList.add('bump');
+      }
+    },
+    setGoal(text, done) {
+      goal.textContent = text;
+      goal.classList.toggle('done', done);
+    },
+    setTide(label, fraction) {
+      tideLabel.textContent = `🌊 ${label}`;
+      tideFill.style.width = `${Math.round(fraction * 100)}%`;
+    },
+    toast(text) {
+      toastBox.textContent = text;
+      toastBox.classList.add('visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastBox.classList.remove('visible'), 2600);
+    },
+    setHint(text) {
+      hint.classList.toggle('hidden', !text);
+      if (text) hint.textContent = text;
+    },
+    setVisible(visible) {
+      root.style.display = visible ? '' : 'none';
+    },
+  };
+}

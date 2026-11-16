@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#cfd2cc">
+<title>Sea Of Crabs</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #cfd2cc; overscroll-behavior: none; }
+  canvas { display: block; width: 100vw; height: 100vh; touch-action: none; -webkit-user-select: none; user-select: none; }
+  #perf { position: fixed; bottom: max(6px, env(safe-area-inset-bottom)); left: max(6px, env(safe-area-inset-left)); padding: 4px 7px;
+    font: 11px/1.35 ui-monospace, Menlo, Consolas, monospace; color: #e8f4f8; background: rgba(8, 24, 34, 0.55); border-radius: 6px; white-space: pre; pointer-events: auto; }
+  #perf.compact { max-height: 15px; overflow: hidden; }
+  #hud { position: fixed; inset: 0; pointer-events: none; font-family: Georgia, 'Times New Roman', serif; color: #fff8e8; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55); }
+  #hud button { pointer-events: auto; font-family: inherit; color: #fff8e8; cursor: pointer; }
+  #hud .top-left { position: absolute; top: max(8px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); display: flex; align-items: center; gap: 8px; max-width: 62vw; }
+  #hud .top-right { position: absolute; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  @media (max-aspect-ratio: 1/1) { #hud .top-right { top: calc(max(8px, env(safe-area-inset-top)) + 44px); } #hud .top-left { max-width: 94vw; } }
+  #hud .chip { padding: 5px 11px; border-radius: 13px; background: rgba(26, 34, 38, 0.6); font-size: 15px; white-space: nowrap; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+  #hud .pause-button { width: 40px; height: 34px; padding: 0; border-radius: 12px; border: 1px solid rgba(255, 244, 214, 0.5); background: rgba(26, 34, 38, 0.6); }
+  #hud .pause-button svg { width: 14px; height: 16px; display: block; margin: 0 auto; }
+  #hud .goal { overflow: hidden; text-overflow: ellipsis; }
+  #hud .goal.done { background: rgba(48, 110, 60, 0.75); }
+  #hud .inventory { display: flex; gap: 6px; }
+  #hud .slot.bump { animation: slot-bump 0.45s ease-out; }
+  @keyframes slot-bump { 30% { transform: scale(1.25); background: rgba(210, 150, 50, 0.9); } }
+  #hud .tide { display: flex; align-items: center; gap: 7px; font-size: 14px; background: rgba(18, 60, 78, 0.6); }
+  #hud .tide-gauge { width: 44px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.4); overflow: hidden; }
+  #hud .tide-fill { height: 100%; background: #7fd4e6; }
+  #hud .toast { position: absolute; top: 17%; left: 50%; transform: translate(-50%, -6px); padding: 7px 16px; border-radius: 12px; background: rgba(26, 34, 38, 0.72); font-size: 17px; opacity: 0; transition: opacity 0.25s, transform 0.25s; white-space: nowrap; }
+  #hud .toast.visible { opacity: 1; transform: translate(-50%, 0); }
+  #hud .hint { position: absolute; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 8px); transform: translateX(-50%); width: min(78vw, 520px); text-align: center; font-size: 15px; padding: 8px 12px; border-radius: 10px; background: rgba(26, 34, 38, 0.55); transition: opacity 0.6s; }
+  #hud .hint.hidden { opacity: 0; }
+  #hud .pause-menu { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10, 14, 16, 0.55); pointer-events: auto; text-shadow: none; }
+  #hud .pause-menu.visible { display: flex; }
+  #hud .pause-card { display: flex; flex-direction: column; gap: 12px; min-width: 240px; padding: 20px 22px; border-radius: 16px; background: rgba(30, 40, 44, 0.96); border: 2px solid #c9b48a; text-align: center; }
+  #hud .pause-title { font-size: 24px; font-weight: bold; letter-spacing: 1px; }
+  #hud .pause-card button { padding: 10px 14px; border-radius: 12px; border: 1px solid rgba(255, 244, 214, 0.4); background: rgba(70, 86, 92, 0.9); font-size: 17px; }
+  #hud .pause-card .resume { background: #c98a2a; font-weight: bold; }
+  #hud .pause-card .reset { font-size: 14px; background: rgba(60, 36, 30, 0.9); }
+  #hud .pause-card .reset.armed { background: rgba(150, 30, 20, 0.95); }
+  #hud .quality-row { display: flex; gap: 6px; }
+  #hud .quality-row button { flex: 1; padding: 8px 4px; font-size: 15px; }
+  #hud .quality-row button.active { background: #2f7f8f; border-color: #bfeaf2; font-weight: bold; }
+  #hud .pause-note { font-size: 12px; opacity: 0.75; }
+  #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
+</style>
+</head>
+<body>
+<script>
+  window.addEventListener('error', function (event) {
+    var box = document.getElementById('fatal') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'fatal' }));
+    box.textContent = 'Error: ' + (event.message || event.error);
+  });
+</script>
+<script type="module">/*BUNDLE*/</script>
+</body>
+</html>

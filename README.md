@@ -1,4 +1,41 @@
-# Sea Of Crabs (Peli 2) – selainkokeilu
+# Sea Of Crabs – selainpeli
+
+Olet erakkorapu rannalla. Three.js + WebGL2, kaikki grafiikka generoidaan koodilla. Nykyinen peli on kansiossa `src/crab/`; vanha aarteenkätkemisversio on kansiossa `src/` ja haarassa `classic-treasure-hiding`.
+
+## Ajo
+
+```bash
+npm install
+node build.mjs            # rapupeli -> dist/index.html (yksi tiedosto)
+node build.mjs classic    # vanha versio -> dist/classic.html
+```
+
+**Ohjaus:** napauta hiekkaa = kävele · napauta ✦-merkittyä esinettä = kerää · nipistä/rulla = zoomaa · WASD/nuolet = kävele (PC).
+
+**Laatutasot:** Low / Medium / High taukovalikossa tai `?quality=low|medium|high`.
+
+**Tallennus:** selaimen localStorage (`seaofcrabs-crab-save`), automaattisesti 5 s välein.
+
+## Rakenne (src/crab/)
+
+| Tiedosto | Sisältö |
+|---|---|
+| `main.js` | Pelitila, kamera, syöte, tallennus, kuvakulmat (`?pose=N`), debug-rajapinta |
+| `world.js` | Kotirannan korkeuskenttä, vuorovesialtaat, lohkareiden paikat, käveltävyys |
+| `seaside.js` | Yhteiset shader-osat: märkä hiekka, kaustiikka, vedenalainen valo, hiekan ja kiven pinnat |
+| `pipeline.js` | Renderöinti: HDR-kohde, vesikerros, syväterävyys, bloom, sävykartoitus |
+| `water.js` | Veden pinta: taittuminen, absorptio, auringon kimallus, vaahto |
+| `textures.js` | Koodilla generoidut kohina- ja aaltotekstuurit |
+| `props.js`, `life.js` | Lohkareet, ajopuut, kivet; merilevä, rantaheinä, meritähdet, vuokot, kalat |
+| `hermit.js` | Pelaajan erakkorapu ja animaatio |
+| `resources.js`, `tracks.js` | Kerättävät esineet ja kimalteet; jalanjäljet |
+| `navigation.js`, `hud.js`, `quality.js` | Reitinhaku, käyttöliittymä, laatutasot |
+
+Testit: `tests/crab_shots.py` (kuvakulmat), `tests/crab_playthrough.py` (keruu ja vuorovesi), `tests/crab_ui.py` (napautus, tauko, tallennus).
+
+---
+
+# Vanha versio (classic)
 
 Purjehduskokeilu: yksi saari, meri ja slooppi isometrisellä kameralla. Three.js + WebGL2, kaikki grafiikka generoidaan koodilla.
 
