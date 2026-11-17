@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySeaside } from './seaside.js';
+import { applySeaside, createEnchantUniforms, updateEnchantUniforms } from './seaside.js';
+import { enchantLook } from './gear.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const CARAPACE = linearColor(0.86, 0.3, 0.14);
@@ -139,11 +140,47 @@ function buildClaw(material, size) {
   return { shoulder, wrist, thumb };
 }
 
+const GROUND_GLOW_RADIUS = 2.4;
+
+function buildGroundGlow() {
+  const uniforms = { uColor: { value: new THREE.Color() } };
+  const material = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */ `
+      varying vec2 vDisc;
+      void main() {
+        vDisc = position.xz / ${GROUND_GLOW_RADIUS.toFixed(2)};
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 uColor;
+      varying vec2 vDisc;
+      void main() {
+        float distanceShare = length(vDisc);
+        float falloff = 1.0 - smoothstep(0.0, 1.0, distanceShare);
+        float ring = smoothstep(0.62, 0.74, distanceShare) * (1.0 - smoothstep(0.78, 0.9, distanceShare));
+        gl_FragColor = vec4(uColor * (falloff * falloff * 1.6 + ring * 1.5), 1.0);
+      }`,
+  });
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(GROUND_GLOW_RADIUS, 40).rotateX(-Math.PI / 2).translate(0, 0.06, 0), material);
+  mesh.renderOrder = 3;
+  mesh.visible = false;
+  return { mesh, uniforms };
+}
+
 export function createHermit(scene, quality, shellLook) {
   const wetnessUniforms = { uBodyWetness: { value: 0 }, uBodyWetTop: { value: -1000 } };
   const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
+  const shellEnchantUniforms = createEnchantUniforms();
+  const clawEnchantUniforms = createEnchantUniforms();
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), wetSurface);
-  const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12 });
+  const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, enchant: clawEnchantUniforms });
+  const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, enchant: shellEnchantUniforms });
+  const enchant = { shell: 0, claws: 0 };
+  const groundGlow = buildGroundGlow();
   const eyeMaterial = new THREE.MeshStandardMaterial({ color: EYE, roughness: 0.08 });
 
   const root = new THREE.Group();
@@ -198,11 +235,11 @@ export function createHermit(scene, quality, shellLook) {
     return antenna;
   });
 
-  const bigClaw = buildClaw(material, 1.25);
+  const bigClaw = buildClaw(clawMaterial, 1.25);
   bigClaw.shoulder.position.set(-0.34, 0.4, 0.5);
   bigClaw.shoulder.rotation.set(0.25, -0.5, 0);
   bigClaw.wrist.rotation.set(0.25, 0.85, 0);
-  const smallClaw = buildClaw(material, 0.85);
+  const smallClaw = buildClaw(clawMaterial, 0.85);
   smallClaw.shoulder.position.set(0.34, 0.4, 0.5);
   smallClaw.shoulder.rotation.set(0.25, 0.5, 0);
   smallClaw.wrist.rotation.set(0.25, -0.85, 0);
@@ -221,7 +258,13 @@ export function createHermit(scene, quality, shellLook) {
     }
   }
 
+  root.add(groundGlow.mesh);
   scene.add(root);
+
+  function setEnchant(shellLevel, clawLevel) {
+    enchant.shell = shellLevel;
+    enchant.claws = clawLevel;
+  }
 
   const pose = { stride: 0, snip: 0, idleTime: 0, tiltX: 0, tiltZ: 0 };
   const attack = { time: 1, variant: 'big' };
@@ -345,6 +388,16 @@ export function createHermit(scene, quality, shellLook) {
     const flash = hurt.amount * hurt.amount;
     flashColor.setRGB(0.75 * flash, 0.62 * flash, 0.55 * flash);
     material.emissive.copy(flashColor);
+    clawMaterial.emissive.copy(flashColor);
+    const shellEnchantLook = enchantLook(enchant.shell);
+    updateEnchantUniforms(shellEnchantUniforms, shellEnchantLook, pose.idleTime);
+    updateEnchantUniforms(clawEnchantUniforms, enchantLook(enchant.claws), pose.idleTime);
+    const groundLook = [shellEnchantLook, enchantLook(enchant.claws)].find((look) => look.groundGlow);
+    groundGlow.mesh.visible = Boolean(groundLook);
+    if (groundLook) {
+      groundGlow.uniforms.uColor.value.setRGB(groundLook.color[0], groundLook.color[1], groundLook.color[2]).multiplyScalar(0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2);
+      groundGlow.mesh.rotation.set(pose.tiltX, 0, pose.tiltZ);
+    }
     shellMaterial.emissive.copy(flashColor).multiplyScalar(0.3);
 
     eyes[0].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8) * 0.06;
@@ -354,5 +407,5 @@ export function createHermit(scene, quality, shellLook) {
     for (const eye of eyes) eye.rotation.x += retract * 0.9;
   }
 
-  return { root, update, wetnessUniforms, setShell, playAttack, playHurt, playDeath, resetPose, clawPosition };
+  return { root, update, wetnessUniforms, setShell, setEnchant, playAttack, playHurt, playDeath, resetPose, clawPosition };
 }

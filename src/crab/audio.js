@@ -243,6 +243,25 @@ export function createAudio({ context = null } = {}) {
       [69, 64, 60, 57].forEach((note, index) => { end = Math.max(end, marimba(at + index * 0.22, note, out, 0.9)); });
       return Math.max(end, tone(at, 2.2, out, { type: 'triangle', frequency: 55, peak: 0.18, attack: 0.4 }));
     },
+    enchantSuccess: (at, out) => {
+      let end = noise(at, 0.5, out, { type: 'highpass', frequency: 5200, endFrequency: 9000, peak: 0.05, attack: 0.25 });
+      [72, 76, 79, 84, 88, 91, 96].forEach((note, index) => {
+        end = Math.max(end, tone(at + index * 0.06, 0.8, out, { frequency: midiToFrequency(note), peak: 0.09, attack: 0.004 }));
+        end = Math.max(end, tone(at + index * 0.06, 0.8, out, { frequency: midiToFrequency(note), peak: 0.035, detune: 11 }));
+      });
+      return Math.max(end, kalimba(at + 0.45, 96, out, 0.7));
+    },
+    enchantBreak: (at, out) => {
+      let end = tone(at, 0.35, out, { type: 'sawtooth', frequency: 220, endFrequency: 70, peak: 0.12, attack: 0.005 });
+      end = Math.max(end, tone(at, 0.35, out, { type: 'square', frequency: 233, endFrequency: 74, peak: 0.06 }));
+      end = Math.max(end, noise(at + 0.04, 0.09, out, { type: 'highpass', frequency: 2400, peak: 0.4, attack: 0.001 }));
+      for (let shard = 0; shard < 7; shard++) {
+        const shardAt = at + 0.08 + shard * 0.045 * variation(0.4);
+        end = Math.max(end, tone(shardAt, 0.12, out, { type: 'triangle', frequency: 1500 * variation(0.35), endFrequency: 900, peak: 0.08 }));
+        end = Math.max(end, noise(shardAt, 0.025, out, { frequency: 4200 * variation(0.3), q: 3, peak: 0.16, attack: 0.001 }));
+      }
+      return Math.max(end, tone(at + 0.05, 0.4, out, { frequency: 110, endFrequency: 45, peak: 0.25 }));
+    },
     recoverRemains: (at, out) => {
       let end = 0;
       [55, 60, 64, 67, 72].forEach((note, index) => { end = Math.max(end, kalimba(at + index * 0.06, note, out, 0.8)); });
@@ -250,7 +269,7 @@ export function createAudio({ context = null } = {}) {
     },
   };
 
-  const PRIORITY_SOUNDS = new Set(['levelUp', 'death', 'recoverRemains', 'craft', 'alert']);
+  const PRIORITY_SOUNDS = new Set(['levelUp', 'death', 'recoverRemains', 'craft', 'alert', 'enchantSuccess', 'enchantBreak']);
 
   function play(name, { at = null, distance = 0, volume = 1 } = {}) {
     if (!SOUNDS[name]) return false;

@@ -240,7 +240,29 @@ export function createMotionDepthMaterial(vertexMotion) {
   return material;
 }
 
-export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false } = {}) {
+const ENCHANT_PULSE_SPEED = 3.2;
+const ENCHANT_PULSE_DEPTH = 0.45;
+
+export function createEnchantUniforms() {
+  return { uEnchantColor: { value: new THREE.Color(1, 1, 1) }, uEnchantGlow: { value: 0 } };
+}
+
+export function updateEnchantUniforms(uniforms, look, time) {
+  const pulse = look.pulse ? 1 - ENCHANT_PULSE_DEPTH * (0.5 + 0.5 * Math.sin(time * ENCHANT_PULSE_SPEED)) : 1;
+  uniforms.uEnchantColor.value.setRGB(look.color[0], look.color[1], look.color[2]);
+  uniforms.uEnchantGlow.value = look.glow * pulse;
+}
+
+const ENCHANT_RIM_GLSL = /* glsl */ `
+#include <emissivemap_fragment>
+{
+  vec3 enchantViewDirection = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
+  float enchantRim = smoothstep(0.58, 0.97, 1.0 - abs(dot(normal, enchantViewDirection)));
+  totalEmissiveRadiance += uEnchantColor * uEnchantGlow * (0.04 + 2.2 * enchantRim);
+}
+`;
+
+export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false, enchant = null } = {}) {
   const surfaceCode = surface ? SURFACES[surface] : null;
   material.defines = { ...(material.defines || {}), WET_DARKENING: wetDarkening.toFixed(3), WET_ROUGHNESS: wetRoughness.toFixed(3), CAUSTIC_STRENGTH: causticStrength.toFixed(3), WET_GLOSS: wetGloss.toFixed(3) };
   if (surface === 'sand') material.defines.SEA_SAND = '';
@@ -249,7 +271,7 @@ export function applySeaside(material, { surface = null, wetDarkening = 0.62, we
   if (glowPulse) material.defines.SEA_GLOW_PULSE = '';
   if (bodyWetness) material.defines.SEA_BODY_WETNESS = '';
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {});
+    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {}, enchant || {});
     shader.vertexShader = injectVertexMotion(shader.vertexShader.replace('#include <project_vertex>', VERTEX_WORLD_GLSL), vertexMotion)
       .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;');
     shader.fragmentShader = shader.fragmentShader
@@ -258,6 +280,11 @@ export function applySeaside(material, { surface = null, wetDarkening = 0.62, we
       .replace('#include <roughnessmap_fragment>', WET_ROUGHNESS_GLSL)
       .replace('#include <opaque_fragment>', CAUSTICS_GLSL);
     if (surfaceCode) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', surfaceCode.normal);
+    if (enchant) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uEnchantColor;\nuniform float uEnchantGlow;')
+        .replace('#include <emissivemap_fragment>', ENCHANT_RIM_GLSL);
+    }
     if (instanceFlash) {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float aFlash;\nvarying float vFlash;')
@@ -267,6 +294,6 @@ export function applySeaside(material, { surface = null, wetDarkening = 0.62, we
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.9, 0.82) * vFlash;');
     }
   };
-  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}`;
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${enchant ? 'enchant' : ''}`;
   return material;
 }

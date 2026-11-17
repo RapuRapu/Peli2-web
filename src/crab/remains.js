@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySeaside } from './seaside.js';
+import { applySeaside, createEnchantUniforms, updateEnchantUniforms } from './seaside.js';
 import { buildShellGeometry } from './hermit.js';
-import { SHELLS } from './gear.js';
+import { SHELLS, enchantLook } from './gear.js';
 import { element } from './workbench.js';
 import { WORLD_LABEL_TOP_PIXELS } from './enemies.js';
 
@@ -42,19 +42,25 @@ export function createRemains(scene, world, quality, labelParent, saved) {
   const projected = new THREE.Vector3();
   let nextId = 1;
 
-  function shellKindOf(record) {
-    const worn = record.gear.shells.find((item) => item.id === record.gear.wornShellId);
-    return (worn || record.gear.shells[0] || {}).kind || null;
+  function shownShell(record) {
+    return record.gear.shells.find((item) => item.id === record.gear.wornShellId) || record.gear.shells[0] || null;
+  }
+
+  function enchantedMaterial(enchantUniforms) {
+    return applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, side: THREE.DoubleSide }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.1, enchant: enchantUniforms });
   }
 
   function build(record) {
-    const kind = shellKindOf(record);
+    const shellItem = shownShell(record);
+    const kind = shellItem ? shellItem.kind : null;
+    const enchantLevel = shellItem ? shellItem.enchant || 0 : 0;
+    const enchantUniforms = enchantLook(enchantLevel).glow > 0 ? createEnchantUniforms() : null;
     const group = new THREE.Group();
     const y = world.heightAt(record.x, record.z);
     let mesh;
     if (kind) {
       const built = buildShellGeometry(SHELLS[kind].look);
-      mesh = new THREE.Mesh(built.geometry, material);
+      mesh = new THREE.Mesh(built.geometry, enchantUniforms ? enchantedMaterial(enchantUniforms) : material);
       mesh.rotation.set(0.25, record.id * 1.7, Math.PI * 0.46);
       mesh.position.y = SHELLS[kind].look.tubeRadius * 0.85;
     } else {
@@ -69,7 +75,7 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     group.position.set(record.x, y, record.z);
     scene.add(group);
     const label = element('div', 'world-label remains-label hidden', labelParent, '💀 Remains');
-    return { ...record, y, group, ring, label };
+    return { ...record, y, group, ring, label, enchantLevel, enchantUniforms };
   }
 
   function add(record) {
@@ -80,8 +86,9 @@ export function createRemains(scene, world, quality, labelParent, saved) {
 
   function remove(entry) {
     scene.remove(entry.group);
-    const geometry = entry.group.children[0].geometry;
-    if (geometry !== bundleGeometry) geometry.dispose();
+    const mesh = entry.group.children[0];
+    if (mesh.geometry !== bundleGeometry) mesh.geometry.dispose();
+    if (mesh.material !== material) mesh.material.dispose();
     entry.label.remove();
     list.splice(list.indexOf(entry), 1);
   }
@@ -98,6 +105,7 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     for (const entry of list) {
       const pulse = 0.5 + 0.5 * Math.sin(time * 3 + entry.id);
       entry.ring.scale.setScalar(1 + 0.06 * pulse);
+      if (entry.enchantUniforms) updateEnchantUniforms(entry.enchantUniforms, enchantLook(entry.enchantLevel), time);
       const point = screenPoint(entry, camera);
       const onScreen = !point.behind && point.x > ARROW_MARGIN_PIXELS && point.x < innerWidth - ARROW_MARGIN_PIXELS && point.y > ARROW_MARGIN_PIXELS && point.y < innerHeight - ARROW_MARGIN_PIXELS;
       entry.label.classList.toggle('hidden', !onScreen);

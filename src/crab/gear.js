@@ -7,7 +7,7 @@ export const SHELLS = {
     attackFactor: 1,
     ability: null,
     cost: { shellBits: 3 },
-    breakable: false,
+    breakable: true,
     look: { turns: 2.7, spireShare: 0.86, whorlRadius: 0.5, tubeRadius: 0.6, height: 1.25, bandFrequency: 26, light: [0.98, 0.94, 0.86], band: [0.86, 0.3, 0.1], inside: [0.36, 0.22, 0.2] },
   },
   turban: {
@@ -44,7 +44,7 @@ export const NAKED = {
 };
 
 export const CLAWS = {
-  bare: { label: 'Bare claws', attackBonus: 0, cost: null, breakable: false },
+  bare: { label: 'Bare claws', attackBonus: 0, cost: null, breakable: false, enchantable: false },
   shellEdged: { label: 'Shell-edged claws', attackBonus: 4, cost: { shellBits: 6, driftwood: 4 }, breakable: true },
 };
 
@@ -53,6 +53,30 @@ export const ENCHANT_SHARE_PER_LEVEL = 0.12;
 
 export function enchantBonus(baseValue, enchantLevel) {
   return enchantLevel * Math.max(1, Math.round(baseValue * ENCHANT_SHARE_PER_LEVEL));
+}
+
+export const ENCHANT_LEVELS = [
+  null,
+  { chance: 1, glow: 0, color: [1, 1, 1], pulse: false },
+  { chance: 1, glow: 0, color: [1, 1, 1], pulse: false },
+  { chance: 1, glow: 0.35, color: [1, 0.97, 0.9], pulse: false },
+  { chance: 0.7, glow: 0.55, color: [0.12, 0.42, 1], pulse: false },
+  { chance: 0.55, glow: 0.75, color: [0.12, 0.42, 1], pulse: false },
+  { chance: 0.4, glow: 0.85, color: [0.12, 0.42, 1], pulse: true },
+  { chance: 0.3, glow: 0.9, color: [0.6, 0.22, 1], pulse: false },
+  { chance: 0.2, glow: 1.05, color: [0.6, 0.22, 1], pulse: true },
+  { chance: 0.15, glow: 1.6, color: [1, 0.5, 0.06], pulse: true, groundGlow: true },
+];
+export const MAX_ENCHANT = ENCHANT_LEVELS.length - 1;
+export const ENCHANT_PEARL_COST = 1;
+export const ENCHANT_SHELL_BITS_PER_LEVEL = 2;
+
+export function enchantCost(targetLevel) {
+  return { pearls: ENCHANT_PEARL_COST, shellBits: ENCHANT_SHELL_BITS_PER_LEVEL * targetLevel };
+}
+
+export function enchantLook(enchantLevel) {
+  return ENCHANT_LEVELS[enchantLevel] || { glow: 0, color: [1, 1, 1], pulse: false };
 }
 
 export function canAfford(cost, inventory) {
@@ -89,6 +113,41 @@ export function createGear(saved) {
     else if (state.claws.some((item) => item.id === id)) state.wornClawsId = id;
     else return false;
     return true;
+  }
+
+  function findItem(id) {
+    const shell = state.shells.find((item) => item.id === id);
+    if (shell) return { category: 'shell', item: shell, definition: SHELLS[shell.kind] };
+    const claws = state.claws.find((item) => item.id === id);
+    if (claws) return { category: 'claws', item: claws, definition: CLAWS[claws.kind] };
+    return null;
+  }
+
+  function enchantableItems() {
+    return [...state.shells, ...state.claws].map((item) => findItem(item.id)).filter(({ definition }) => definition.enchantable !== false);
+  }
+
+  function enchant(id, inventory, random) {
+    const found = findItem(id);
+    if (!found || found.definition.enchantable === false) return null;
+    const targetLevel = (found.item.enchant || 0) + 1;
+    if (targetLevel > MAX_ENCHANT) return null;
+    const cost = enchantCost(targetLevel);
+    if (!canAfford(cost, inventory)) return null;
+    for (const [type, amount] of Object.entries(cost)) inventory[type] -= amount;
+    if (random() < ENCHANT_LEVELS[targetLevel].chance) {
+      found.item.enchant = targetLevel;
+      return { success: true, item: found.item, category: found.category, level: targetLevel };
+    }
+    const wasWorn = id === state.wornShellId || id === state.wornClawsId;
+    if (found.category === 'shell') {
+      state.shells = state.shells.filter((item) => item.id !== id);
+      if (state.wornShellId === id) state.wornShellId = null;
+    } else {
+      state.claws = state.claws.filter((item) => item.id !== id);
+      if (state.wornClawsId === id) state.wornClawsId = state.claws.find((item) => !CLAWS[item.kind].cost).id;
+    }
+    return { success: false, item: found.item, category: found.category, level: targetLevel, wasWorn };
   }
 
   const wornShellDefinition = () => (wornShell() ? SHELLS[wornShell().kind] : NAKED);
@@ -142,6 +201,9 @@ export function createGear(saved) {
     markAllSeen,
     craft,
     wear,
+    findItem,
+    enchantableItems,
+    enchant,
     stats,
     dropAll,
     restore,

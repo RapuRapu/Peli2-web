@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside } from './seaside.js';
 import { createNoise2D } from '../noise.js';
-import { SHELLS, CLAWS, canAfford } from './gear.js';
+import { SHELLS, CLAWS, canAfford, enchantBonus, enchantCost, ENCHANT_LEVELS, MAX_ENCHANT } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 
 export const WORKSHOP_REACH = 2.9;
@@ -131,7 +131,12 @@ function costRow(cost, inventory, parent) {
   }
 }
 
-export function createWorkbenchPanel(root, { gear, inventory, onCraft, onClose }) {
+function enchantedStatText(category, definition, level) {
+  if (category === 'shell') return `🛡 ${definition.defense + enchantBonus(definition.defense, level)}`;
+  return `🗡️ +${definition.attackBonus + enchantBonus(definition.attackBonus, level)}`;
+}
+
+export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant, onClose }) {
   const overlay = element('div', 'workbench', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -169,9 +174,66 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onClose }
     }
   }
 
-  function renderEnchant() {
-    element('div', 'placeholder', body, 'Enchanting needs pearls 🦪. Find them in the deep parts of the tide pools — coming soon.');
+  function renderEnchantResult() {
+    if (!enchantState.lastResult) return;
+    const { success, label, level } = enchantState.lastResult;
+    element('div', success ? 'enchant-result success' : 'enchant-result broke', body, success ? `✨ ${label} is now +${level}!` : `💥 ${label} broke.`);
   }
+
+  function renderEnchant() {
+    renderEnchantResult();
+    const pearls = inventory().pearls || 0;
+    element('div', 'summary', body, `You have 🦪 ${pearls} · +1 to +3 never fail. Higher levels can break the item.`);
+    if (!pearls) element('div', 'enchant-hint', body, 'Pearls lie in the deep parts of tide pools. Shore crabs sometimes drop one.');
+    const entries = gear.enchantableItems().sort((first, second) => isWorn(second.item) - isWorn(first.item));
+    if (!entries.length) element('div', 'placeholder', body, 'Craft a shell or claws to enchant them.');
+    for (const { category, item, definition } of entries) {
+      const level = item.enchant || 0;
+      const targetLevel = level + 1;
+      const row = element('div', isWorn(item) ? 'item worn' : 'item', body);
+      row.dataset.enchantItem = String(item.id);
+      const text = element('div', 'item-text', row);
+      const name = element('div', 'item-name', text, level ? `${definition.label} +${level}` : definition.label);
+      if (isWorn(item)) element('span', 'enchant-worn', name, '✓ Wearing');
+      if (targetLevel > MAX_ENCHANT) {
+        element('div', 'item-stats', text, `${enchantedStatText(category, definition, level)} · fully enchanted`);
+        const maxButton = element('button', 'item-action', row, 'Max');
+        maxButton.disabled = true;
+        continue;
+      }
+      element('div', 'item-stats', text, `${enchantedStatText(category, definition, level)} → ${enchantedStatText(category, definition, targetLevel).split(' ')[1]}`);
+      const chance = ENCHANT_LEVELS[targetLevel].chance;
+      const odds = element('div', 'enchant-odds', text, `+${targetLevel}: ${chance < 1 ? `${percent(chance)} success` : 'always succeeds'}`);
+      if (chance < 1) {
+        odds.classList.add('risky');
+        element('span', 'enchant-break', odds, ` · ⚠ ${percent(1 - chance)} break risk`);
+      }
+      odds.dataset.chance = String(chance);
+      const cost = enchantCost(targetLevel);
+      costRow(cost, inventory(), text);
+      const armed = enchantState.armedId === item.id;
+      const button = element('button', armed ? 'item-action armed' : chance < 1 ? 'item-action risky-action' : 'item-action', row, armed ? `Confirm · ${percent(1 - chance)} break` : 'Enchant');
+      button.dataset.enchant = String(item.id);
+      button.disabled = !canAfford(cost, inventory());
+      button.addEventListener('click', () => {
+        if (chance < 1 && enchantState.armedId !== item.id) {
+          Object.assign(enchantState, { armedId: item.id, lastResult: null });
+          render();
+          return;
+        }
+        enchantState.armedId = null;
+        const result = onEnchant(item.id);
+        if (result) enchantState.lastResult = { success: result.success, label: definition.label, level: result.level };
+        render();
+      });
+    }
+  }
+
+  function isWorn(item) {
+    return item.id === gear.state.wornShellId || item.id === gear.state.wornClawsId;
+  }
+
+  const enchantState = { armedId: null, lastResult: null };
 
   function render() {
     body.replaceChildren();
@@ -183,6 +245,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onClose }
   for (const button of tabButtons) {
     button.addEventListener('click', () => {
       activeTab = button.dataset.tab;
+      Object.assign(enchantState, { armedId: null, lastResult: null });
       render();
     });
   }
@@ -202,6 +265,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onClose }
       root.classList.add('panel-open');
     },
     close() {
+      Object.assign(enchantState, { armedId: null, lastResult: null });
       overlay.classList.remove('visible');
       root.classList.remove('panel-open');
     },

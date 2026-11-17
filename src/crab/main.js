@@ -14,7 +14,7 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
-import { createGear, SHELLS, CLAWS } from './gear.js';
+import { createGear, SHELLS, CLAWS, ENCHANT_LEVELS } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel, WORKSHOP_REACH, WORKSHOP_BLOCK_RADIUS } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createProgression, GATHER_EXPERIENCE } from './progression.js';
@@ -110,6 +110,12 @@ const POSES = {
   36: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: -2.4, offsetZ: 0.8 }, fightSeconds: 0.6, moment: 'dying' },
   37: { x: 12, z: -14, distance: 11, tideShare: 0.56, heading: 2.6, gather: { type: 'seaLettuce', share: 0.5 } },
   38: { x: 0, z: -104, distance: 34, tideShare: 0.56, heading: 3.2, level: 6, enemy: { kind: 'gull', offsetX: -2, offsetZ: -5.5 }, fightSeconds: 2.2, moment: 'enemyHurt' },
+  39: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'cone', claws: 'shellEdged', level: 3 } },
+  40: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'turban', claws: 'shellEdged', level: 6 } },
+  41: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'cone', claws: 'shellEdged', level: 9 } },
+  42: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Enchant', enchanted: { shell: 'turban', claws: 'shellEdged', level: 3 }, inventory: { pearls: 2, shellBits: 9 }, armEnchant: true },
+  43: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Enchant', enchanted: { shell: 'turban', claws: 'shellEdged', level: 3 }, inventory: { pearls: 2, shellBits: 9 }, armEnchant: true },
+  44: { x: 22, z: -14, distance: 14, tideShare: 0.56, heading: 1.2, naked: true, remainsAt: { x: 24, z: -12 }, remainsEnchant: 6 },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -225,6 +231,12 @@ const navigation = createNavigation(world);
 const gear = createGear(save.gear);
 const progression = createProgression(save.progression);
 const hermit = createHermit(scene, quality, gear.wornLook());
+
+function applyWornLook() {
+  hermit.setShell(gear.wornLook());
+  hermit.setEnchant(gear.wornShell() ? gear.wornShell().enchant || 0 : 0, gear.wornClaws().enchant || 0);
+}
+applyWornLook();
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
 const hud = createHud(qualityName);
 const tracks = createTracks(scene, world);
@@ -250,6 +262,7 @@ const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
   onCraft: craftItem,
+  onEnchant: enchantItem,
   onClose: () => workbenchPanel.close(),
 });
 const backpack = createBackpackPanel(hud.root, {
@@ -406,9 +419,26 @@ function craftItem(category, kind) {
   return item;
 }
 
+function enchantItem(id) {
+  const result = gear.enchant(id, save.inventory, random);
+  if (!result) return null;
+  const label = (result.category === 'shell' ? SHELLS : CLAWS)[result.item.kind].label;
+  if (result.success) {
+    soundAt('enchantSuccess');
+    hud.toast(`✨ ${label} +${result.level}!`);
+  } else {
+    soundAt('enchantBreak');
+    hud.toast(result.wasWorn ? `💥 Your ${label.toLowerCase()} broke` : `💥 ${label} broke`);
+  }
+  applyWornLook();
+  refreshHud(null);
+  persist();
+  return result;
+}
+
 function wearItem(id) {
   if (!gear.wear(id)) return false;
-  hermit.setShell(gear.wornLook());
+  applyWornLook();
   backpack.render();
   persist();
   return true;
@@ -587,7 +617,7 @@ function finishDeath() {
   const carried = Object.fromEntries(Object.entries(save.inventory).filter(([, amount]) => amount > 0));
   if (dropped.shells.length || dropped.claws.length || Object.keys(carried).length) remains.add({ x: player.x, z: player.z, inventory: carried, gear: dropped });
   save.inventory = {};
-  hermit.setShell(gear.wornLook());
+  applyWornLook();
   hermit.resetPose();
   progression.state.health = progression.maxHealth();
   player.lastCombatTime = -100;
@@ -601,7 +631,7 @@ function finishDeath() {
 function recoverRemains(entry) {
   for (const [type, amount] of Object.entries(entry.inventory)) save.inventory[type] = (save.inventory[type] || 0) + amount;
   gear.restore(entry.gear);
-  hermit.setShell(gear.wornLook());
+  applyWornLook();
   remains.remove(entry);
   soundAt('recoverRemains');
   hud.toast('🎒 You recovered your things');
@@ -1079,11 +1109,22 @@ if (isScreenshotMode) {
   if (pose.level) progression.setLevel(pose.level);
   if (pose.naked) {
     gear.dropAll();
-    hermit.setShell(gear.wornLook());
+    applyWornLook();
   }
-  if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', enchant: 0 }], claws: [], wornShellId: 90, wornClawsId: null } });
+  if (pose.enchanted) {
+    for (const [category, kind] of [['shell', pose.enchanted.shell], ['claws', pose.enchanted.claws]]) {
+      for (const [type, amount] of Object.entries((category === 'shell' ? SHELLS : CLAWS)[kind].cost)) save.inventory[type] = (save.inventory[type] || 0) + amount;
+      const item = gear.craft(category, kind, save.inventory);
+      item.enchant = pose.enchanted.level;
+      gear.wear(item.id);
+    }
+    gear.markAllSeen();
+    applyWornLook();
+  }
+  if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', enchant: pose.remainsEnchant || 0 }], claws: [], wornShellId: 90, wornClawsId: null } });
   refreshHud(null);
   if (pose.panel) workbenchPanel.open(pose.panel);
+  if (pose.armEnchant) hud.root.querySelector('.workbench .enchant-odds.risky')?.closest('.item').querySelector('[data-enchant]').click();
   if (pose.backpack) openBackpack();
   if (pose.walkFrom) {
     const walkStart = navigation.nearestWalkable(pose.walkFrom.x, pose.walkFrom.z, 40);
@@ -1159,7 +1200,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };

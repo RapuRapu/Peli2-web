@@ -7,7 +7,7 @@ const GROUPS = [
   { title: 'Poiminta', sounds: [['gatherShellBits', '🐚 Simpukanpala'], ['gatherDriftwood', '🪵 Ajopuu'], ['gatherSeaLettuce', '🥬 Merisalaatti'], ['gatherPearls', '🦪 Helmi']] },
   { title: 'Taistelu', sounds: [['clawSnap', 'Saksien napsahdus'], ['hitThud', 'Osuma'], ['stingHit', 'Sting-isku'], ['shellClonk', 'Rapu ottaa osumaa'], ['alert', 'Vihollinen huomaa (!)']] },
   { title: 'Eliöt', sounds: [['hopperChirp', 'Hyppijän sirinä'], ['hopperJump', 'Hyppijän hyppy'], ['crabClatter', 'Rantaravun kalke'], ['gullCall', 'Lokin kirkuna'], ['wingFlap', 'Siivet'], ['fishPlop', 'Kalan pulahdus']] },
-  { title: 'Käyttöliittymä', sounds: [['craft', 'Valmistus'], ['levelUp', 'Tason nousu'], ['death', 'Kuolema'], ['recoverRemains', 'Ruumiin löytyminen']] },
+  { title: 'Käyttöliittymä', sounds: [['craft', 'Valmistus'], ['levelUp', 'Tason nousu'], ['death', 'Kuolema'], ['recoverRemains', 'Ruumiin löytyminen'], ['enchantSuccess', 'Enchant onnistuu'], ['enchantBreak', 'Enchant epäonnistuu, varuste hajoaa']] },
 ];
 
 const element = (tag, className, parent, text) => {
