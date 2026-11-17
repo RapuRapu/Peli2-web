@@ -23,7 +23,8 @@ import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
 import { createAudio } from './audio.js';
 import { createBurrow, createEmptyBurrow, BURROW_GRID, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, cellCenter } from './burrow.js';
-import { createBuildPanel, createStoragePanel } from './burrowPanels.js';
+import { createBuildPanel, createStoragePanel, createHelpersPanel } from './burrowPanels.js';
+import { createHelpers, HELPER_LIMIT, HELPER_COST, HELPER_JOBS } from './helpers.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -136,6 +137,9 @@ const POSES = {
   48: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, shellBits: 12 }, storagePanel: true },
   49: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[5, 7], [6, 7]], inBurrow: true },
   50: { x: 21, z: -24, distance: 26, tideShare: 0.56, heading: 0.9, placingEntrance: true, previewEntrance: { x: 25, z: -19 } },
+  51: { x: 20, z: -26, distance: 30, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], helpers: ['shellBits', 'driftwood', 'seaLettuce'], simulateSeconds: 5 },
+  52: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], helpers: ['shellBits', 'seaLettuce'], inBurrow: true, simulateSeconds: 2, inventory: { seaLettuce: 6 }, helpersPanel: true },
+  53: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], helpers: ['shellBits', 'driftwood', 'seaLettuce'], helpersResting: true, inBurrow: true },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -145,7 +149,7 @@ const POSES = {
 };
 
 function createEmptySave() {
-  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false };
+  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [] };
 }
 
 function migrateSave(stored) {
@@ -319,6 +323,53 @@ const storagePanel = createStoragePanel(hud.root, {
   },
   onClose: () => storagePanel.close(),
 });
+const helpers = createHelpers(scene, {
+  world,
+  navigation,
+  resources,
+  enemies,
+  quality,
+  saved: save.helpers,
+  onDeposit: (type) => {
+    storage.inventory[type] = (storage.inventory[type] || 0) + 1;
+    if (storagePanel.isOpen) storagePanel.render();
+  },
+  onLost: (helper, enemy) => {
+    hud.toast(`🦀 A helper was caught by a ${enemy.definition.label.toLowerCase()}`);
+    persist();
+  },
+  onSound: (name, helper) => {
+    if (!underground) soundAt(name, helper.x, helper.z, 0.45);
+  },
+});
+const helpersPanel = createHelpersPanel(hud.root, {
+  helpers,
+  inventory: () => save.inventory,
+  limit: HELPER_LIMIT,
+  cost: HELPER_COST,
+  jobs: HELPER_JOBS,
+  requirement: () => (burrow.hasStation('storage') ? null : 'Build a 📦 storage first — helpers bring their finds there.'),
+  onRecruit: recruitHelper,
+  onJob: (id, job) => {
+    helpers.setJob(id, job);
+    helpersPanel.render();
+    persist();
+  },
+  onClose: () => helpersPanel.close(),
+});
+
+function recruitHelper(job = 'shellBits') {
+  if (!burrow.hasStation('storage') || helpers.list.length >= HELPER_LIMIT || !canAfford(HELPER_COST, save.inventory)) return null;
+  for (const [type, amount] of Object.entries(HELPER_COST)) save.inventory[type] -= amount;
+  const helper = helpers.recruit(job);
+  soundAt('recoverRemains');
+  hud.toast('🦀 A helper joined your burrow');
+  if (helpersPanel.isOpen) helpersPanel.render();
+  refreshHud(null);
+  persist();
+  return helper;
+}
+
 const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
@@ -345,7 +396,7 @@ function openBackpack() {
 }
 
 function anyPanelOpen() {
-  return workbenchPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen;
+  return workbenchPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen || helpersPanel.isOpen;
 }
 
 function closePanels() {
@@ -353,6 +404,7 @@ function closePanels() {
   if (backpack.isOpen) backpack.close();
   buildPanel.close();
   storagePanel.close();
+  helpersPanel.close();
 }
 
 const destinationMarker = new THREE.Mesh(
@@ -416,7 +468,7 @@ let startingOver = false;
 
 function persist() {
   if (isScreenshotMode || startingOver) return;
-  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground });
+  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, helpers: helpers.serialize() });
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
@@ -1174,6 +1226,7 @@ function simulate(deltaTime) {
   updatePlayer(deltaTime);
   if (underground) Object.assign(surfaceProbe, { x: burrow.state.entrance.x, z: burrow.state.entrance.z });
   enemies.update(deltaTime, simulationTime, underground ? surfaceProbe : player);
+  helpers.update(deltaTime, simulationTime, burrow.state.entrance);
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   seaUniforms.uCrabPosition.value.set(player.x, player.y, player.z);
@@ -1246,6 +1299,8 @@ function renderScene() {
   destinationMarker.scale.setScalar(1 + 0.12 * Math.sin(simulationTime * 5));
   workshop.update(simulationTime, underground && !hasCraftedGear() && !anyPanelOpen() && !placement.station, camera, underground);
   burrow.update(simulationTime, camera, underground);
+  helpers.render(simulationTime);
+  if (helpersPanel.isOpen && Math.floor(simulationTime * 2) !== Math.floor((simulationTime - 1 / 60) * 2)) helpersPanel.render();
   spotFeedback.visible = spotFeedback.visible && simulationTime < spotFeedbackUntil && !underground;
   spotFeedback.scale.setScalar(1 + 0.08 * Math.sin(simulationTime * 5));
   enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null);
@@ -1442,6 +1497,9 @@ hud.onGoalTap(goalTapped);
 hud.onBuild(() => {
   if (underground && !anyPanelOpen()) buildPanel.open();
 });
+hud.onHelpers(() => {
+  if (underground && !anyPanelOpen()) helpersPanel.open();
+});
 hud.onBag(openBackpack);
 hud.setBagDot(gear.hasNewItems());
 function startOver() {
@@ -1516,6 +1574,12 @@ if (isScreenshotMode) {
     buildStation(kind, cell.column, cell.row);
   }
   if (pose.stored) Object.assign(storage.inventory, pose.stored);
+  for (const job of pose.helpers || []) {
+    Object.assign(save.inventory, HELPER_COST);
+    recruitHelper(job);
+  }
+  if (pose.helpersResting) for (const helper of helpers.list) helper.restTimer = 600;
+  for (let step = 0; step < (pose.simulateSeconds || 0) / FIXED_STEP; step++) simulate(FIXED_STEP);
   if (pose.inBurrow) {
     enterBurrow();
     player.heading = pose.heading ?? 0;
@@ -1528,6 +1592,7 @@ if (isScreenshotMode) {
   if (pose.placingEntrance) startEntrancePlacement();
   if (pose.previewEntrance) previewEntranceSpot(pose.previewEntrance.x, pose.previewEntrance.z);
   if (pose.storagePanel) storagePanel.open();
+  if (pose.helpersPanel) helpersPanel.open();
   refreshHud(null);
   if (pose.panel) workbenchPanel.open(pose.panel);
   if (pose.armEnchant) hud.root.querySelector('.workbench .enchant-odds.risky')?.closest('.item').querySelector('[data-enchant]').click();
@@ -1606,7 +1671,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };

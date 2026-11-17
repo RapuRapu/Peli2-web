@@ -191,3 +191,63 @@ export function createStoragePanel(root, { gear, inventory, storage, onChange, o
     storeAll,
   };
 }
+
+const JOB_LABELS = { shellBits: '🐚 Shell bits', driftwood: '🪵 Driftwood', seaLettuce: '🥬 Sea lettuce' };
+function helperStatus(helper) {
+  const job = JOB_LABELS[helper.job];
+  if (helper.state === 'resting') return '💤 Resting in the burrow';
+  if (helper.state === 'outbound') return `➜ Heading out for ${job}`;
+  if (helper.state === 'gathering') return `⛏ Gathering ${job}`;
+  if (helper.state === 'returning') return helper.carrying ? `⬅ Carrying ${JOB_LABELS[helper.carrying]} home` : '⬅ Coming home';
+  if (helper.state === 'fleeing') return '⚠ Fleeing home!';
+  return helper.state;
+}
+
+export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs, requirement, onRecruit, onJob, onClose }) {
+  const shell = createPanelShell(root, 'helpers-panel', '🦀 Helpers', onClose);
+
+  function render() {
+    shell.body.replaceChildren();
+    element('div', 'summary', shell.body, `Helpers gather on the beach and bring everything to your storage. ${helpers.list.length}/${limit} helpers.`);
+    const missing = requirement();
+    const recruitRow = element('div', 'item', shell.body);
+    const recruitText = element('div', 'item-text', recruitRow);
+    element('div', 'item-name', recruitText, 'Recruit a helper crab');
+    if (missing) element('div', 'item-ability', recruitText, missing);
+    const costLine = element('div', 'cost', recruitText);
+    for (const [type, amount] of Object.entries(cost)) {
+      const have = inventory()[type] || 0;
+      element('span', have >= amount ? 'cost-item' : 'cost-item short', costLine, `${RESOURCE_TYPES[type].icon} ${amount} ${RESOURCE_TYPES[type].label}${have >= amount ? ' ✓' : ` (have ${have})`}`);
+    }
+    const recruitButton = element('button', 'item-action', recruitRow, 'Recruit');
+    recruitButton.dataset.recruit = '1';
+    recruitButton.disabled = Boolean(missing) || helpers.list.length >= limit || !canAfford(cost, inventory());
+    recruitButton.addEventListener('click', () => onRecruit());
+    for (const [index, helper] of helpers.list.entries()) {
+      const row = element('div', 'item helper-row', shell.body);
+      row.dataset.helper = String(helper.id);
+      const text = element('div', 'item-text', row);
+      element('div', 'item-name', text, `Helper ${index + 1} · ❤ ${Math.max(0, Math.ceil(helper.health))}/${helpers.maxHealth}`);
+      element('div', helper.state === 'fleeing' ? 'item-ability danger' : 'item-stats', text, helperStatus(helper));
+      const jobRow = element('div', 'job-row', text);
+      element('span', 'job-label', jobRow, 'Job:');
+      for (const job of jobs) {
+        const button = element('button', job === helper.job ? 'job-button active' : 'job-button', jobRow, JOB_LABELS[job]);
+        button.dataset.job = job;
+        button.addEventListener('click', () => onJob(helper.id, job));
+      }
+    }
+  }
+
+  return {
+    get isOpen() {
+      return shell.isOpen;
+    },
+    open() {
+      render();
+      shell.show();
+    },
+    close: () => shell.hide(),
+    render,
+  };
+}

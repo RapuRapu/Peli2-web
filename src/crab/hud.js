@@ -20,7 +20,9 @@ export function createHud(activeQualityName) {
   bagButton.setAttribute('aria-label', 'Backpack');
   const bagDot = element('span', 'bag-dot hidden', bagButton);
   const goal = element('div', 'chip goal', topLeft);
-  const buildButton = element('button', 'build-button hidden', root, '🏗️ Build');
+  const burrowButtons = element('div', 'burrow-buttons hidden', root);
+  const helpersButton = element('button', 'build-button helpers-button', burrowButtons, '🦀 Helpers');
+  const buildButton = element('button', 'build-button build-open', burrowButtons, '🏗️ Build');
   const modeBar = element('div', 'mode-bar hidden', root);
   const modeText = element('span', 'mode-text', modeBar);
   const modeCancel = element('button', 'mode-cancel', modeBar, 'Cancel');
@@ -76,6 +78,7 @@ export function createHud(activeQualityName) {
   let bagListener = () => {};
   let volumeListener = () => {};
   let buildListener = () => {};
+  let helpersListener = () => {};
   let modeCancelListener = () => {};
   let toastTimer = 0;
   let resetArmed = false;
@@ -83,6 +86,7 @@ export function createHud(activeQualityName) {
   pauseButton.addEventListener('click', () => pauseListener(true));
   bagButton.addEventListener('click', () => bagListener());
   buildButton.addEventListener('click', () => buildListener());
+  helpersButton.addEventListener('click', () => helpersListener());
   modeCancel.addEventListener('click', () => modeCancelListener());
   goal.addEventListener('click', () => {
     if (goal.classList.contains('action')) goalListener();
@@ -110,12 +114,13 @@ export function createHud(activeQualityName) {
     onGoalTap: (listener) => { goalListener = listener; },
     onBag: (listener) => { bagListener = listener; },
     onBuild: (listener) => { buildListener = listener; },
+    onHelpers: (listener) => { helpersListener = listener; },
     setBuildButton(visible) {
-      buildButton.classList.toggle('hidden', !visible);
+      burrowButtons.classList.toggle('hidden', !visible);
     },
     setMode(text, onCancel = () => {}) {
       modeBar.classList.toggle('hidden', !text);
-      buildButton.classList.toggle('dimmed', Boolean(text));
+      burrowButtons.classList.toggle('dimmed', Boolean(text));
       root.classList.toggle('placing', Boolean(text));
       modeText.textContent = text || '';
       modeCancelListener = onCancel;

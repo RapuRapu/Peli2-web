@@ -7,7 +7,7 @@ extra = sys.argv[3] if len(sys.argv) > 3 else 'hud'
 os.makedirs(out_dir, exist_ok=True)
 LANDSCAPE = {'width': 915, 'height': 412}
 PORTRAIT = {'width': 412, 'height': 915}
-PORTRAIT_POSES = ('8', '19', '20', '28', '30', '43', '48', '49')
+PORTRAIT_POSES = ('8', '19', '20', '28', '30', '43', '48', '49', '52')
 
 with sync_playwright() as p:
     browser = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'])

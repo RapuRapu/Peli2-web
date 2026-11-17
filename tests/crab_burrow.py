@@ -31,14 +31,14 @@ FLOW = r'''
   out.underground = d.isUnderground();
   out.hudUnderground = document.querySelector('#hud').classList.contains('underground');
   out.cameraOnBurrowLayer = d.camera.layers.mask === 2;
-  out.buildButtonShown = !document.querySelector('#hud .build-button').classList.contains('hidden');
+  out.buildButtonShown = !document.querySelector('#hud .build-open').classList.contains('hidden');
   out.playerY = d.player.y;
   out.digStarted = d.startDigCell(5, 7);
   window.__step(12, () => d.burrow.isDug(5, 7));
   out.cellDug = d.burrow.isDug(5, 7);
   out.notAdjacentRefused = d.startDigCell(0, 0) === false;
   Object.assign(d.save.inventory, { shellBits: 5, driftwood: 7, seaLettuce: 3 });
-  document.querySelector('#hud .build-button').click();
+  document.querySelector('#hud .build-open').click();
   out.buildPanelOpen = d.buildPanel.isOpen;
   document.querySelector('#hud .build-panel [data-station="workshop"]').click();
   out.placingAfterChoose = !document.querySelector('#hud .mode-bar').classList.contains('hidden');
