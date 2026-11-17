@@ -15,6 +15,15 @@ uniform float uTime;
 uniform float uSeaLevel;
 uniform sampler2D uRetained;
 uniform float uWorldSize;
+uniform vec3 uCrabPosition;
+`;
+
+const CRAB_PUSH_GLSL = /* glsl */ `
+    vec2 crabAway = aRoot.xz - uCrabPosition.xz;
+    float crabDistance = length(crabAway);
+    float crabPush = (1.0 - smoothstep(0.5, 2.4, crabDistance)) * (1.0 - smoothstep(2.0, 4.0, abs(aRoot.y - uCrabPosition.y))) * bladeAlong * bladeAlong * bladeLength * 0.6;
+    transformed.xz += crabAway / max(crabDistance, 0.001) * crabPush;
+    transformed.y -= crabPush * 0.4;
 `;
 
 const bladeMotion = (floats) => ({
@@ -30,6 +39,7 @@ const bladeMotion = (floats) => ({
     vec2 sway = vec2(sin(swayPhase), cos(swayPhase * 0.83 + 1.3)) * (bladeAlong * bladeAlong) * bladeLength * ${floats ? '0.34' : '0.1'};
     vec2 lean = vec2(cos(aBlade.w * 3.7), sin(aBlade.w * 3.7)) * (bladeAlong * bladeAlong) * bladeLength * ${floats ? '0.12' : '0.34'};
     transformed = aRoot + vec3(cos(aBlade.z) * bladeSide + sway.x + lean.x, bladeAlong * bladeLength * ${floats ? '1.0' : '0.92'}, sin(aBlade.z) * bladeSide + sway.y + lean.y);
+    ${CRAB_PUSH_GLSL}
     ${floats ? `
     float bladeSurface = max(uSeaLevel, texture2D(uRetained, transformed.xz / uWorldSize + 0.5).r) - 0.07;
     float bladeExcess = transformed.y - bladeSurface;
@@ -147,8 +157,51 @@ function buildStarfishGeometry(spot, size, heading, color) {
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.scale(size, size, size).rotateY(heading).translate(spot.x, spot.y + 0.02, spot.z);
+  return withCreatureCenter(geometry, spot.x, spot.y, spot.z, size);
+}
+
+function withCreatureCenter(geometry, x, y, z, size) {
+  const centers = new Float32Array(geometry.attributes.position.count * 4);
+  for (let index = 0; index < geometry.attributes.position.count; index++) centers.set([x, y, z, size], index * 4);
+  geometry.setAttribute('aCreature', new THREE.BufferAttribute(centers, 4));
   return geometry;
 }
+
+const CREATURE_DECLARATIONS_GLSL = /* glsl */ `
+attribute vec4 aCreature;
+uniform float uTime;
+uniform vec3 uCrabPosition;
+`;
+
+const starfishMotion = {
+  key: 'starfish',
+  declarations: CREATURE_DECLARATIONS_GLSL,
+  code: /* glsl */ `
+    vec2 starfishOffset = transformed.xz - aCreature.xz;
+    float starfishReach = length(starfishOffset) / aCreature.w;
+    float crabNear = 1.0 - smoothstep(1.2, 3.0, distance(aCreature.xz, uCrabPosition.xz));
+    float breathe = 0.5 + 0.5 * sin(uTime * 0.6 + aCreature.x * 1.7 + atan(starfishOffset.y, starfishOffset.x) * 2.0);
+    transformed.y += starfishReach * starfishReach * aCreature.w * (0.05 * breathe + 0.32 * crabNear);
+    transformed.xz -= starfishOffset * crabNear * 0.12 * starfishReach;
+  `,
+};
+
+const anemoneMotion = {
+  key: 'anemone',
+  declarations: CREATURE_DECLARATIONS_GLSL,
+  colorCode: /* glsl */ `
+    float closedTint = 1.0 - smoothstep(1.8, 4.2, distance(aCreature.xz, uCrabPosition.xz));
+    vColor.rgb *= 1.0 - 0.45 * closedTint * smoothstep(0.5, 0.8, (position.y - aCreature.y) / aCreature.w);
+  `,
+  code: /* glsl */ `
+    float tentacle = smoothstep(0.55, 0.75, (transformed.y - aCreature.y) / aCreature.w);
+    float closed = 1.0 - smoothstep(1.8, 4.2, distance(aCreature.xz, uCrabPosition.xz));
+    vec3 mouth = vec3(aCreature.x, aCreature.y + 0.62 * aCreature.w, aCreature.z);
+    float above = max(0.0, transformed.y - mouth.y);
+    transformed.xz += tentacle * vec2(sin(uTime * 1.3 + aCreature.x + transformed.y * 2.0), cos(uTime * 1.1 + aCreature.z + transformed.y * 2.0)) * above * 0.18 * (1.0 - closed);
+    transformed = mix(transformed, mouth, tentacle * closed * 0.82);
+  `,
+};
 
 function buildAnemoneGeometry(spot, size, color) {
   const parts = [];
@@ -169,13 +222,14 @@ function buildAnemoneGeometry(spot, size, color) {
       parts.push(paint(geometry, color, 0.85 + ring * 0.45));
     }
   }
-  return mergeGeometries(parts).scale(size, size, size).translate(spot.x, spot.y - 0.05, spot.z);
+  return withCreatureCenter(mergeGeometries(parts).scale(size, size, size).translate(spot.x, spot.y - 0.05, spot.z), spot.x, spot.y - 0.05, spot.z, size);
 }
 
 const FISH_DECLARATIONS_GLSL = /* glsl */ `
 attribute vec4 aOrbit;
 attribute vec4 aSwim;
 uniform float uTime;
+uniform vec3 uCrabPosition;
 `;
 
 const fishMotion = {
@@ -189,13 +243,14 @@ const fishMotion = {
   code: /* glsl */ `
     float fishTurn = uTime * aSwim.y + aSwim.z;
     float fishHeading = fishTurn + sign(aSwim.y) * 1.5708;
-    vec3 fishLocal = position * aSwim.w;
-    fishLocal.z += sin(uTime * 9.0 + aSwim.z * 7.0 - position.x * 2.6) * 0.16 * aSwim.w * (1.0 - smoothstep(-1.0, 0.2, position.x));
     vec2 fishWobble = vec2(sin(fishTurn * 2.7), cos(fishTurn * 1.9)) * 1.3;
-    transformed = vec3(
-      aOrbit.x + cos(fishTurn) * aSwim.x + fishWobble.x + fishLocal.x * cos(fishHeading) - fishLocal.z * sin(fishHeading),
-      aOrbit.y + fishLocal.y + sin(fishTurn * 3.1) * 0.15,
-      aOrbit.z + sin(fishTurn) * aSwim.x * aOrbit.w + fishWobble.y + fishLocal.x * sin(fishHeading) + fishLocal.z * cos(fishHeading));
+    vec3 fishCenter = vec3(aOrbit.x + cos(fishTurn) * aSwim.x + fishWobble.x, aOrbit.y + sin(fishTurn * 3.1) * 0.15, aOrbit.z + sin(fishTurn) * aSwim.x * aOrbit.w + fishWobble.y);
+    vec3 fromCrab = fishCenter - uCrabPosition;
+    float fear = 1.0 - smoothstep(3.0, 9.0, length(fromCrab));
+    fishCenter.xz += normalize(fromCrab.xz + vec2(0.001, 0.0)) * fear * 6.0;
+    vec3 fishLocal = position * aSwim.w;
+    fishLocal.z += sin(uTime * (9.0 + fear * 14.0) + aSwim.z * 7.0 - position.x * 2.6) * (0.16 + fear * 0.1) * aSwim.w * (1.0 - smoothstep(-1.0, 0.2, position.x));
+    transformed = fishCenter + vec3(fishLocal.x * cos(fishHeading) - fishLocal.z * sin(fishHeading), fishLocal.y, fishLocal.x * sin(fishHeading) + fishLocal.z * cos(fishHeading));
   `,
 };
 
@@ -244,6 +299,7 @@ export function createLife(scene, world, quality) {
   const anemoneColors = [linearColor(0.8, 0.42, 0.5), linearColor(0.42, 0.7, 0.62), linearColor(0.8, 0.58, 0.34), linearColor(0.58, 0.46, 0.76)];
   const starfish = [];
   const anemones = [];
+  const anemoneSpots = [];
   const inPoolShallows = (x, z, height) => world.retained.levelAt(x, z) - height > 0.25;
   const inPoolDepths = (x, z, height) => world.retained.levelAt(x, z) - height > 1.2;
   for (let index = 0; index < Math.round(16 * quality.density); index++) {
@@ -252,12 +308,17 @@ export function createLife(scene, world, quality) {
   }
   for (let index = 0; index < Math.round(30 * quality.density); index++) {
     const spot = world.randomSpot(random, inPoolDepths);
-    if (spot) anemones.push(buildAnemoneGeometry(spot, 0.8 + random() * 0.9, anemoneColors[index % anemoneColors.length]));
+    if (!spot) continue;
+    anemoneSpots.push(spot);
+    anemones.push(buildAnemoneGeometry(spot, 0.8 + random() * 0.9, anemoneColors[index % anemoneColors.length]));
   }
-  const starfishMesh = new THREE.Mesh(mergeGeometries(starfish), applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), { wetDarkening: 0.8, wetRoughness: 0.25, chromaticCaustics: quality.chromaticCaustics }));
+  const starfishMesh = new THREE.Mesh(mergeGeometries(starfish), applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }), { wetDarkening: 0.8, wetRoughness: 0.25, chromaticCaustics: quality.chromaticCaustics, vertexMotion: starfishMotion }));
   starfishMesh.castShadow = true;
+  starfishMesh.customDepthMaterial = createMotionDepthMaterial(starfishMotion);
   starfishMesh.receiveShadow = true;
-  const anemoneMesh = new THREE.Mesh(mergeGeometries(anemones), applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), { wetDarkening: 1, causticStrength: 1.4, chromaticCaustics: false, glow: 0.22 }));
+  const anemoneMesh = new THREE.Mesh(mergeGeometries(anemones), applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5 }), { wetDarkening: 1, causticStrength: 1.4, chromaticCaustics: false, glow: 0.22, vertexMotion: anemoneMotion }));
   anemoneMesh.castShadow = true;
+  anemoneMesh.customDepthMaterial = createMotionDepthMaterial(anemoneMotion);
   scene.add(starfishMesh, anemoneMesh, buildFishSchool(world, quality));
+  return { anemoneSpots };
 }

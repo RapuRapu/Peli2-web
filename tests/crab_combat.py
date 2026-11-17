@@ -111,6 +111,44 @@ with sync_playwright() as playwright:
     }''')
     checks['behaviour'] = behaviour
 
+    page.evaluate(HELPERS)
+    pack = page.evaluate(r'''() => {
+      const d = __debug, c = __combat;
+      for (const enemy of d.enemies.list) if (enemy.kind === 'sandHopper') Object.assign(enemy, { state: 'idle', respawnTimer: 0, health: 12, sink: 0, provoked: false, hurt: 0 });
+      const groups = new Map();
+      for (const enemy of d.enemies.list.filter(e => e.kind === 'sandHopper' && Math.hypot(e.home.x - e.pack.x, e.home.z - e.pack.z) < 6)) groups.set(enemy.pack, [...(groups.get(enemy.pack) || []), enemy]);
+      const sizes = [...groups.values()].map(g => g.length);
+      const members = [...groups.values()].sort((a, b) => b.length - a.length)[0];
+      const leader = members[0];
+      for (const member of members) Object.assign(member, { x: leader.home.x + (member.home.x - leader.home.x), z: leader.home.z + (member.home.z - leader.home.z), state: 'idle', health: 12, path: [], pathIndex: 0 });
+      const otherPack = d.enemies.list.find(e => e.kind === 'sandHopper' && e.pack !== leader.pack);
+      d.progression.setLevel(5); c.equip('turban', 0, true);
+      const spot = d.navigation.nearestWalkable(leader.x + 2.5, leader.z, 10);
+      Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null });
+      const calmBefore = members.every(m => m.state === 'idle');
+      d.engage(leader);
+      c.step(1.2);
+      const joined = members.filter(m => m !== leader && (m.state === 'chase' || m.state === 'dying' || m.state === 'dead')).length;
+      const outsiderCalm = otherPack.state === 'idle' || Math.hypot(otherPack.x - leader.x, otherPack.z - leader.z) < 12;
+      return { packSizes: sizes, calmBefore, packSize: members.length, joined, outsiderCalm, pass: calmBefore && members.length >= 2 && joined === members.length - 1 && outsiderCalm && sizes.every(n => n >= 1 && n <= 4) };
+    }''')
+    checks['passivePack'] = pack
+
+    sight = page.evaluate(r'''() => {
+      const d = __debug, c = __combat;
+      d.progression.setLevel(1); c.equip('snail', 0, false);
+      const spot = c.place(-1, -6);
+      const crab = c.spawnNear('shoreCrab', spot, 12);
+      crab.home = { x: crab.x, z: crab.z };
+      c.step(1);
+      const ignoredFar = crab.state === 'idle';
+      const near = d.navigation.nearestWalkable(crab.x - 7, crab.z, 6);
+      Object.assign(d.player, { x: near.x, z: near.z });
+      c.step(0.5);
+      return { ignoredFar, spottedWithin9: crab.state === 'chase', pass: ignoredFar && crab.state === 'chase' };
+    }''')
+    checks['aggressiveSight'] = sight
+
     progression = page.evaluate(r'''() => {
       const d = __debug, c = __combat;
       d.progression.setLevel(1);

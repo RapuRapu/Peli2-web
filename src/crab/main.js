@@ -40,7 +40,7 @@ const MINIMUM_HORIZONTAL_FIELD_OF_VIEW = 25;
 const WALK_SPEED = 7.2;
 const WADE_SPEED = 5.2;
 const TURN_RATE = 9;
-const GATHER_REACH = 1.7;
+const GATHER_REACH = 2.5;
 const PICK_RADIUS_PIXELS = 46;
 const STARTING_TIDE_TIME = TIDE_PERIOD_SECONDS * 0.56;
 const WET_SAND_DRYING_RATE = 0.006;
@@ -54,7 +54,7 @@ const STARTING_HEADING = 2.3;
 const BODY_WET_MINIMUM_DEPTH = 0.04;
 const BODY_WET_MAXIMUM_HEIGHT_PER_SIZE = 2.0;
 const BODY_DRYING_SECONDS = 30;
-const PLAYER_ATTACK_REACH = 1.6;
+const PLAYER_ATTACK_REACH = 1.25;
 const PLAYER_ATTACK_INTERVAL = 0.9;
 const PLAYER_FIRST_STRIKE_SECONDS = 0.3;
 const COMBAT_REPATH_SECONDS = 0.4;
@@ -65,6 +65,10 @@ const BRACE_DAMAGE_FACTOR = 0.7;
 const BRACE_MAXIMUM_SPEED = 0.5;
 const STING_EVERY_HITS = 4;
 const RESPAWN_CALM_SECONDS = 4;
+const DEATH_ANIMATION_SECONDS = 1.1;
+const KNOCKBACK_DISTANCE = 0.3;
+const STRIKING_RANGE_TOLERANCE = 0.45;
+const ITEM_LIFT_START_SHARE = 0.55;
 
 const POSES = {
   1: { x: HOME_SPOT.x, z: HOME_SPOT.z, distance: 32, tideShare: 0.56 },
@@ -91,6 +95,14 @@ const POSES = {
   22: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, naked: true },
   23: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, remainsAt: { x: 24, z: -12 } },
   29: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, remainsAt: { x: -20, z: -40 } },
+  31: { x: 11, z: -24, distance: 11, tideShare: 0.56, heading: 2.6, gather: { type: 'shellBits', share: 0.8 } },
+  32: { x: -1, z: -6, distance: 13, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 1.2, moment: 'strike' },
+  33: { x: -1, z: -6, distance: 13, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 1.2, moment: 'hurt' },
+  34: { x: -1, z: -6, distance: 13, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 1.2, moment: 'enemyHurt' },
+  35: { x: 6, z: 2, distance: 14, tideShare: 0.75, heading: 0.6, nearAnemone: true },
+  36: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: -2.4, offsetZ: 0.8 }, fightSeconds: 0.6, moment: 'dying' },
+  37: { x: 12, z: -14, distance: 11, tideShare: 0.56, heading: 2.6, gather: { type: 'seaLettuce', share: 0.5 } },
+  38: { x: 0, z: -104, distance: 34, tideShare: 0.56, heading: 3.2, level: 6, enemy: { kind: 'gull', offsetX: -2, offsetZ: -5.5 }, fightSeconds: 2.2, moment: 'enemyHurt' },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -174,7 +186,7 @@ scene.add(sun, sun.target);
 
 scene.add(world.terrainMesh);
 createProps(scene, world, quality);
-createLife(scene, world, quality);
+const life = createLife(scene, world, quality);
 
 const pipeline = createPipeline(renderer, quality);
 const water = createWater(createWaveGradientTexture(), pipeline.overlayUniforms, quality.rippleCapacity);
@@ -199,6 +211,7 @@ const enemies = createEnemies({
   labelParent: hud.root,
   onAttackPlayer: hitPlayer,
   onKilled: enemyKilled,
+  onAlert: (enemy) => floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, '!', 'alert'),
 });
 const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
@@ -246,7 +259,7 @@ const camera = new THREE.PerspectiveCamera(LANDSCAPE_FIELD_OF_VIEW, 1, 1.5, 1600
 const cameraFocus = new THREE.Vector3();
 let cameraDistance = 32;
 
-const player = { x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
+const player = { x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
 const startPoint = navigation.nearestWalkable(player.x, player.z, 40) || HOME_SPOT;
 player.x = startPoint.x;
 player.z = startPoint.z;
@@ -441,10 +454,12 @@ function strike(enemy) {
   const damage = rollDamage(stats.attack, enemy.definition.defense) * (isSting ? 2 : 1);
   player.lastCombatTime = simulationTime;
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.7, enemy.z, isSting ? `${damage}!` : String(damage), isSting ? 'sting' : 'dealt');
-  enemies.damage(enemy, damage, simulationTime);
+  hermit.playAttack(isSting ? 'both' : player.hitCount % 2 ? 'big' : 'small');
+  enemies.damage(enemy, damage, simulationTime, player);
 }
 
 function hitPlayer(enemy) {
+  if (player.dyingTimer > 0) return;
   const stats = playerStats();
   let damage = rollDamage(enemy.definition.attack, stats.defense);
   const braced = stats.ability && stats.ability.id === 'brace' && player.speed < BRACE_MAXIMUM_SPEED;
@@ -453,6 +468,13 @@ function hitPlayer(enemy) {
   player.lastCombatTime = simulationTime;
   floatAt(player.x, player.y + 2.4, player.z, `−${damage}`, 'taken');
   hud.flashHurt();
+  const awayX = player.x - enemy.x;
+  const awayZ = player.z - enemy.z;
+  const awayLength = Math.hypot(awayX, awayZ) || 1;
+  const strength = THREE.MathUtils.clamp(damage / (progression.maxHealth() * 0.2), 0.4, 1.6);
+  tryStep(player.x + (awayX / awayLength) * KNOCKBACK_DISTANCE * strength, player.z + (awayZ / awayLength) * KNOCKBACK_DISTANCE * strength);
+  const sideways = Math.sign(Math.sin(Math.atan2(-awayX, -awayZ) - player.heading)) || 1;
+  hermit.playHurt(strength, sideways);
   const idle = !player.combatTarget && !player.gatherTarget && player.pathIndex >= player.path.length && !keyboardDirection();
   if (idle) engage(enemy);
   if (progression.state.health <= 0) die();
@@ -481,22 +503,28 @@ function wakeSpot() {
 }
 
 function die() {
+  stopWalking();
+  player.gatherTarget = null;
+  player.combatTarget = null;
+  player.dyingTimer = DEATH_ANIMATION_SECONDS;
+  hermit.playDeath();
+  enemies.calmAll(RESPAWN_CALM_SECONDS + DEATH_ANIMATION_SECONDS, simulationTime);
+  workbenchPanel.close();
+  if (backpack.isOpen) backpack.close();
+  hud.showDeath();
+}
+
+function finishDeath() {
   const dropped = gear.dropAll();
   const carried = Object.fromEntries(Object.entries(save.inventory).filter(([, amount]) => amount > 0));
   if (dropped.shells.length || dropped.claws.length || Object.keys(carried).length) remains.add({ x: player.x, z: player.z, inventory: carried, gear: dropped });
   save.inventory = {};
   hermit.setShell(gear.wornLook());
+  hermit.resetPose();
   progression.state.health = progression.maxHealth();
-  stopWalking();
-  player.gatherTarget = null;
-  player.combatTarget = null;
   player.lastCombatTime = -100;
   const spot = wakeSpot();
   Object.assign(player, { x: spot.x, z: spot.z, speed: 0 });
-  enemies.calmAll(RESPAWN_CALM_SECONDS, simulationTime);
-  workbenchPanel.close();
-  if (backpack.isOpen) backpack.close();
-  hud.showDeath();
   hud.toast('💀 You were defeated — your things wait in your remains');
   refreshHud(null);
   persist();
@@ -548,6 +576,13 @@ function turnToward(targetHeading, deltaTime) {
 }
 
 function updatePlayer(deltaTime) {
+  if (player.dyingTimer > 0) {
+    player.dyingTimer -= deltaTime;
+    player.speed = 0;
+    if (player.dyingTimer <= 0) finishDeath();
+    hermit.update(deltaTime, { x: player.x, y: player.y, z: player.z, heading: player.heading, speed: 0, working: false, groundNormal: player.groundNormal });
+    return;
+  }
   const waterDepth = world.waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
   const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * gear.stats().speedFactor;
   let targetSpeed = 0;
@@ -556,7 +591,7 @@ function updatePlayer(deltaTime) {
   if (!combatTarget) player.combatTarget = null;
   let inStrikingRange = false;
   if (combatTarget && !steering) {
-    const reach = PLAYER_ATTACK_REACH + combatTarget.definition.radius;
+    const reach = PLAYER_ATTACK_REACH + combatTarget.definition.radius + (player.wasInStrikingRange ? STRIKING_RANGE_TOLERANCE : 0);
     const distance = Math.hypot(combatTarget.x - player.x, combatTarget.z - player.z);
     if (distance <= reach) {
       inStrikingRange = true;
@@ -588,7 +623,7 @@ function updatePlayer(deltaTime) {
     const offsetZ = waypoint.z - player.z;
     const distance = Math.hypot(offsetX, offsetZ);
     const isLast = player.pathIndex === player.path.length - 1;
-    const arrivalDistance = isLast && player.gatherTarget ? GATHER_REACH * 0.8 : 0.25;
+    const arrivalDistance = isLast && player.gatherTarget ? RESOURCE_TYPES[player.gatherTarget.type].standOff : 0.25;
     if (distance <= arrivalDistance) {
       player.pathIndex++;
       if (player.pathIndex >= player.path.length) destinationMarker.visible = false;
@@ -614,8 +649,15 @@ function updatePlayer(deltaTime) {
     }
   }
 
+  player.wasInStrikingRange = inStrikingRange;
   const target = player.gatherTarget;
   let working = false;
+  let gatherType = null;
+  let gatherShare = 0;
+  if (player.heldNode && player.heldNode !== target) {
+    if (!player.heldNode.gathered) resources.release(player.heldNode);
+    player.heldNode = null;
+  }
   if (inStrikingRange) {
     working = true;
     turnToward(Math.atan2(combatTarget.x - player.x, combatTarget.z - player.z), deltaTime);
@@ -633,8 +675,16 @@ function updatePlayer(deltaTime) {
     const distance = Math.hypot(target.x - player.x, target.z - player.z);
     if (distance <= GATHER_REACH) {
       working = true;
+      gatherType = target.type;
       turnToward(Math.atan2(target.x - player.x, target.z - player.z), deltaTime);
       player.gatherProgress += deltaTime;
+      gatherShare = Math.min(1, player.gatherProgress / RESOURCE_TYPES[target.type].gatherSeconds);
+      const lift = THREE.MathUtils.smoothstep(gatherShare, ITEM_LIFT_START_SHARE, 1);
+      if (lift > 0) {
+        const claw = hermit.clawPosition(target.type === 'shellBits' ? 'small' : 'big', projected);
+        player.heldNode = target;
+        resources.hold(target, THREE.MathUtils.lerp(target.x, claw.x, lift), THREE.MathUtils.lerp(target.y, claw.y, lift), THREE.MathUtils.lerp(target.z, claw.z, lift), 1 - 0.65 * lift);
+      }
       if (player.gatherProgress >= RESOURCE_TYPES[target.type].gatherSeconds) {
         resources.gather(target);
         save.inventory[target.type] = (save.inventory[target.type] || 0) + 1;
@@ -650,10 +700,11 @@ function updatePlayer(deltaTime) {
         persist();
       }
     } else {
+      resources.release(target);
       player.gatherTarget = null;
     }
   }
-  hermit.update(deltaTime, { x: player.x, y: player.y, z: player.z, heading: player.heading, speed: player.speed, working, groundNormal: player.groundNormal });
+  hermit.update(deltaTime, { x: player.x, y: player.y, z: player.z, heading: player.heading, speed: player.speed, working, gatherType, gatherProgress: gatherShare, groundNormal: player.groundNormal });
 }
 
 function updateBodyWetness(deltaTime) {
@@ -681,6 +732,7 @@ function simulate(deltaTime) {
   enemies.update(deltaTime, simulationTime, player);
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
+  seaUniforms.uCrabPosition.value.set(player.x, player.y, player.z);
   tracks.update(deltaTime, simulationTime, player, tideState.seaLevel);
   ripples.update(deltaTime, simulationTime, player);
   autosaveTimer += deltaTime;
@@ -806,7 +858,7 @@ function workshopUnder(clientX, clientY) {
 }
 
 function handleTap(clientX, clientY, isNewTouch) {
-  if (paused || anyPanelOpen()) return;
+  if (paused || anyPanelOpen() || player.dyingTimer > 0) return;
   const enemy = isNewTouch ? enemies.pick(clientX, clientY, camera) : null;
   if (enemy) {
     engage(enemy);
@@ -971,6 +1023,26 @@ if (isScreenshotMode) {
     }
     if (pose.fightSeconds) engage(enemy);
     for (let step = 0; step < Math.max(30, pose.fightSeconds / FIXED_STEP); step++) simulate(FIXED_STEP);
+    const momentSteps = { strike: 12, hurt: 6, enemyHurt: 5, dying: 40 }[pose.moment] || 0;
+    if (pose.moment === 'strike') hermit.playAttack('big');
+    if (pose.moment === 'hurt') hitPlayer(enemy);
+    if (pose.moment === 'enemyHurt') enemies.damage(enemy, 1, simulationTime, player);
+    if (pose.moment === 'dying') {
+      progression.state.health = 1;
+      hitPlayer(enemy);
+    }
+    for (let step = 0; step < momentSteps; step++) simulate(FIXED_STEP);
+  } else if (pose.nearAnemone) {
+    const anemone = life.anemoneSpots.filter((candidate) => world.retained.levelAt(candidate.x, candidate.z) > -0.5).sort((first, second) => Math.hypot(first.x - spot.x, first.z - spot.z) - Math.hypot(second.x - spot.x, second.z - spot.z))[0];
+    const beside = navigation.nearestWalkable(anemone.x - 1.6, anemone.z - 0.4, 6);
+    Object.assign(player, { x: beside.x, z: beside.z, heading: 1.3 });
+    for (let step = 0; step < 30; step++) simulate(FIXED_STEP);
+  } else if (pose.gather) {
+    const node = resources.nodes.filter((candidate) => candidate.type === pose.gather.type && !candidate.gathered).sort((first, second) => Math.hypot(first.x - spot.x, first.z - spot.z) - Math.hypot(second.x - spot.x, second.z - spot.z))[0];
+    const stand = navigation.nearestWalkable(node.x - 3.5, node.z - 1.5, 6);
+    Object.assign(player, { x: stand.x, z: stand.z });
+    setDestination(node.x, node.z, node);
+    for (let step = 0; step < 600 && !(player.gatherTarget && player.gatherProgress / RESOURCE_TYPES[node.type].gatherSeconds >= pose.gather.share); step++) simulate(FIXED_STEP);
   } else {
     for (let step = 0; step < (pose.gullCircling ? 240 : 90); step++) simulate(FIXED_STEP);
     const gull = pose.gullCircling && enemies.list.find((enemy) => enemy.kind === 'gull');

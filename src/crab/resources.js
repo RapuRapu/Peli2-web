@@ -7,10 +7,10 @@ import { TIDE_MIDDLE, TIDE_AMPLITUDE } from './world.js';
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 
 export const RESOURCE_TYPES = {
-  shellBits: { label: 'Shell bits', icon: '🐚', count: 16, gatherSeconds: 1.0 },
-  driftwood: { label: 'Driftwood', icon: '🪵', count: 12, gatherSeconds: 1.3 },
-  seaLettuce: { label: 'Sea lettuce', icon: '🥬', count: 12, gatherSeconds: 0.9 },
-  pearls: { label: 'Pearls', icon: '🦪', count: 3, gatherSeconds: 1.6 },
+  shellBits: { label: 'Shell bits', icon: '🐚', count: 16, gatherSeconds: 1.0, standOff: 1.3 },
+  driftwood: { label: 'Driftwood', icon: '🪵', count: 12, gatherSeconds: 1.3, standOff: 1.5 },
+  seaLettuce: { label: 'Sea lettuce', icon: '🥬', count: 12, gatherSeconds: 0.9, standOff: 2.1 },
+  pearls: { label: 'Pearls', icon: '🦪', count: 3, gatherSeconds: 1.6, standOff: 1.3 },
 };
 
 const PEARL_MINIMUM_POOL_DEPTH = 1.4;
@@ -201,6 +201,22 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
     refresh(node);
   }
 
+  function hold(node, x, y, z, scale) {
+    const mesh = meshes[node.type];
+    transform.position.set(x, y, z);
+    transform.rotation.set(0, node.heading, 0);
+    transform.scale.setScalar(node.size * scale);
+    transform.updateMatrix();
+    mesh.setMatrixAt(node.slot, transform.matrix);
+    mesh.instanceMatrix.needsUpdate = true;
+    sparkleGeometry.attributes.position.setXYZ(node.sparkleIndex, 0, -999, 0);
+    sparkleGeometry.attributes.position.needsUpdate = true;
+  }
+
+  function release(node) {
+    refresh(node);
+  }
+
   function gather(node) {
     node.gathered = true;
     refresh(node);
@@ -227,5 +243,5 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
     return saved;
   }
 
-  return { nodes, gather, washAshore, update, serialize };
+  return { nodes, gather, hold, release, washAshore, update, serialize };
 }

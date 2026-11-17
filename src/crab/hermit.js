@@ -14,6 +14,9 @@ const SHELL_LEAN_BACK = -0.5;
 const ANTENNA_FORWARD_TILT = 1.32;
 const LEG_RISE = 0.28;
 const LEG_SPLAY = 0.32;
+const ATTACK_SECONDS = 0.45;
+const HURT_SECONDS = 0.55;
+const DEATH_SECONDS = 1.1;
 
 function tinted(geometry, color, shadeByHeight = 0) {
   const positions = geometry.attributes.position;
@@ -146,8 +149,10 @@ export function createHermit(scene, quality, shellLook) {
   const root = new THREE.Group();
   const tilt = new THREE.Group();
   const body = new THREE.Group();
+  const front = new THREE.Group();
   root.add(tilt);
   tilt.add(body);
+  body.add(front);
 
   const shell = new THREE.Mesh(undefined, shellMaterial);
   shell.castShadow = true;
@@ -172,7 +177,7 @@ export function createHermit(scene, quality, shellLook) {
   ]);
   const head = new THREE.Mesh(headGeometry, material);
   head.castShadow = true;
-  body.add(head);
+  front.add(head);
 
   const eyes = [-1, 1].map((side) => {
     const stalk = new THREE.Group();
@@ -181,7 +186,7 @@ export function createHermit(scene, quality, shellLook) {
     const ball = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 9).translate(0, 0.4, 0), eyeMaterial);
     stalk.add(stem, ball);
     stalk.rotation.set(0.35, 0, -side * 0.32);
-    body.add(stalk);
+    front.add(stalk);
     return stalk;
   });
 
@@ -189,7 +194,7 @@ export function createHermit(scene, quality, shellLook) {
     const antenna = new THREE.Mesh(tinted(new THREE.ConeGeometry(0.014, 1.15, 5).translate(0, 0.575, 0), CARAPACE_DARK, 0), material);
     antenna.position.set(side * 0.08, 0.56, 0.8);
     antenna.rotation.set(ANTENNA_FORWARD_TILT, 0, -side * 0.55);
-    body.add(antenna);
+    front.add(antenna);
     return antenna;
   });
 
@@ -201,7 +206,7 @@ export function createHermit(scene, quality, shellLook) {
   smallClaw.shoulder.position.set(0.34, 0.4, 0.5);
   smallClaw.shoulder.rotation.set(0.25, 0.5, 0);
   smallClaw.wrist.rotation.set(0.25, -0.85, 0);
-  body.add(bigClaw.shoulder, smallClaw.shoulder);
+  front.add(bigClaw.shoulder, smallClaw.shoulder);
 
   const legs = [];
   for (const side of [-1, 1]) {
@@ -219,8 +224,56 @@ export function createHermit(scene, quality, shellLook) {
   scene.add(root);
 
   const pose = { stride: 0, snip: 0, idleTime: 0, tiltX: 0, tiltZ: 0 };
+  const attack = { time: 1, variant: 'big' };
+  const hurt = { amount: 0, strength: 1, side: 0 };
+  const death = { time: -1 };
+  const flashColor = new THREE.Color();
 
-  function update(deltaTime, { x, y, z, heading, speed, working, groundNormal }) {
+  function playAttack(variant) {
+    attack.time = 0;
+    attack.variant = variant;
+  }
+
+  function playHurt(strength, sideways) {
+    hurt.amount = 1;
+    hurt.strength = strength;
+    hurt.side = sideways;
+  }
+
+  function playDeath() {
+    death.time = 0;
+  }
+
+  function resetPose() {
+    death.time = -1;
+    hurt.amount = 0;
+    attack.time = 1;
+  }
+
+  const clawWorld = new THREE.Vector3();
+  function clawPosition(which, target = clawWorld) {
+    return (which === 'small' ? smallClaw : bigClaw).thumb.getWorldPosition(target);
+  }
+
+  function gatherPose(type, progress) {
+    const reachDown = THREE.MathUtils.smoothstep(progress, 0, 0.35) * (1 - THREE.MathUtils.smoothstep(progress, 0.55, 0.9));
+    const lifted = THREE.MathUtils.smoothstep(progress, 0.55, 0.9);
+    const pinch = progress > 0.45 && progress < 0.95 ? 0.05 : 0.6;
+    if (type === 'driftwood') {
+      const tug = Math.sin(progress * Math.PI * 7) * THREE.MathUtils.smoothstep(progress, 0.3, 0.45);
+      return { big: { reach: 0.75 * reachDown + 0.35, open: pinch, spread: -0.25 }, small: { reach: 0.7 * reachDown + 0.3, open: pinch, spread: -0.25 }, lunge: 0.1 * reachDown - 0.12 * Math.max(0, tug), pitch: 0.18 * reachDown, lifted };
+    }
+    if (type === 'seaLettuce') {
+      const nibble = Math.sin(progress * Math.PI * 8);
+      return { big: { reach: 0.55 + 0.45 * Math.max(0, nibble) - 0.5 * Math.max(0, -nibble), open: 0.35 + 0.3 * Math.max(0, nibble), spread: 0.1 }, small: { reach: 0.55 + 0.45 * Math.max(0, -nibble) - 0.5 * Math.max(0, nibble), open: 0.35 + 0.3 * Math.max(0, -nibble), spread: 0.1 }, lunge: 0.06, pitch: 0.2 + 0.05 * Math.sin(progress * Math.PI * 16), lifted: 0 };
+    }
+    if (type === 'pearls') {
+      return { big: { reach: 0.85 * reachDown - 0.3 * lifted, open: pinch * 0.6, spread: -0.35 }, small: { reach: 0.85 * reachDown - 0.3 * lifted, open: pinch * 0.6, spread: -0.35 }, lunge: 0.1 * reachDown, pitch: 0.22 * reachDown, lifted };
+    }
+    return { big: { reach: 0.1, open: 0.2, spread: 0 }, small: { reach: 0.95 * reachDown - 0.45 * lifted, open: pinch, spread: -0.3 }, lunge: 0.08 * reachDown, pitch: 0.2 * reachDown, lifted };
+  }
+
+  function update(deltaTime, { x, y, z, heading, speed, working, gatherType = null, gatherProgress = 0, groundNormal }) {
     root.position.set(x, y, z);
     root.rotation.y = heading;
     pose.idleTime += deltaTime;
@@ -247,19 +300,59 @@ export function createHermit(scene, quality, shellLook) {
       leg.knee.rotation.z = LEG_SPLAY - leg.hip.rotation.z;
     }
 
-    pose.snip = working ? pose.snip + deltaTime * 11 : 0;
-    const snipOpen = working ? 0.35 + 0.35 * Math.sin(pose.snip) : 0.16 + 0.08 * Math.sin(pose.idleTime * 0.9);
-    bigClaw.thumb.rotation.x = -snipOpen;
-    smallClaw.thumb.rotation.x = -snipOpen * 0.8;
-    const reach = working ? 0.28 + 0.12 * Math.sin(pose.snip * 0.5) : 0;
-    bigClaw.shoulder.rotation.x = 0.25 + reach + Math.sin(pose.stride + 1) * 0.05 * moving;
-    smallClaw.shoulder.rotation.x = 0.25 + reach * 0.8 - Math.sin(pose.stride + 1) * 0.05 * moving;
+    const idleOpen = 0.16 + 0.08 * Math.sin(pose.idleTime * 0.9);
+    const claws = { big: { reach: Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen, spread: 0 }, small: { reach: -Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen * 0.8, spread: 0 } };
+    let lunge = 0;
+    let pitch = 0;
+    if (working && gatherType) {
+      const gather = gatherPose(gatherType, gatherProgress);
+      Object.assign(claws, { big: gather.big, small: gather.small });
+      lunge = gather.lunge;
+      pitch = gather.pitch;
+    }
+    attack.time = Math.min(1, attack.time + deltaTime / ATTACK_SECONDS);
+    if (attack.time < 1) {
+      const windup = THREE.MathUtils.smoothstep(attack.time, 0, 0.33) * (1 - THREE.MathUtils.smoothstep(attack.time, 0.33, 0.48));
+      const strike = THREE.MathUtils.smoothstep(attack.time, 0.33, 0.48) * (1 - THREE.MathUtils.smoothstep(attack.time, 0.55, 1));
+      const power = attack.variant === 'both' ? 1.3 : 1;
+      for (const which of attack.variant === 'both' ? ['big', 'small'] : [attack.variant]) {
+        claws[which] = { reach: -0.75 * windup + 0.85 * strike * power, open: 0.9 * windup + 0.05 * strike, spread: -0.35 * strike };
+      }
+      lunge += (-0.14 * windup + 0.5 * strike) * power;
+      pitch += -0.12 * windup + 0.14 * strike * power;
+    }
+    for (const [which, claw] of [['big', bigClaw], ['small', smallClaw]]) {
+      const side = which === 'big' ? -1 : 1;
+      claw.thumb.rotation.x = -claws[which].open * (which === 'big' ? 1 : 0.8);
+      claw.shoulder.rotation.x = 0.25 + claws[which].reach;
+      claw.shoulder.rotation.y = side * (0.5 + claws[which].spread);
+    }
+
+    hurt.amount = Math.max(0, hurt.amount - deltaTime / HURT_SECONDS);
+    const deathShare = death.time >= 0 ? Math.min(1, (death.time += deltaTime / DEATH_SECONDS)) : 0;
+    const retract = Math.max(Math.pow(hurt.amount, 0.5) * Math.min(1, 0.7 + 0.3 * hurt.strength), THREE.MathUtils.smoothstep(deathShare, 0, 0.35));
+    for (const claw of [bigClaw, smallClaw]) {
+      claw.shoulder.rotation.x = THREE.MathUtils.lerp(claw.shoulder.rotation.x, -0.55, retract);
+      claw.thumb.rotation.x *= 1 - retract;
+    }
+    front.position.set(0, 0.12 * retract, -0.5 * retract);
+    front.scale.setScalar(1 - 0.32 * retract);
+    body.position.z = lunge;
+    body.rotation.x = pitch - 0.25 * hurt.amount * hurt.strength;
+    const fall = THREE.MathUtils.smoothstep(deathShare, 0.3, 0.8);
+    tilt.rotation.z += fall * 1.35 + hurt.side * hurt.amount * 0.25 * hurt.strength;
+    for (const leg of legs) leg.knee.rotation.z += retract * 0.9;
+    const flash = hurt.amount * hurt.amount;
+    flashColor.setRGB(0.75 * flash, 0.62 * flash, 0.55 * flash);
+    material.emissive.copy(flashColor);
+    shellMaterial.emissive.copy(flashColor).multiplyScalar(0.3);
 
     eyes[0].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8) * 0.06;
     eyes[1].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8 + 1.4) * 0.06;
     antennae[0].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(pose.idleTime * 2.3) * 0.09;
     antennae[1].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(pose.idleTime * 2.3 + 0.9) * 0.09;
+    for (const eye of eyes) eye.rotation.x += retract * 0.9;
   }
 
-  return { root, update, wetnessUniforms, setShell };
+  return { root, update, wetnessUniforms, setShell, playAttack, playHurt, playDeath, resetPose, clawPosition };
 }

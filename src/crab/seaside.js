@@ -22,6 +22,7 @@ export const seaUniforms = {
   uSunColor: { value: lighting.sunColor },
   uHorizonColor: { value: lighting.horizonColor },
   uZenithColor: { value: lighting.zenithColor },
+  uCrabPosition: { value: new THREE.Vector3(0, -1000, 0) },
 };
 
 export const SEA_LEVELS_GLSL = /* glsl */ `
@@ -239,7 +240,7 @@ export function createMotionDepthMaterial(vertexMotion) {
   return material;
 }
 
-export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null } = {}) {
+export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false } = {}) {
   const surfaceCode = surface ? SURFACES[surface] : null;
   material.defines = { ...(material.defines || {}), WET_DARKENING: wetDarkening.toFixed(3), WET_ROUGHNESS: wetRoughness.toFixed(3), CAUSTIC_STRENGTH: causticStrength.toFixed(3), WET_GLOSS: wetGloss.toFixed(3) };
   if (surface === 'sand') material.defines.SEA_SAND = '';
@@ -257,7 +258,15 @@ export function applySeaside(material, { surface = null, wetDarkening = 0.62, we
       .replace('#include <roughnessmap_fragment>', WET_ROUGHNESS_GLSL)
       .replace('#include <opaque_fragment>', CAUSTICS_GLSL);
     if (surfaceCode) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', surfaceCode.normal);
+    if (instanceFlash) {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float aFlash;\nvarying float vFlash;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFlash = aFlash;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vFlash;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.9, 0.82) * vFlash;');
+    }
   };
-  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}`;
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}`;
   return material;
 }
