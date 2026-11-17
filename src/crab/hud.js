@@ -36,6 +36,7 @@ export function createHud(activeQualityName) {
   const healthText = element('div', 'health-text', healthTrack);
   const experienceTrack = element('div', 'experience-track', bars);
   const experienceFill = element('div', 'experience-fill', experienceTrack);
+  const buffChip = element('div', 'buff-chip hidden', root);
   const hurtFlash = element('div', 'hurt-flash', root);
   const deathFade = element('div', 'death-fade', root);
   const floatLayer = element('div', 'float-layer', root);
@@ -151,6 +152,10 @@ export function createHud(activeQualityName) {
       goal.textContent = text || '';
       goal.classList.toggle('done', done && !action);
       goal.classList.toggle('action', action);
+    },
+    setBuff(text) {
+      buffChip.classList.toggle('hidden', !text);
+      if (text && buffChip.textContent !== text) buffChip.textContent = text;
     },
     setTide(label, fraction) {
       tideLabel.textContent = `🌊 ${label}`;

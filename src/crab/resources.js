@@ -11,6 +11,7 @@ export const RESOURCE_TYPES = {
   driftwood: { label: 'Driftwood', icon: '🪵', count: 12, gatherSeconds: 1.3, standOff: 1.5 },
   seaLettuce: { label: 'Sea lettuce', icon: '🥬', count: 12, gatherSeconds: 0.9, standOff: 2.1 },
   pearls: { label: 'Pearls', icon: '🦪', count: 3, gatherSeconds: 1.6, standOff: 1.3 },
+  driedKelp: { label: 'Dried kelp', icon: '🍂', count: 0 },
 };
 
 const PEARL_MINIMUM_POOL_DEPTH = 1.4;
@@ -149,6 +150,7 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
   const sparklePhases = [];
 
   for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
+    if (!definition.count) continue;
     const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: type === 'shellBits' || type === 'pearls' ? 0.3 : 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: type === 'shellBits' || type === 'pearls' ? 0.15 : 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
     const mesh = new THREE.InstancedMesh(geometries[type], material, definition.count);
     mesh.castShadow = true;

@@ -4,10 +4,11 @@ import { applySeaside } from './seaside.js';
 import { buildShellGeometry } from './hermit.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { BURROW_LAYER, BURROW_ORIGIN, cellCenter, SHAFT_CELL } from './burrow.js';
+import { RACK_BATCH, RACK_REACH } from './rack.js';
 
 export const HELPER_LIMIT = 3;
 export const HELPER_COST = { seaLettuce: 5 };
-export const HELPER_JOBS = ['shellBits', 'driftwood', 'seaLettuce'];
+export const HELPER_JOBS = ['shellBits', 'driftwood', 'seaLettuce', 'rack'];
 export const HELPER_SIZE = 0.7;
 const HELPER_HEALTH = 10;
 const WALK_SPEED = 4.2;
@@ -25,7 +26,7 @@ const BURROW_REST_SPOTS = [[-3.0, 2.7], [3.0, 2.4], [0.8, 8.8]];
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const BODY_COLOR = linearColor(0.92, 0.42, 0.18);
 const SHELL_LOOK = { turns: 2.4, spireShare: 0.86, whorlRadius: 0.5, tubeRadius: 0.6, height: 1.15, bandFrequency: 22, light: [0.9, 0.97, 0.94], band: [0.02, 0.62, 0.6], inside: [0.36, 0.22, 0.2] };
-const CARRY_COLORS = { shellBits: new THREE.Color(1.7, 1.55, 1.3), driftwood: new THREE.Color(0.9, 0.5, 0.18), seaLettuce: new THREE.Color(0.35, 1.5, 0.3) };
+const CARRY_COLORS = { shellBits: new THREE.Color(1.7, 1.55, 1.3), driftwood: new THREE.Color(0.9, 0.5, 0.18), seaLettuce: new THREE.Color(0.35, 1.5, 0.3), driedKelp: new THREE.Color(1.1, 0.62, 0.18) };
 
 function painted(geometry, color) {
   const colors = new Float32Array(geometry.attributes.position.count * 3);
@@ -51,7 +52,7 @@ function buildHelperGeometry() {
   return mergeGeometries(parts.map((part) => (part.index ? part : part)));
 }
 
-export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, onDeposit, onLost, onSound }) {
+export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, storage, onDeposit, onLost, onSound }) {
   const list = (saved || []).map((entry) => ({ ...entry, state: 'resting', path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, health: HELPER_HEALTH, targetId: null }));
   let nextId = list.reduce((highest, helper) => Math.max(highest, helper.id), 0) + 1;
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.12 });
@@ -94,7 +95,27 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     return path.length > 0;
   }
 
+  function leaveForRack(helper) {
+    const start = navigation.nearestWalkable(entrance.x + 1.6, entrance.z - 1.2, 6) || entrance;
+    if (!rack.exists) return false;
+    const canLoad = rack.freeSlots() > 0 && (storage.inventory.seaLettuce || 0) >= RACK_BATCH;
+    if (!canLoad && rack.state.ready === 0) return false;
+    Object.assign(helper, { x: start.x, z: start.z });
+    if (!walkTo(helper, rack.state.x, rack.state.z)) return false;
+    if (canLoad) {
+      storage.inventory.seaLettuce -= RACK_BATCH;
+      helper.carrying = 'seaLettuce';
+      helper.load = RACK_BATCH;
+    }
+    helper.state = 'toRack';
+    return true;
+  }
+
   function leaveBurrow(helper) {
+    if (helper.job === 'rack') {
+      if (!leaveForRack(helper)) helper.restTimer = IDLE_RETRY_SECONDS;
+      return;
+    }
     const candidates = resources.nodes.filter((node) => node.type === helper.job && !node.gathered && !node.reservedBy && Math.hypot(node.x - entrance.x, node.z - entrance.z) < SEARCH_RADIUS);
     candidates.sort((first, second) => Math.hypot(first.x - entrance.x, first.z - entrance.z) - Math.hypot(second.x - entrance.x, second.z - entrance.z));
     const start = navigation.nearestWalkable(entrance.x + 1.6, entrance.z - 1.2, 6) || entrance;
@@ -154,8 +175,9 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     if (helper.state === 'resting') {
       helper.restTimer -= deltaTime;
       if (helper.carrying) {
-        onDeposit(helper.carrying, helper);
+        onDeposit(helper.carrying, helper.load || 1);
         helper.carrying = null;
+        helper.load = 0;
       }
       if (helper.restTimer <= 0 && entrance) leaveBurrow(helper);
       return;
@@ -176,7 +198,21 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       }
     }
     if (threat && threat.distance < DANGER_DISTANCE && helper.state !== 'fleeing') headHome(helper, true);
-    if (helper.state === 'outbound') {
+    if (helper.state === 'toRack') {
+      step(helper, deltaTime, WALK_SPEED);
+      if (!rack.exists || Math.hypot(rack.state.x - helper.x, rack.state.z - helper.z) <= RACK_REACH || helper.pathIndex >= helper.path.length) {
+        if (rack.exists && helper.carrying === 'seaLettuce' && rack.load()) {
+          helper.carrying = null;
+          helper.load = 0;
+          onSound('gatherSeaLettuce', helper);
+        }
+        if (!helper.carrying && rack.exists && rack.collect(1)) {
+          helper.carrying = 'driedKelp';
+          helper.load = 1;
+        }
+        headHome(helper, false);
+      }
+    } else if (helper.state === 'outbound') {
       const node = nodeById(helper.targetId);
       if (!node || node.gathered) {
         release(helper);
@@ -279,7 +315,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     return true;
   }
 
-  const serialize = () => list.map(({ id, job, carrying }) => ({ id, job, carrying }));
+  const serialize = () => list.map(({ id, job, carrying, load }) => ({ id, job, carrying, load }));
 
   return { list, update, render, recruit, setJob, serialize, maxHealth: HELPER_HEALTH, meshes: [surfaceMesh, burrowMesh, carryMesh] };
 }

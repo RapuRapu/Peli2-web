@@ -53,7 +53,7 @@ export function createBuildPanel(root, { inventory, hasStation, onChoose, onClos
       element('div', 'item-ability', text, definition.description);
       const cost = element('div', 'cost', text);
       for (const [index, part] of costText(definition.cost, inventory()).entries()) element('span', part.includes('have') ? 'cost-item short' : 'cost-item', cost, part).dataset.index = String(index);
-      const button = element('button', 'item-action', row, built ? 'Built' : 'Place');
+      const button = element('button', 'item-action', row, built ? 'Built' : definition.surface ? 'Build' : 'Place');
       button.dataset.station = kind;
       button.disabled = built || !canAfford(definition.cost, inventory());
       button.addEventListener('click', () => onChoose(kind));
@@ -192,10 +192,11 @@ export function createStoragePanel(root, { gear, inventory, storage, onChange, o
   };
 }
 
-const JOB_LABELS = { shellBits: '🐚 Shell bits', driftwood: '🪵 Driftwood', seaLettuce: '🥬 Sea lettuce' };
+const JOB_LABELS = { shellBits: '🐚 Shell bits', driftwood: '🪵 Driftwood', seaLettuce: '🥬 Sea lettuce', rack: '🍂 Tend rack', driedKelp: '🍂 Dried kelp' };
 function helperStatus(helper) {
   const job = JOB_LABELS[helper.job];
-  if (helper.state === 'resting') return '💤 Resting in the burrow';
+  if (helper.state === 'resting') return helper.job === 'rack' ? '💤 Resting · tends the rack when there is 🥬 in storage or 🍂 to bring' : '💤 Resting in the burrow';
+  if (helper.state === 'toRack') return helper.carrying ? '➜ Taking 🥬 to the drying rack' : '➜ Fetching 🍂 from the drying rack';
   if (helper.state === 'outbound') return `➜ Heading out for ${job}`;
   if (helper.state === 'gathering') return `⛏ Gathering ${job}`;
   if (helper.state === 'returning') return helper.carrying ? `⬅ Carrying ${JOB_LABELS[helper.carrying]} home` : '⬅ Coming home';
@@ -237,6 +238,58 @@ export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs
         button.addEventListener('click', () => onJob(helper.id, job));
       }
     }
+  }
+
+  return {
+    get isOpen() {
+      return shell.isOpen;
+    },
+    open() {
+      render();
+      shell.show();
+    },
+    close: () => shell.hide(),
+    render,
+  };
+}
+
+export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLoad, onCollect, onClose }) {
+  const shell = createPanelShell(root, 'rack-panel', '🍂 Drying rack', onClose);
+
+  function render() {
+    shell.body.replaceChildren();
+    const state = rack.state;
+    if (!state) return;
+    element('div', 'summary', shell.body, `${batch} 🥬 dry into 1 🍂 dried kelp in ${drySeconds} s. Eat it from 🎒 (Well fed: 2× HP regen for 90 s) or craft Kelp-wrapped claws.`);
+    const slots = element('div', 'rack-slots', shell.body);
+    state.slots.forEach((progress, index) => {
+      const slot = element('div', progress === null ? 'rack-slot empty' : 'rack-slot', slots);
+      slot.dataset.slot = String(index);
+      if (progress === null) {
+        element('div', 'rack-slot-label', slot, 'Empty');
+        return;
+      }
+      element('div', 'rack-slot-label', slot, `Drying · ${Math.ceil((1 - progress) * drySeconds)} s left`);
+      const bar = element('div', 'rack-bar', slot);
+      element('div', 'rack-fill', bar).style.width = `${Math.round(progress * 100)}%`;
+    });
+    const have = inventory().seaLettuce || 0;
+    const loadRow = element('div', 'item', shell.body);
+    const loadText = element('div', 'item-text', loadRow);
+    element('div', 'item-name', loadText, `Hang ${batch} 🥬 to dry`);
+    element('div', have >= batch ? 'item-stats' : 'item-stats short-text', loadText, `You have 🥬 ${have}`);
+    if (have < batch) element('div', 'enchant-hint', loadText, 'Sea lettuce grows at the waterline and in tide pools.');
+    const loadButton = element('button', 'item-action', loadRow, 'Hang');
+    loadButton.dataset.rackLoad = '1';
+    loadButton.disabled = have < batch || rack.freeSlots() === 0;
+    loadButton.addEventListener('click', () => onLoad());
+    const collectRow = element('div', state.ready ? 'item ready-row' : 'item', shell.body);
+    const collectText = element('div', 'item-text', collectRow);
+    element('div', 'item-name', collectText, `🍂 Ready: ${state.ready}`);
+    const collectButton = element('button', 'item-action take', collectRow, 'Collect');
+    collectButton.dataset.rackCollect = '1';
+    collectButton.disabled = state.ready === 0;
+    collectButton.addEventListener('click', () => onCollect());
   }
 
   return {

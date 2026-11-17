@@ -46,6 +46,7 @@ export const NAKED = {
 export const CLAWS = {
   bare: { label: 'Bare claws', attackBonus: 0, cost: null, breakable: false, enchantable: false },
   shellEdged: { label: 'Shell-edged claws', attackBonus: 4, cost: { shellBits: 6, driftwood: 4 }, breakable: true },
+  kelpWrapped: { label: 'Kelp-wrapped claws', attackBonus: 2, cost: { driedKelp: 4, shellBits: 4 }, breakable: true, healOnHit: 1 },
 };
 
 export const BASE_ATTACK = 4;
@@ -163,6 +164,7 @@ export function createGear(saved) {
       speedFactor: shell.speedFactor,
       attack: Math.round((BASE_ATTACK + levelAttackBonus + claws.attackBonus + enchantBonus(claws.attackBonus, clawsItem.enchant || 0)) * shell.attackFactor),
       ability: shell.ability,
+      healOnHit: claws.healOnHit || 0,
     };
   }
 

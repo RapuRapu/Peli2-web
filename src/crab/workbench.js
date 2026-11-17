@@ -172,6 +172,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
       element('div', 'item-name', text, category === 'shell' ? `${definition.label} · ${definition.role}` : definition.label);
       element('div', 'item-stats', text, category === 'shell' ? shellStatsText(definition) : `🗡️ +${definition.attackBonus} attack`);
       if (definition.ability) element('div', 'item-ability', text, `${definition.ability.label} — ${definition.ability.description}`);
+      if (definition.healOnHit) element('div', 'item-ability', text, `Mend — every hit heals ${definition.healOnHit} HP`);
       const owned = (category === 'shell' ? gear.state.shells : gear.state.claws).filter((item) => item.kind === kind).length;
       if (owned) element('div', 'item-owned', text, `Owned: ${owned}`);
       costRow(definition.cost, inventory(), text);

@@ -2,7 +2,7 @@ import { SHELLS, CLAWS } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { element, percent, shellStatsText } from './workbench.js';
 
-export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, onWear, onClose }) {
+export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, onWear, onEat, onClose }) {
   const overlay = element('div', 'workbench backpack', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -19,6 +19,12 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
       material.dataset.material = type;
       element('div', 'material-count', material, `${definition.icon} ${inventory()[type] || 0}`);
       element('div', 'material-label', material, definition.label);
+      if (type === 'driedKelp' && inventory()[type] > 0) {
+        const eatButton = element('button', 'eat-button', material, 'Eat');
+        eatButton.dataset.eat = type;
+        eatButton.addEventListener('click', () => onEat());
+        element('div', 'eat-hint', material, '2× regen, 90 s');
+      }
     }
     const stats = combatStats();
     element('div', 'summary', topRow, `Total: ❤ ${maxHealth()} · 🛡 ${stats.defense} · 🏃 ${percent(stats.speedFactor)} · 🗡️ ${stats.attack}`);

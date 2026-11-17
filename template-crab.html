@@ -150,6 +150,17 @@
   #hud .workbench .job-button.active { background: #2f7f8f; border-color: #bfeaf2; font-weight: bold; }
   #hud .workbench .item-ability.danger { color: #ff9c86; font-weight: bold; }
   #hud .workbench .job-label { align-self: center; font-size: 13px; opacity: 0.75; }
+  #hud .workbench .rack-slots { display: flex; gap: 8px; }
+  #hud .workbench .rack-slot { flex: 1; padding: 8px; border-radius: 11px; background: #3d5a3a; display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+  #hud .workbench .rack-slot.empty { background: #384449; opacity: 0.7; }
+  #hud .workbench .rack-bar { height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.35); overflow: hidden; }
+  #hud .workbench .rack-fill { height: 100%; background: #c9a35a; }
+  #hud .workbench .short-text { color: #ff9c86; }
+  #hud .workbench .eat-button { margin-top: 3px; padding: 3px 10px; border-radius: 8px; border: 1px solid #ffe2a8; background: #c98a2a; font-size: 13px; font-weight: bold; }
+  #hud .workbench .eat-hint { font-size: 11px; color: #f3d9a0; max-width: 92px; text-align: center; line-height: 1.2; }
+  #hud .workbench .ready-row { background: #5a4422; border: 1px solid #e0b866; }
+  #hud .buff-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); padding: 3px 10px; border-radius: 11px; background: rgba(90, 70, 30, 0.82); border: 1px solid #ffe2a8; font-size: 14px; }
+  #hud .buff-chip.hidden { display: none; }
   #hud .helpers-button { background: rgba(47, 127, 143, 0.92); border-color: #bfeaf2; }
   #hud .storage-panel .workbench-card { max-height: min(92vh, 780px); }
   #hud .remains-arrow { position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: rgba(70, 76, 110, 0.9); border: 2px solid #d6dcff; font-size: 20px; }
