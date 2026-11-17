@@ -50,10 +50,14 @@ export function createHud(activeQualityName) {
   let pauseListener = () => {};
   let resetListener = () => {};
   let qualityListener = () => {};
+  let goalListener = () => {};
   let toastTimer = 0;
   let resetArmed = false;
 
   pauseButton.addEventListener('click', () => pauseListener(true));
+  goal.addEventListener('click', () => {
+    if (goal.classList.contains('action')) goalListener();
+  });
   resumeButton.addEventListener('click', () => pauseListener(false));
   resetButton.addEventListener('click', () => {
     if (!resetArmed) {
@@ -70,6 +74,8 @@ export function createHud(activeQualityName) {
     onPause: (listener) => { pauseListener = listener; },
     onReset: (listener) => { resetListener = listener; },
     onQuality: (listener) => { qualityListener = listener; },
+    onGoalTap: (listener) => { goalListener = listener; },
+    root,
     setPaused(paused) {
       pauseMenu.classList.toggle('visible', paused);
       resetArmed = false;
@@ -84,9 +90,11 @@ export function createHud(activeQualityName) {
         slots[bumpedType].classList.add('bump');
       }
     },
-    setGoal(text, done) {
-      goal.textContent = text;
-      goal.classList.toggle('done', done);
+    setGoal(text, { done = false, action = false } = {}) {
+      goal.classList.toggle('hidden', !text);
+      goal.textContent = text || '';
+      goal.classList.toggle('done', done && !action);
+      goal.classList.toggle('action', action);
     },
     setTide(label, fraction) {
       tideLabel.textContent = `🌊 ${label}`;

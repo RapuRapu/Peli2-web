@@ -43,6 +43,37 @@
   #hud .quality-row button { flex: 1; padding: 8px 4px; font-size: 15px; }
   #hud .quality-row button.active { background: #2f7f8f; border-color: #bfeaf2; font-weight: bold; }
   #hud .pause-note { font-size: 12px; opacity: 0.75; }
+  #hud .goal.action { pointer-events: auto; cursor: pointer; background: #c98a2a; border: 1px solid #ffe2a8; font-weight: bold; animation: goal-pulse 1.6s ease-in-out infinite; }
+  @keyframes goal-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 210, 120, 0.6); } 50% { box-shadow: 0 0 0 6px rgba(255, 210, 120, 0); } }
+  #hud .goal.hidden { display: none; }
+  #hud .workbench { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(10, 14, 16, 0.45); pointer-events: auto; text-shadow: none; }
+  #hud .workbench.visible { display: flex; }
+  #hud .workbench-card { display: flex; flex-direction: column; width: min(94vw, 460px); max-height: min(88vh, 620px); padding: 12px 14px 14px; border-radius: 16px; background: rgba(30, 40, 44, 0.97); border: 2px solid #c9b48a; }
+  #hud .workbench-header { display: flex; align-items: center; justify-content: space-between; }
+  #hud .workbench-title { font-size: 20px; font-weight: bold; }
+  #hud .workbench-close { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255, 244, 214, 0.4); background: rgba(70, 86, 92, 0.9); font-size: 17px; }
+  #hud .workbench-tabs { display: flex; gap: 6px; margin: 10px 0 8px; }
+  #hud .workbench-tabs button { flex: 1; padding: 8px 4px; border-radius: 10px; border: 1px solid rgba(255, 244, 214, 0.3); background: rgba(56, 70, 76, 0.9); font-size: 15px; }
+  #hud .workbench-tabs button.active { background: #2f7f8f; border-color: #bfeaf2; font-weight: bold; }
+  #hud .workbench-body { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 18px; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 26px), transparent); }
+  #hud.panel-open .goal, #hud.panel-open .hint { visibility: hidden; }
+  #hud .world-label { position: absolute; left: 0; top: 0; padding: 4px 10px; border-radius: 11px; background: rgba(201, 138, 42, 0.92); border: 1px solid #ffe2a8; font-size: 15px; font-weight: bold; white-space: nowrap; }
+  #hud .world-label.hidden { display: none; }
+  @media (max-height: 500px) { #hud .workbench-card { padding: 8px 12px 10px; max-height: 94vh; } #hud .workbench-tabs { margin: 6px 0; } #hud .workbench-tabs button { padding: 5px 4px; } #hud .workbench .item { padding: 6px 10px; } #hud .workbench-title { font-size: 18px; } #hud .workbench-close { width: 32px; height: 32px; } #hud .workbench .item-name { font-size: 15px; } }
+  #hud .workbench .item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; background: #384449; }
+  #hud .workbench .item.worn { background: #2c535b; border: 1px solid rgba(191, 234, 242, 0.45); }
+  #hud .workbench .item-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  #hud .workbench .item-name { font-size: 16px; font-weight: bold; }
+  #hud .workbench .item-stats { font-size: 14px; }
+  #hud .workbench .item-ability { font-size: 13px; color: #f3d9a0; }
+  #hud .workbench .item-owned { font-size: 12px; opacity: 0.75; }
+  #hud .workbench .cost { display: flex; gap: 8px; font-size: 14px; }
+  #hud .workbench .cost-item.short { color: #ff9c86; }
+  #hud .workbench .item-action { padding: 9px 14px; border-radius: 11px; border: 1px solid #ffe2a8; background: #c98a2a; font-size: 16px; font-weight: bold; }
+  #hud .workbench .item-action:disabled { opacity: 0.4; cursor: default; }
+  #hud .workbench .item-badge { font-size: 13px; padding: 4px 9px; border-radius: 9px; background: rgba(191, 234, 242, 0.2); }
+  #hud .workbench .summary { font-size: 15px; padding: 2px 4px 4px; }
+  #hud .workbench .placeholder { font-size: 15px; padding: 14px 6px; line-height: 1.45; opacity: 0.85; }
   #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
 </style>
 </head>

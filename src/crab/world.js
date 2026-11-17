@@ -339,6 +339,15 @@ export function createWorld(quality) {
     return Math.max(seaLevel, retained.levelAt(x, z));
   }
 
+  function blockCircle(x, z, radius) {
+    for (let row = Math.floor(z - radius + WORLD_SIZE / 2); row <= Math.ceil(z + radius + WORLD_SIZE / 2); row++) {
+      for (let column = Math.floor(x - radius + WORLD_SIZE / 2); column <= Math.ceil(x + radius + WORLD_SIZE / 2); column++) {
+        if (column < 0 || row < 0 || column >= WORLD_SIZE || row >= WORLD_SIZE) continue;
+        if (Math.hypot(column + 0.5 - WORLD_SIZE / 2 - x, row + 0.5 - WORLD_SIZE / 2 - z) < radius) walkable[row * WORLD_SIZE + column] = 0;
+      }
+    }
+  }
+
   function randomSpot(random, accept, attempts = 400) {
     for (let attempt = 0; attempt < attempts; attempt++) {
       const x = (random() * 2 - 1) * PLAY_HALF_SIZE;
@@ -350,5 +359,5 @@ export function createWorld(quality) {
     return null;
   }
 
-  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, terrainMesh, walkable, isWalkable, waterLevelAt, randomSpot, createRandom };
+  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, terrainMesh, walkable, isWalkable, waterLevelAt, randomSpot, createRandom, blockCircle };
 }

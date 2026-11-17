@@ -7,15 +7,10 @@ const CARAPACE = linearColor(0.86, 0.3, 0.14);
 const CARAPACE_DARK = linearColor(0.6, 0.16, 0.1);
 const CLAW_TIP = linearColor(0.98, 0.86, 0.72);
 const EYE = linearColor(0.03, 0.03, 0.04);
-const SHELL_LIGHT = linearColor(0.98, 0.94, 0.86);
-const SHELL_BAND = linearColor(0.86, 0.3, 0.1);
-const SHELL_INSIDE = linearColor(0.36, 0.22, 0.2);
 
-const SHELL_TURNS = 2.7;
 const SHELL_RINGS = 96;
 const SHELL_SIDES = 20;
 const SHELL_LEAN_BACK = -0.5;
-const SHELL_SPIRE_SHARE = 0.86;
 const ANTENNA_FORWARD_TILT = 1.32;
 const LEG_RISE = 0.28;
 const LEG_SPLAY = 0.32;
@@ -35,27 +30,29 @@ function tinted(geometry, color, shadeByHeight = 0) {
   return geometry;
 }
 
-function buildShellGeometry() {
+function buildShellGeometry(look) {
+  const light = linearColor(...look.light);
+  const bandColor = linearColor(...look.band);
   const positions = [];
   const colors = [];
   const indices = [];
   const color = new THREE.Color();
   for (let ring = 0; ring <= SHELL_RINGS; ring++) {
-    const along = (ring / SHELL_RINGS) * SHELL_SPIRE_SHARE;
+    const along = (ring / SHELL_RINGS) * look.spireShare;
     const closing = ring === SHELL_RINGS ? 0 : 1;
-    const angle = along * SHELL_TURNS * Math.PI * 2;
-    const whorlRadius = 0.5 * Math.pow(1 - along, 1.15) + 0.02 * (1 - along);
-    const tubeRadius = (0.6 * Math.pow(1 - along, 0.95) + 0.015 * (1 - along)) * closing;
+    const angle = along * look.turns * Math.PI * 2;
+    const whorlRadius = look.whorlRadius * Math.pow(1 - along, 1.15) + 0.02 * (1 - along);
+    const tubeRadius = (look.tubeRadius * Math.pow(1 - along, 0.95) + 0.015 * (1 - along)) * closing;
     const centerX = Math.cos(angle) * whorlRadius;
     const centerZ = Math.sin(angle) * whorlRadius;
-    const centerY = along * 1.25 + 0.6 * (1 - Math.pow(1 - along, 0.95));
+    const centerY = along * look.height + look.tubeRadius * (1 - Math.pow(1 - along, 0.95));
     for (let side = 0; side < SHELL_SIDES; side++) {
       const around = (side / SHELL_SIDES) * Math.PI * 2;
       const outward = Math.cos(around);
       const lift = Math.sin(around);
       positions.push(centerX + Math.cos(angle) * outward * tubeRadius, centerY + lift * tubeRadius, centerZ + Math.sin(angle) * outward * tubeRadius);
-      const band = 0.5 + 0.5 * Math.sin(along * SHELL_TURNS * 26 + lift * 1.4);
-      color.copy(SHELL_LIGHT).lerp(SHELL_BAND, THREE.MathUtils.smoothstep(band, 0.55, 0.8) * 0.85);
+      const band = 0.5 + 0.5 * Math.sin(along * look.turns * look.bandFrequency + lift * 1.4);
+      color.copy(light).lerp(bandColor, THREE.MathUtils.smoothstep(band, 0.55, 0.8) * 0.85);
       const seamShade = 0.62 + 0.38 * THREE.MathUtils.smoothstep(outward, -0.9, 0.2);
       colors.push(color.r * seamShade, color.g * seamShade, color.b * seamShade);
     }
@@ -72,8 +69,9 @@ function buildShellGeometry() {
   shell.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   shell.setIndex(indices);
   shell.computeVertexNormals();
-  const mouthLining = tinted(new THREE.CircleGeometry(0.56, SHELL_SIDES), SHELL_INSIDE).translate(0.52, 0, 0.05);
-  return mergeGeometries([shell, mouthLining]);
+  const mouthOffset = look.whorlRadius + 0.02;
+  const mouthLining = tinted(new THREE.CircleGeometry(look.tubeRadius * 0.93, SHELL_SIDES), linearColor(...look.inside)).translate(mouthOffset, 0, 0.05);
+  return { geometry: mergeGeometries([shell, mouthLining]), mouthOffset };
 }
 
 function buildLeg(material, { reach, drop, thickness }) {
@@ -107,7 +105,7 @@ function buildClaw(material, size) {
   return { shoulder, wrist, thumb };
 }
 
-export function createHermit(scene, quality) {
+export function createHermit(scene, quality, shellLook) {
   const wetnessUniforms = { uBodyWetness: { value: 0 }, uBodyWetTop: { value: -1000 } };
   const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), wetSurface);
@@ -120,11 +118,17 @@ export function createHermit(scene, quality) {
   root.add(tilt);
   tilt.add(body);
 
-  const shell = new THREE.Mesh(buildShellGeometry(), shellMaterial);
+  const shell = new THREE.Mesh(undefined, shellMaterial);
   shell.castShadow = true;
   const shellPivot = new THREE.Group();
   shell.rotation.set(0, Math.PI, 0);
-  shell.position.set(0.52, 0, 0);
+  function setShell(look) {
+    const built = buildShellGeometry(look);
+    shell.geometry.dispose();
+    shell.geometry = built.geometry;
+    shell.position.set(built.mouthOffset, 0, 0);
+  }
+  setShell(shellLook);
   shellPivot.add(shell);
   shellPivot.position.set(0, 0.64, -0.12);
   shellPivot.rotation.set(SHELL_LEAN_BACK, 0, 0.1);
@@ -225,5 +229,5 @@ export function createHermit(scene, quality) {
     antennae[1].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(pose.idleTime * 2.3 + 0.9) * 0.09;
   }
 
-  return { root, update, wetnessUniforms };
+  return { root, update, wetnessUniforms, setShell };
 }
