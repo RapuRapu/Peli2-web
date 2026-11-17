@@ -11,7 +11,7 @@ SETUP = r'''
   d.setPaused(false);
   Object.assign(d.save.inventory, { shellBits: 5, driftwood: 3, seaLettuce: 3 });
   d.buildWorkshop();
-  return d.save.workshopBuilt;
+  return d.burrow.hasStation('workshop');
 }
 '''
 
@@ -124,7 +124,7 @@ BEHAVIOUR = r'''
 
 PANEL_STATE = r'''
 () => {
-  const panel = document.querySelector('#hud .workbench');
+  const panel = document.querySelector('#hud .workshop-panel');
   const rows = [...panel.querySelectorAll('[data-enchant-item]')].map((row) => ({ id: Number(row.dataset.enchantItem), name: row.querySelector('.item-name').textContent, odds: row.querySelector('.enchant-odds')?.textContent || '', button: row.querySelector('button').textContent }));
   return { visible: panel.classList.contains('visible'), rows, result: panel.querySelector('.enchant-result')?.textContent || null, pearls: window.__debug.save.inventory.pearls };
 }
@@ -183,13 +183,14 @@ with sync_playwright() as playwright:
     mobile = browser.new_context(viewport={'width': 412, 'height': 915}, is_mobile=True, has_touch=True, device_scale_factor=2)
     touch = fresh_page(mobile, errors)
     touch.evaluate(SETUP)
-    touch.evaluate('''() => {
+    opened = touch.evaluate('''() => {
       const d = window.__debug;
       Object.assign(d.save.inventory, { shellBits: 10, seaLettuce: 4 });
       const turban = d.craftItem('shell', 'turban');
       d.wearItem(turban.id);
       Object.assign(d.save.inventory, { pearls: 3, shellBits: 20 });
       d.workbenchPanel.open('Enchant');
+      return { open: d.workbenchPanel.isOpen, underground: d.isUnderground(), dying: d.player.dyingTimer, burrow: d.burrow.exists };
     }''')
     wait_frames(touch)
     first = touch.evaluate(PANEL_STATE)

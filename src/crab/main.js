@@ -14,14 +14,16 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
-import { createGear, SHELLS, CLAWS, ENCHANT_LEVELS } from './gear.js';
-import { createWorkbenchModel, createWorkbenchPanel, WORKSHOP_REACH, WORKSHOP_BLOCK_RADIUS } from './workbench.js';
+import { createGear, SHELLS, CLAWS, ENCHANT_LEVELS, canAfford } from './gear.js';
+import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createProgression, GATHER_EXPERIENCE } from './progression.js';
 import { createEnemies } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
 import { createAudio } from './audio.js';
+import { createBurrow, createEmptyBurrow, BURROW_GRID, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, cellCenter } from './burrow.js';
+import { createBuildPanel, createStoragePanel } from './burrowPanels.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -30,7 +32,7 @@ const qualityName = chosenQualityName(searchParameters);
 const quality = QUALITY_LEVELS[qualityName];
 
 const SAVE_KEY = 'seaofcrabs-crab-save';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 const AUTOSAVE_INTERVAL_SECONDS = 5;
 const FIXED_STEP = 1 / 60;
 const CAMERA_YAW = 0.3;
@@ -47,7 +49,6 @@ const STARTING_TIDE_TIME = TIDE_PERIOD_SECONDS * 0.56;
 const WET_SAND_DRYING_RATE = 0.006;
 const HOME_SPOT = { x: 13, z: -21 };
 const WORKSHOP_SPOT = { x: 18, z: -17 };
-const WORKSHOP_PICK_RADIUS_PIXELS = 70;
 const FIRST_GOAL = { shellBits: 5, driftwood: 3, seaLettuce: 3 };
 const STARTER_SPOTS = { shellBits: { x: 11, z: -26.5 }, driftwood: { x: 17.5, z: -23 }, seaLettuce: { x: 12, z: -14 } };
 const FAR_ZOOM_RING_DISTANCES = [46, 66];
@@ -76,6 +77,19 @@ const HEAD_UNDERWATER_DEPTH = 1.9;
 const AMBIENCE_UPDATE_SECONDS = 0.3;
 const GULL_MOOD_EDGE_Z = -85;
 const FISH_PLOP_PER_SECOND = 0.15;
+const ENTRANCE_DIG_SECONDS = 2.5;
+const BURROW_DIG_REACH = 2.4;
+const ENTRANCE_CONFIRM_RADIUS = 2.2;
+const ENTRANCE_CLEARANCE = 3;
+const ENTRANCE_HIGH_TIDE_MARGIN = 0.35;
+const DEFAULT_WORKSHOP_CELL = { column: 6, row: 5 };
+const DEFAULT_STORAGE_CELL = { column: 4, row: 5 };
+const BURROW_BACKGROUND = new THREE.Color(0.05, 0.035, 0.025);
+const BURROW_FOG_DENSITY = 0.026;
+const BURROW_SUN_INTENSITY = 1.5;
+const BURROW_ENVIRONMENT_INTENSITY = 0.34;
+const SURFACE_SUN_INTENSITY = 4.2;
+const SURFACE_ENVIRONMENT_INTENSITY = 0.55;
 
 const POSES = {
   1: { x: HOME_SPOT.x, z: HOME_SPOT.z, distance: 32, tideShare: 0.56 },
@@ -116,6 +130,12 @@ const POSES = {
   42: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Enchant', enchanted: { shell: 'turban', claws: 'shellEdged', level: 3 }, inventory: { pearls: 2, shellBits: 9 }, armEnchant: true },
   43: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Enchant', enchanted: { shell: 'turban', claws: 'shellEdged', level: 3 }, inventory: { pearls: 2, shellBits: 9 }, armEnchant: true },
   44: { x: 22, z: -14, distance: 14, tideShare: 0.56, heading: 1.2, naked: true, remainsAt: { x: 24, z: -12 }, remainsEnchant: 6 },
+  45: { x: 21, z: -24, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 } },
+  46: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[5, 7], [6, 7], [7, 5]], inBurrow: true },
+  47: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], dug: [[5, 7]], inBurrow: true, placingStation: 'storage' },
+  48: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, shellBits: 12 }, storagePanel: true },
+  49: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[5, 7], [6, 7]], inBurrow: true },
+  50: { x: 21, z: -24, distance: 26, tideShare: 0.56, heading: 0.9, placingEntrance: true, previewEntrance: { x: 25, z: -19 } },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -125,12 +145,17 @@ const POSES = {
 };
 
 function createEmptySave() {
-  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [] };
+  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false };
 }
 
 function migrateSave(stored) {
   const gearItemCount = stored.gear ? stored.gear.shells.length + stored.gear.claws.length : 0;
-  return { ...createEmptySave(), ...stored, version: SAVE_VERSION, craftedOnce: gearItemCount > 2 };
+  const migrated = { ...createEmptySave(), ...stored, version: SAVE_VERSION };
+  if (stored.version < 3) migrated.craftedOnce = gearItemCount > 2;
+  if (stored.workshopBuilt && !stored.burrow) {
+    migrated.burrow = { ...createEmptyBurrow(), entrance: { ...WORKSHOP_SPOT }, stations: [{ kind: 'workshop', ...DEFAULT_WORKSHOP_CELL }] };
+  }
+  return migrated;
 }
 
 function loadSave() {
@@ -138,7 +163,7 @@ function loadSave() {
   try {
     const stored = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (stored && stored.version === SAVE_VERSION) return { ...createEmptySave(), ...stored };
-    if (stored && (stored.version === 1 || stored.version === 2)) return migrateSave(stored);
+    if (stored && stored.version >= 1 && stored.version < SAVE_VERSION) return migrateSave(stored);
   } catch {
     /* unreadable or blocked storage: start a new game */
   }
@@ -217,6 +242,7 @@ sun.shadow.bias = -0.00004;
 sun.shadow.normalBias = 0.012;
 sun.shadow.camera.near = 60;
 sun.shadow.camera.far = 330;
+sun.layers.enable(BURROW_LAYER);
 scene.add(sun, sun.target);
 
 scene.add(world.terrainMesh);
@@ -231,6 +257,7 @@ const navigation = createNavigation(world);
 const gear = createGear(save.gear);
 const progression = createProgression(save.progression);
 const hermit = createHermit(scene, quality, gear.wornLook());
+hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
 
 function applyWornLook() {
   hermit.setShell(gear.wornLook());
@@ -242,6 +269,21 @@ const hud = createHud(qualityName);
 const tracks = createTracks(scene, world);
 const ripples = createRipples(water.uniforms);
 const workshop = createWorkbenchModel(scene, world, quality, WORKSHOP_SPOT, hud.root);
+const burrow = createBurrow(scene, world, quality, hud.root, save.burrow);
+burrow.attachStations(workshop);
+if (burrow.hasStation('workshop')) workshop.build();
+const storage = save.storage;
+let underground = Boolean(save.underground && burrow.exists);
+const surfaceSpace = {
+  heightAt: (x, z) => world.heightAt(x, z),
+  isWalkable: (x, z) => world.isWalkable(x, z),
+  waterLevelAt: (x, z, seaLevel) => world.waterLevelAt(x, z, seaLevel),
+  findPath: (fromX, fromZ, toX, toZ) => navigation.findPath(fromX, fromZ, toX, toZ),
+  nearestWalkable: (x, z) => navigation.nearestWalkable(x, z, 10),
+};
+const space = () => (underground ? burrow.space : surfaceSpace);
+const surfaceProbe = { x: 0, z: 0, alive: false };
+const placement = { entrance: false, station: null };
 const remains = createRemains(scene, world, quality, hud.root, save.remains);
 const enemies = createEnemies({
   scene,
@@ -257,6 +299,25 @@ const enemies = createEnemies({
     soundAt('alert', enemy.x, enemy.z);
   },
   onSound: (name, enemy) => soundAt(name, enemy.x, enemy.z),
+});
+const buildPanel = createBuildPanel(hud.root, {
+  inventory: () => save.inventory,
+  hasStation: (kind) => burrow.hasStation(kind),
+  onChoose: chooseStation,
+  onClose: () => buildPanel.close(),
+});
+const storagePanel = createStoragePanel(hud.root, {
+  gear,
+  inventory: () => save.inventory,
+  storage,
+  onChange: () => {
+    soundAt('gatherDriftwood', player.x, player.z, 0.6);
+    applyWornLook();
+    storagePanel.render();
+    refreshHud(null);
+    persist();
+  },
+  onClose: () => storagePanel.close(),
 });
 const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
@@ -284,7 +345,14 @@ function openBackpack() {
 }
 
 function anyPanelOpen() {
-  return workbenchPanel.isOpen || backpack.isOpen;
+  return workbenchPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen;
+}
+
+function closePanels() {
+  workbenchPanel.close();
+  if (backpack.isOpen) backpack.close();
+  buildPanel.close();
+  storagePanel.close();
 }
 
 const destinationMarker = new THREE.Mesh(
@@ -300,13 +368,14 @@ const playerRing = new THREE.Mesh(
 );
 playerRing.renderOrder = 5;
 scene.add(playerRing);
+for (const marker of [destinationMarker, playerRing]) marker.layers.enable(BURROW_LAYER);
 
 const camera = new THREE.PerspectiveCamera(LANDSCAPE_FIELD_OF_VIEW, 1, 1.5, 1600);
 const cameraFocus = new THREE.Vector3();
 let cameraDistance = 32;
 
 const player = { x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
-const startPoint = navigation.nearestWalkable(player.x, player.z, 40) || HOME_SPOT;
+const startPoint = (underground ? burrow.space.nearestWalkable(player.x, player.z) : navigation.nearestWalkable(player.x, player.z, 40)) || HOME_SPOT;
 player.x = startPoint.x;
 player.z = startPoint.z;
 
@@ -347,7 +416,7 @@ let startingOver = false;
 
 function persist() {
   if (isScreenshotMode || startingOver) return;
-  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize() });
+  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground });
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
@@ -357,7 +426,7 @@ function persist() {
 
 function goalText() {
   const parts = Object.entries(FIRST_GOAL).map(([type, wanted]) => `${RESOURCE_TYPES[type].icon} ${Math.min(save.inventory[type] || 0, wanted)}/${wanted}`);
-  return `Gather ${parts.join('  ')}`;
+  return `Workshop: ${parts.join('  ')}`;
 }
 
 function goalReached() {
@@ -371,37 +440,265 @@ function hasCraftedGear() {
 function refreshHud(bumpedType) {
   if (bumpedType) hud.bumpBag();
   if (backpack.isOpen) backpack.render();
-  if (remains.list.length) {
+  hud.setBuildButton(underground);
+  if (placement.entrance) {
+    hud.setGoal(null);
+  } else if (remains.list.length) {
     hud.setGoal('💀 Recover your remains');
-  } else if (!save.workshopBuilt) {
-    if (goalReached()) hud.setGoal('🔨 Build workshop', { action: true });
+  } else if (!burrow.exists) {
+    hud.setGoal('🕳️ Dig a burrow', { action: true });
+  } else if (!burrow.hasStation('workshop')) {
+    if (goalReached()) hud.setGoal('🔨 Build the workshop in your burrow', { action: true });
     else hud.setGoal(goalText());
   } else if (!hasCraftedGear()) {
-    hud.setGoal('🔨 Tap the workshop to craft', { done: true });
+    hud.setGoal('🔨 Tap the workshop to craft', { done: true, action: !underground });
   } else {
     hud.setGoal(null);
   }
 }
 
-function placeWorkshop() {
-  workshop.build();
-  world.blockCircle(WORKSHOP_SPOT.x, WORKSHOP_SPOT.z, WORKSHOP_BLOCK_RADIUS);
-  if (!world.isWalkable(player.x, player.z)) {
+function blockEntrance() {
+  const { x, z } = burrow.state.entrance;
+  world.blockCircle(x, z, ENTRANCE_BLOCK_RADIUS);
+  if (!underground && !world.isWalkable(player.x, player.z)) {
     const free = navigation.nearestWalkable(player.x, player.z, 10);
-    Object.assign(player, { x: free.x, z: free.z });
+    if (free) Object.assign(player, { x: free.x, z: free.z });
   }
 }
 
-function buildWorkshop() {
-  if (save.workshopBuilt || !goalReached()) return false;
-  for (const [type, amount] of Object.entries(FIRST_GOAL)) save.inventory[type] -= amount;
-  save.workshopBuilt = true;
-  placeWorkshop();
-  soundAt('craft');
+function entranceSpotProblem(x, z) {
+  if (!world.isWalkable(x, z)) return 'blocked';
+  if (world.heightAt(x, z) < TIDE_MIDDLE + TIDE_AMPLITUDE + ENTRANCE_HIGH_TIDE_MARGIN || world.retained.levelAt(x, z) > world.heightAt(x, z) - 0.05) return 'wet';
+  for (let step = 0; step < 12; step++) {
+    const angle = (step / 12) * Math.PI * 2;
+    if (!world.isWalkable(x + Math.cos(angle) * ENTRANCE_CLEARANCE, z + Math.sin(angle) * ENTRANCE_CLEARANCE)) return 'blocked';
+  }
+  return null;
+}
+
+const spotFeedback = new THREE.Mesh(
+  new THREE.RingGeometry(1.0, 1.35, 40).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 0.5, 0.4), transparent: true, opacity: 0.9, depthWrite: false, depthTest: false, fog: false }),
+);
+spotFeedback.renderOrder = 6;
+spotFeedback.visible = false;
+scene.add(spotFeedback);
+let spotFeedbackUntil = 0;
+
+function showSpotFeedback(x, z, valid, lasting = false) {
+  spotFeedback.position.set(x, world.heightAt(x, z) + 0.15, z);
+  spotFeedback.material.color.set(valid ? new THREE.Color(0.6, 2.4, 0.8) : new THREE.Color(2.4, 0.5, 0.4));
+  spotFeedback.visible = true;
+  spotFeedbackUntil = lasting ? Infinity : simulationTime + 1.2;
+}
+
+function startEntrancePlacement() {
+  if (burrow.exists || player.dyingTimer > 0) return;
+  closePanels();
   stopWalking();
-  hud.toast('🔨 Workshop built — tap it to craft');
+  placement.entrance = true;
+  hud.setMode('Tap dry sand above the tide line', cancelPlacement);
+  refreshHud(null);
+}
+
+function cancelPlacement() {
+  placement.entrance = false;
+  placement.preview = null;
+  spotFeedbackUntil = 0;
+  placement.station = null;
+  burrow.showPlacementCells(false);
+  hud.setMode(null);
+  refreshHud(null);
+}
+
+function digEntranceAt(x, z) {
+  burrow.setEntrance(x, z, world.heightAt(x, z));
+  blockEntrance();
+  save.burrow = burrow.serialize();
+  soundAt('craft');
+  hud.toast('🕳️ Burrow dug — tap it to go inside');
   refreshHud(null);
   persist();
+}
+
+function previewEntranceSpot(x, z) {
+  const preview = placement.preview;
+  if (preview && preview.valid && Math.hypot(preview.x - x, preview.z - z) < ENTRANCE_CONFIRM_RADIUS) return chooseEntranceSpot(preview.x, preview.z);
+  const problem = entranceSpotProblem(x, z);
+  placement.preview = { x, z, valid: !problem };
+  showSpotFeedback(x, z, !problem, true);
+  if (problem) hud.setMode(problem === 'wet' ? '🌊 Too wet here — try higher up the beach' : '🪨 No room here — pick open sand', cancelPlacement);
+  else hud.setMode('Tap the green ring again to dig here', cancelPlacement);
+  return false;
+}
+
+function chooseEntranceSpot(x, z) {
+  const problem = entranceSpotProblem(x, z);
+  showSpotFeedback(x, z, !problem);
+  if (problem) {
+    hud.toast(problem === 'wet' ? '🌊 Too wet — pick sand above the high-tide line' : '🪨 No room — pick open sand away from rocks');
+    return false;
+  }
+  placement.entrance = false;
+  placement.preview = null;
+  spotFeedbackUntil = simulationTime + 1.2;
+  hud.setMode(null);
+  if (!setDestination(x, z)) return false;
+  destinationMarker.visible = true;
+  player.digTarget = { kind: 'entrance', x, z, progress: 0 };
+  refreshHud(null);
+  return true;
+}
+
+function buildStation(kind, column, row) {
+  const definition = STATION_KINDS[kind];
+  if (!definition || burrow.hasStation(kind) || !canAfford(definition.cost, save.inventory)) return false;
+  if (!burrow.freeCells().some((cell) => cell.column === column && cell.row === row)) return false;
+  for (const [type, amount] of Object.entries(definition.cost)) save.inventory[type] -= amount;
+  burrow.addStation(kind, column, row, workshop);
+  if (kind === 'workshop') workshop.build();
+  save.burrow = burrow.serialize();
+  const spot = burrow.stationSpot({ column, row });
+  if (underground && !burrow.space.isWalkable(player.x, player.z)) {
+    const free = burrow.space.nearestWalkable(spot.x, spot.z);
+    if (free) Object.assign(player, { x: free.x, z: free.z });
+  }
+  soundAt('craft');
+  hud.toast(kind === 'workshop' ? '🔨 Workshop built — tap it to craft' : `${definition.icon} ${definition.label} built — tap it to open`);
+  refreshHud(null);
+  persist();
+  return true;
+}
+
+function chooseStation(kind) {
+  buildPanel.close();
+  placement.station = kind;
+  burrow.showPlacementCells(true);
+  hud.setMode(`Tap a glowing spot to place the ${STATION_KINDS[kind].label.toLowerCase()}`, cancelPlacement);
+}
+
+function buildWorkshop() {
+  if (!burrow.exists) {
+    digEntranceAt(WORKSHOP_SPOT.x, WORKSHOP_SPOT.z);
+  }
+  if (burrow.hasStation('workshop') || !goalReached()) return false;
+  const cell = burrow.freeCells().find((candidate) => candidate.column === DEFAULT_WORKSHOP_CELL.column && candidate.row === DEFAULT_WORKSHOP_CELL.row) || burrow.freeCells()[0];
+  return buildStation('workshop', cell.column, cell.row);
+}
+
+function goalTapped() {
+  if (!burrow.exists) {
+    startEntrancePlacement();
+    return;
+  }
+  if (!underground) {
+    walkToEntrance();
+    return;
+  }
+  if (!burrow.hasStation('workshop') && goalReached()) {
+    buildPanel.open();
+  }
+}
+
+function workshopSpot() {
+  const station = burrow.stationOf('workshop');
+  return station && underground ? burrow.stationSpot(station) : null;
+}
+
+function setUnderground(value) {
+  underground = value;
+  save.underground = value;
+  camera.layers.set(value ? BURROW_LAYER : 0);
+  scene.background = value ? BURROW_BACKGROUND : lighting.hazeColor;
+  scene.fog.color.copy(value ? BURROW_BACKGROUND : lighting.hazeColor);
+  scene.fog.density = value ? BURROW_FOG_DENSITY : lighting.hazeDensity;
+  sun.intensity = value ? BURROW_SUN_INTENSITY : SURFACE_SUN_INTENSITY;
+  scene.environmentIntensity = value ? BURROW_ENVIRONMENT_INTENSITY : SURFACE_ENVIRONMENT_INTENSITY;
+  hud.root.classList.toggle('underground', value);
+  if (!value) burrow.showPlacementCells(false);
+}
+
+function enterBurrow() {
+  if (!burrow.exists) return false;
+  closePanels();
+  stopWalking();
+  player.gatherTarget = null;
+  player.combatTarget = null;
+  setUnderground(true);
+  const arrival = burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 3.2);
+  Object.assign(player, { x: arrival.x, z: arrival.z, y: BURROW_ORIGIN.y, speed: 0, heading: 0 });
+  hud.fade();
+  updateCamera(0, true);
+  if (!save.burrowDug) hud.setHint('Tap the floor to walk · tap sand marked ✦ to dig · ⬆\u00a0Exit to go up');
+  else hud.setHint(null);
+  refreshHud(null);
+  persist();
+  return true;
+}
+
+function exitBurrow() {
+  if (!underground) return false;
+  closePanels();
+  cancelPlacement();
+  stopWalking();
+  setUnderground(false);
+  const { x, z } = burrow.state.entrance;
+  const outside = navigation.nearestWalkable(x - 2.2, z - 1.6, 10) || HOME_SPOT;
+  Object.assign(player, { x: outside.x, z: outside.z, y: world.heightAt(outside.x, outside.z), speed: 0, heading: Math.PI + 0.4 });
+  hud.fade();
+  hud.setHint(null);
+  updateCamera(0, true);
+  refreshHud(null);
+  persist();
+  return true;
+}
+
+function walkToEntrance() {
+  if (!burrow.exists || underground) return false;
+  const { x, z } = burrow.state.entrance;
+  if (Math.hypot(x - player.x, z - player.z) <= ENTRANCE_REACH + 0.3) return enterBurrow();
+  const awayX = player.x - x;
+  const awayZ = player.z - z;
+  const awayLength = Math.hypot(awayX, awayZ) || 1;
+  const stand = navigation.nearestWalkable(x + (awayX / awayLength) * (ENTRANCE_BLOCK_RADIUS + 0.8), z + (awayZ / awayLength) * (ENTRANCE_BLOCK_RADIUS + 0.8), 6);
+  if (!stand || !setDestination(stand.x, stand.z)) return false;
+  player.walkGoal = 'entrance';
+  return true;
+}
+
+function walkToShaft() {
+  if (!underground) return false;
+  if (Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH) return exitBurrow();
+  if (!setDestination(burrow.shaftCenter.x, burrow.shaftCenter.z)) return false;
+  player.walkGoal = 'shaft';
+  return true;
+}
+
+function walkToStation(station) {
+  const spot = burrow.stationSpot(station);
+  if (Math.hypot(spot.x - player.x, spot.z - player.z) <= STATION_REACH) {
+    openStation(station);
+    return true;
+  }
+  if (!setDestination(spot.x, spot.z)) return false;
+  player.walkGoal = station;
+  return true;
+}
+
+function openStation(station) {
+  stopWalking();
+  const spot = burrow.stationSpot(station);
+  turnToward(Math.atan2(spot.x - player.x, spot.z - player.z), 1);
+  if (station.kind === 'workshop') workbenchPanel.open();
+  else storagePanel.open();
+}
+
+function startDigCell(column, row) {
+  if (!burrow.canDig(column, row)) return false;
+  const center = cellCenter(column, row);
+  if (!setDestination(center.x, center.z)) return false;
+  destinationMarker.visible = false;
+  player.digTarget = { kind: 'cell', column, row, x: center.x, z: center.z, progress: 0 };
   return true;
 }
 
@@ -445,29 +742,25 @@ function wearItem(id) {
 }
 
 function walkToWorkshop() {
-  const awayX = player.x - WORKSHOP_SPOT.x;
-  const awayZ = player.z - WORKSHOP_SPOT.z;
-  const awayLength = Math.hypot(awayX, awayZ) || 1;
-  const standX = WORKSHOP_SPOT.x + (awayX / awayLength) * (WORKSHOP_BLOCK_RADIUS + 0.7);
-  const standZ = WORKSHOP_SPOT.z + (awayZ / awayLength) * (WORKSHOP_BLOCK_RADIUS + 0.7);
-  const stand = world.isWalkable(standX, standZ) ? { x: standX, z: standZ } : navigation.nearestWalkable(standX, standZ, 6);
-  if (!setDestination(stand.x, stand.z)) return false;
-  destinationMarker.visible = false;
-  player.headingToWorkshop = true;
-  return true;
+  const station = burrow.stationOf('workshop');
+  if (!station) return false;
+  if (!underground) return walkToEntrance();
+  return walkToStation(station);
 }
 
 function setDestination(x, z, gatherTarget = null) {
-  const path = navigation.findPath(player.x, player.z, x, z);
+  const path = space().findPath(player.x, player.z, x, z);
   if (!path.length) return false;
   player.path = path;
   player.pathIndex = 0;
   player.gatherTarget = gatherTarget;
   player.gatherProgress = 0;
   player.headingToWorkshop = false;
+  player.walkGoal = null;
+  player.digTarget = null;
   player.combatTarget = null;
   const end = path[path.length - 1];
-  destinationMarker.position.set(end.x, world.heightAt(end.x, end.z) + 0.12, end.z);
+  destinationMarker.position.set(end.x, space().heightAt(end.x, end.z) + 0.12, end.z);
   destinationMarker.visible = !gatherTarget;
   if (!save.hasMoved) {
     save.hasMoved = true;
@@ -478,6 +771,8 @@ function setDestination(x, z, gatherTarget = null) {
 
 function stopWalking() {
   player.headingToWorkshop = false;
+  player.walkGoal = null;
+  player.digTarget = null;
   player.path = [];
   player.pathIndex = 0;
   destinationMarker.visible = false;
@@ -495,7 +790,7 @@ function updateAudio(deltaTime) {
     player.stepDistance = 0;
     const surface = player.waterDepth > HEAD_UNDERWATER_DEPTH ? null : player.waterDepth > 0.04 ? 'stepSplash' : player.y < tideState.wetLevel ? 'stepWetSand' : 'stepSand';
     if (surface) soundAt(surface, player.x, player.z, 0.8);
-    const inPool = world.retained.levelAt(player.x, player.z) > player.y;
+    const inPool = !underground && world.retained.levelAt(player.x, player.z) > player.y;
     if (inPool && random() < FISH_PLOP_PER_SECOND * 3) soundAt('fishPlop', player.x + 3, player.z + 2, 0.7);
   }
   ambienceTimer -= deltaTime;
@@ -503,12 +798,12 @@ function updateAudio(deltaTime) {
   ambienceTimer = AMBIENCE_UPDATE_SECONDS;
   const heightAboveSea = player.y - tideState.seaLevel;
   audio.setAmbience({
-    waveIntensity: Math.max(0.15, 1 - THREE.MathUtils.smoothstep(heightAboveSea, 0.5, 9)),
-    wind: THREE.MathUtils.smoothstep(-player.z, 65, 95),
+    waveIntensity: underground ? 0.06 : Math.max(0.15, 1 - THREE.MathUtils.smoothstep(heightAboveSea, 0.5, 9)),
+    wind: underground ? 0 : THREE.MathUtils.smoothstep(-player.z, 65, 95),
     underwater: player.waterDepth > HEAD_UNDERWATER_DEPTH,
   });
-  const fighting = enemies.list.some((enemy) => enemy.state === 'chase' || enemy.state === 'landing');
-  audio.setMusicMood(fighting ? 'combat' : player.z < GULL_MOOD_EDGE_Z ? 'gull' : 'calm');
+  const fighting = !underground && enemies.list.some((enemy) => enemy.state === 'chase' || enemy.state === 'landing');
+  audio.setMusicMood(fighting ? 'combat' : !underground && player.z < GULL_MOOD_EDGE_Z ? 'gull' : 'calm');
 }
 
 function playerStats() {
@@ -595,8 +890,8 @@ function announceLevel() {
 }
 
 function wakeSpot() {
-  const spot = save.workshopBuilt ? { x: WORKSHOP_SPOT.x - 2.4, z: WORKSHOP_SPOT.z - 1.6 } : HOME_SPOT;
-  return navigation.nearestWalkable(spot.x, spot.z, 10) || HOME_SPOT;
+  if (burrow.exists) return burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 2.2);
+  return navigation.nearestWalkable(HOME_SPOT.x, HOME_SPOT.z, 10) || HOME_SPOT;
 }
 
 function die() {
@@ -622,7 +917,9 @@ function finishDeath() {
   progression.state.health = progression.maxHealth();
   player.lastCombatTime = -100;
   const spot = wakeSpot();
-  Object.assign(player, { x: spot.x, z: spot.z, speed: 0 });
+  setUnderground(burrow.exists);
+  Object.assign(player, { x: spot.x, z: spot.z, y: space().heightAt(spot.x, spot.z), speed: 0 });
+  updateCamera(0, true);
   hud.toast('💀 You were defeated — your things wait in your remains');
   refreshHud(null);
   persist();
@@ -640,16 +937,16 @@ function recoverRemains(entry) {
 }
 
 function tryStep(nextX, nextZ) {
-  if (world.isWalkable(nextX, nextZ)) {
+  if (space().isWalkable(nextX, nextZ)) {
     player.x = nextX;
     player.z = nextZ;
     return true;
   }
-  if (world.isWalkable(nextX, player.z)) {
+  if (space().isWalkable(nextX, player.z)) {
     player.x = nextX;
     return true;
   }
-  if (world.isWalkable(player.x, nextZ)) {
+  if (space().isWalkable(player.x, nextZ)) {
     player.z = nextZ;
     return true;
   }
@@ -682,7 +979,7 @@ function updatePlayer(deltaTime) {
     hermit.update(deltaTime, { x: player.x, y: player.y, z: player.z, heading: player.heading, speed: 0, working: false, groundNormal: player.groundNormal });
     return;
   }
-  const waterDepth = world.waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
+  const waterDepth = space().waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
   const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * gear.stats().speedFactor;
   let targetSpeed = 0;
   const steering = keyboardDirection();
@@ -700,7 +997,7 @@ function updatePlayer(deltaTime) {
       player.combatRepathTimer -= deltaTime;
       if (player.combatRepathTimer <= 0 || player.pathIndex >= player.path.length) {
         player.combatRepathTimer = COMBAT_REPATH_SECONDS;
-        player.path = navigation.findPath(player.x, player.z, combatTarget.x, combatTarget.z);
+        player.path = space().findPath(player.x, player.z, combatTarget.x, combatTarget.z);
         player.pathIndex = 0;
       }
     }
@@ -735,16 +1032,57 @@ function updatePlayer(deltaTime) {
     }
   }
   player.speed += (targetSpeed - player.speed) * Math.min(1, deltaTime * 10);
-  player.y = world.heightAt(player.x, player.z);
-  player.waterDepth = world.waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
+  const ground = space();
+  player.y = ground.heightAt(player.x, player.z);
+  player.waterDepth = ground.waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
   const sampleReach = 0.5;
-  player.groundNormal.set(world.heightAt(player.x - sampleReach, player.z) - world.heightAt(player.x + sampleReach, player.z), 2 * sampleReach, world.heightAt(player.x, player.z - sampleReach) - world.heightAt(player.x, player.z + sampleReach)).normalize();
+  player.groundNormal.set(ground.heightAt(player.x - sampleReach, player.z) - ground.heightAt(player.x + sampleReach, player.z), 2 * sampleReach, ground.heightAt(player.x, player.z - sampleReach) - ground.heightAt(player.x, player.z + sampleReach)).normalize();
 
-  if (player.headingToWorkshop && player.pathIndex >= player.path.length) {
-    player.headingToWorkshop = false;
-    if (Math.hypot(WORKSHOP_SPOT.x - player.x, WORKSHOP_SPOT.z - player.z) <= WORKSHOP_REACH) {
-      turnToward(Math.atan2(WORKSHOP_SPOT.x - player.x, WORKSHOP_SPOT.z - player.z), 1);
-      workbenchPanel.open();
+  const arrived = player.pathIndex >= player.path.length;
+  if (player.walkGoal && arrived) {
+    const goal = player.walkGoal;
+    player.walkGoal = null;
+    if (goal === 'entrance' && !underground && Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= ENTRANCE_REACH + 0.6) enterBurrow();
+    else if (goal === 'shaft' && underground && Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH) exitBurrow();
+    else if (typeof goal === 'object' && underground) {
+      const spot = burrow.stationSpot(goal);
+      if (Math.hypot(spot.x - player.x, spot.z - player.z) <= STATION_REACH) openStation(goal);
+    }
+  }
+  let digging = false;
+  if (player.digTarget) {
+    const dig = player.digTarget;
+    const reach = dig.kind === 'entrance' ? 0.8 : BURROW_DIG_REACH;
+    const distance = Math.hypot(dig.x - player.x, dig.z - player.z);
+    if (distance <= reach || (arrived && distance <= reach + 1.4)) {
+      player.path = [];
+      player.pathIndex = 0;
+      digging = true;
+      turnToward(Math.atan2(dig.x - player.x, dig.z - player.z), deltaTime);
+      dig.progress += deltaTime;
+      const total = dig.kind === 'entrance' ? ENTRANCE_DIG_SECONDS : burrow.digSeconds;
+      if (dig.kind === 'cell') burrow.setDigProgress(dig.row * BURROW_GRID + dig.column, Math.min(1, dig.progress / total));
+      player.digSoundTimer = (player.digSoundTimer || 0) - deltaTime;
+      if (player.digSoundTimer <= 0) {
+        player.digSoundTimer = 0.45;
+        soundAt('gatherSeaLettuce', player.x, player.z, 0.8);
+      }
+      if (dig.progress >= total) {
+        player.digTarget = null;
+        if (dig.kind === 'entrance') digEntranceAt(dig.x, dig.z);
+        else {
+          if (!save.burrowDug) {
+            save.burrowDug = true;
+            hud.setHint(null);
+          }
+          burrow.finishDig(dig.column, dig.row);
+          save.burrow = burrow.serialize();
+          persist();
+        }
+      }
+    } else if (arrived) {
+      if (dig.kind === 'cell') burrow.setDigProgress(-1, 0);
+      player.digTarget = null;
     }
   }
 
@@ -795,7 +1133,7 @@ function updatePlayer(deltaTime) {
         player.gatherTarget = null;
         if (goalReached() && !save.goalAnnounced) {
           save.goalAnnounced = true;
-          hud.toast('✓ Enough for a workshop — tap 🔨 Build workshop');
+          hud.toast(burrow.exists ? '✓ Enough for a workshop — build it in your burrow' : '✓ Enough for a workshop — dig a burrow first');
         }
         persist();
       }
@@ -803,6 +1141,11 @@ function updatePlayer(deltaTime) {
       resources.release(target);
       player.gatherTarget = null;
     }
+  }
+  if (digging) {
+    working = true;
+    gatherType = 'seaLettuce';
+    gatherShare = (player.digTarget ? player.digTarget.progress : 0) % 1;
   }
   hermit.update(deltaTime, { x: player.x, y: player.y, z: player.z, heading: player.heading, speed: player.speed, working, gatherType, gatherProgress: gatherShare, groundNormal: player.groundNormal });
 }
@@ -829,13 +1172,16 @@ function simulate(deltaTime) {
   seaUniforms.uTime.value = simulationTime;
   updateTide(deltaTime);
   updatePlayer(deltaTime);
-  enemies.update(deltaTime, simulationTime, player);
+  if (underground) Object.assign(surfaceProbe, { x: burrow.state.entrance.x, z: burrow.state.entrance.z });
+  enemies.update(deltaTime, simulationTime, underground ? surfaceProbe : player);
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   seaUniforms.uCrabPosition.value.set(player.x, player.y, player.z);
   updateAudio(deltaTime);
-  tracks.update(deltaTime, simulationTime, player, tideState.seaLevel);
-  ripples.update(deltaTime, simulationTime, player);
+  if (!underground) {
+    tracks.update(deltaTime, simulationTime, player, tideState.seaLevel);
+    ripples.update(deltaTime, simulationTime, player);
+  }
   autosaveTimer += deltaTime;
   if (autosaveTimer >= AUTOSAVE_INTERVAL_SECONDS) {
     autosaveTimer = 0;
@@ -850,7 +1196,7 @@ function updateCamera(deltaTime, snap) {
   cameraFocus.y += (player.y + 0.6 - cameraFocus.y) * follow;
   const horizontal = Math.cos(CAMERA_PITCH) * cameraDistance;
   camera.position.set(cameraFocus.x + Math.sin(CAMERA_YAW) * horizontal, cameraFocus.y + Math.sin(CAMERA_PITCH) * cameraDistance, cameraFocus.z - Math.cos(CAMERA_YAW) * horizontal);
-  const minimumHeight = world.heightAt(camera.position.x, camera.position.z) + 2;
+  const minimumHeight = space().heightAt(camera.position.x, camera.position.z) + 2;
   if (camera.position.y < minimumHeight) camera.position.y = minimumHeight;
   camera.lookAt(cameraFocus);
   camera.updateMatrixWorld();
@@ -898,7 +1244,10 @@ function renderScene() {
   renderer.getDrawingBufferSize(drawingBufferSize);
   resources.update(simulationTime, Math.min(drawingBufferSize.x, drawingBufferSize.y) * 2.4);
   destinationMarker.scale.setScalar(1 + 0.12 * Math.sin(simulationTime * 5));
-  workshop.update(simulationTime, !hasCraftedGear() && !anyPanelOpen(), camera);
+  workshop.update(simulationTime, underground && !hasCraftedGear() && !anyPanelOpen() && !placement.station, camera, underground);
+  burrow.update(simulationTime, camera, underground);
+  spotFeedback.visible = spotFeedback.visible && simulationTime < spotFeedbackUntil && !underground;
+  spotFeedback.scale.setScalar(1 + 0.08 * Math.sin(simulationTime * 5));
   enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null);
   remains.update(simulationTime, camera, player);
   hud.setVitals(progression.state.level, progression.state.health, progression.maxHealth(), progression.state.experience, progression.experienceToNext());
@@ -951,15 +1300,52 @@ function resourceUnder(clientX, clientY) {
   return best ? best.node : null;
 }
 
-function workshopUnder(clientX, clientY) {
-  if (!save.workshopBuilt) return false;
-  projected.set(WORKSHOP_SPOT.x, workshop.group.position.y + 0.5, WORKSHOP_SPOT.z).project(camera);
-  if (projected.z > 1) return false;
-  return Math.hypot((projected.x * 0.5 + 0.5) * innerWidth - clientX, (-projected.y * 0.5 + 0.5) * innerHeight - clientY) < WORKSHOP_PICK_RADIUS_PIXELS;
+function handleBurrowTap(clientX, clientY, isNewTouch) {
+  if (placement.station) {
+    if (!isNewTouch) return;
+    const point = burrow.pointOnFloor(clientX, clientY, camera, raycaster);
+    const free = point && burrow.freeCells().find((cell) => cell.column === point.column && cell.row === point.row);
+    if (free && buildStation(placement.station, free.column, free.row)) cancelPlacement();
+    else if (point) hud.toast('Pick one of the glowing spots');
+    return;
+  }
+  if (isNewTouch) {
+    const station = burrow.stationUnder(clientX, clientY, camera);
+    if (station) {
+      walkToStation(station);
+      return;
+    }
+    if (burrow.shaftUnder(clientX, clientY, camera)) {
+      walkToShaft();
+      return;
+    }
+  }
+  const point = burrow.pointOnFloor(clientX, clientY, camera, raycaster);
+  if (!point) return;
+  if (point.wall) {
+    if (!isNewTouch) return;
+    if (!startDigCell(point.column, point.row)) hud.toast('Dig next to an open part of your burrow');
+    return;
+  }
+  setDestination(point.x, point.z);
 }
 
 function handleTap(clientX, clientY, isNewTouch) {
   if (paused || anyPanelOpen() || player.dyingTimer > 0) return;
+  if (underground) {
+    handleBurrowTap(clientX, clientY, isNewTouch);
+    return;
+  }
+  if (placement.entrance) {
+    if (!isNewTouch) return;
+    const spot = groundPointUnder(clientX, clientY);
+    if (spot) previewEntranceSpot(spot.x, spot.z);
+    return;
+  }
+  if (isNewTouch && burrow.entranceUnder(clientX, clientY, camera)) {
+    walkToEntrance();
+    return;
+  }
   const enemy = isNewTouch ? enemies.pick(clientX, clientY, camera) : null;
   if (enemy) {
     engage(enemy);
@@ -968,11 +1354,6 @@ function handleTap(clientX, clientY, isNewTouch) {
   const remainsEntry = isNewTouch ? remains.pick(clientX, clientY, camera) : null;
   if (remainsEntry) {
     setDestination(remainsEntry.x, remainsEntry.z);
-    return;
-  }
-  if (isNewTouch && workshopUnder(clientX, clientY)) {
-    if (Math.hypot(WORKSHOP_SPOT.x - player.x, WORKSHOP_SPOT.z - player.z) <= WORKSHOP_REACH) workbenchPanel.open();
-    else walkToWorkshop();
     return;
   }
   const node = isNewTouch ? resourceUnder(clientX, clientY) : null;
@@ -1011,7 +1392,7 @@ canvas.addEventListener('pointermove', (event) => {
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (activePointers.size === 2) {
     cameraDistance = THREE.MathUtils.clamp((pinchStartDistance * pinchStartSpan) / Math.max(20, pinchSpan()), ...CAMERA_DISTANCE_LIMITS);
-  } else if (performance.now() - lastSteerTime > 120 && !player.gatherTarget && !player.headingToWorkshop && !player.combatTarget) {
+  } else if (performance.now() - lastSteerTime > 120 && !player.gatherTarget && !player.headingToWorkshop && !player.combatTarget && !player.walkGoal && !player.digTarget && !placement.entrance && !placement.station) {
     lastSteerTime = performance.now();
     handleTap(event.clientX, event.clientY, false);
   }
@@ -1027,8 +1408,8 @@ canvas.addEventListener('wheel', (event) => {
 }, { passive: false });
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
-    workbenchPanel.close();
-    if (backpack.isOpen) backpack.close();
+    closePanels();
+    if (placement.entrance || placement.station) cancelPlacement();
     hud.setBagDot(gear.hasNewItems());
   }
   heldKeys.add(event.key.toLowerCase());
@@ -1057,7 +1438,10 @@ hud.onVolume((key, value) => {
     /* storage unavailable: setting lasts for this visit */
   }
 });
-hud.onGoalTap(buildWorkshop);
+hud.onGoalTap(goalTapped);
+hud.onBuild(() => {
+  if (underground && !anyPanelOpen()) buildPanel.open();
+});
 hud.onBag(openBackpack);
 hud.setBagDot(gear.hasNewItems());
 function startOver() {
@@ -1081,7 +1465,8 @@ document.addEventListener('visibilitychange', () => {
 });
 addEventListener('pagehide', persist);
 
-if (save.workshopBuilt) placeWorkshop();
+if (burrow.exists) blockEntrance();
+setUnderground(underground);
 refreshHud(null);
 if (!save.hasMoved) hud.setHint('Tap to walk · tap a ✦ to gather · pinch to zoom');
 tideState.wetLevel = TIDE_MIDDLE + TIDE_AMPLITUDE * 0.9;
@@ -1097,8 +1482,9 @@ if (isScreenshotMode) {
   cameraDistance = pose.distance;
   save.worldTime = TIDE_PERIOD_SECONDS * (searchParameters.has('tide') ? Number(searchParameters.get('tide')) : pose.tideShare);
   if (pose.workshop) {
-    save.workshopBuilt = true;
-    placeWorkshop();
+    if (!burrow.exists) digEntranceAt(WORKSHOP_SPOT.x, WORKSHOP_SPOT.z);
+    Object.assign(save.inventory, FIRST_GOAL);
+    buildWorkshop();
   }
   if (pose.inventory) Object.assign(save.inventory, pose.inventory);
   for (const kind of pose.crafted || []) {
@@ -1122,6 +1508,26 @@ if (isScreenshotMode) {
     applyWornLook();
   }
   if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', enchant: pose.remainsEnchant || 0 }], claws: [], wornShellId: 90, wornClawsId: null } });
+  if (pose.burrowAt) digEntranceAt(pose.burrowAt.x, pose.burrowAt.z);
+  for (const [column, row] of pose.dug || []) burrow.finishDig(column, row);
+  for (const kind of pose.stations || []) {
+    Object.assign(save.inventory, STATION_KINDS[kind].cost);
+    const cell = kind === 'workshop' ? DEFAULT_WORKSHOP_CELL : DEFAULT_STORAGE_CELL;
+    buildStation(kind, cell.column, cell.row);
+  }
+  if (pose.stored) Object.assign(storage.inventory, pose.stored);
+  if (pose.inBurrow) {
+    enterBurrow();
+    player.heading = pose.heading ?? 0;
+    for (let step = 0; step < 20; step++) simulate(FIXED_STEP);
+  }
+  if (pose.placingStation) {
+    Object.assign(save.inventory, STATION_KINDS[pose.placingStation].cost);
+    chooseStation(pose.placingStation);
+  }
+  if (pose.placingEntrance) startEntrancePlacement();
+  if (pose.previewEntrance) previewEntranceSpot(pose.previewEntrance.x, pose.previewEntrance.z);
+  if (pose.storagePanel) storagePanel.open();
   refreshHud(null);
   if (pose.panel) workbenchPanel.open(pose.panel);
   if (pose.armEnchant) hud.root.querySelector('.workbench .enchant-odds.risky')?.closest('.item').querySelector('[data-enchant]').click();
@@ -1200,7 +1606,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };

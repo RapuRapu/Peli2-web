@@ -83,22 +83,30 @@ export function createWorkbenchModel(scene, world, quality, spot, labelParent) {
   marker.position.set(spot.x, world.heightAt(spot.x, spot.z) + 0.1, spot.z);
   marker.visible = false;
   scene.add(marker);
-  const label = element('div', 'world-label hidden', labelParent, '🔨 Workshop');
+  const label = element('div', 'world-label burrow-label hidden', labelParent, '🔨 Workshop');
   const labelPoint = new THREE.Vector3();
 
   return {
-    spot,
+    get spot() {
+      return spot;
+    },
     group,
+    marker,
+    place(newSpot, floorY) {
+      spot = newSpot;
+      group.position.set(spot.x, floorY, spot.z);
+      marker.position.set(spot.x, floorY + 0.1, spot.z);
+    },
     get built() {
       return group.visible;
     },
     build() {
       group.visible = true;
     },
-    update(time, highlighted, camera) {
+    update(time, highlighted, camera, labelShown = marker.visible) {
       marker.visible = group.visible && highlighted;
       labelPoint.set(spot.x, group.position.y + 2.2, spot.z).project(camera);
-      const labelVisible = marker.visible && labelPoint.z < 1;
+      const labelVisible = group.visible && (marker.visible || labelShown) && labelPoint.z < 1;
       label.classList.toggle('hidden', !labelVisible);
       if (labelVisible) label.style.transform = `translate(-50%, -100%) translate(${(labelPoint.x * 0.5 + 0.5) * innerWidth}px, ${(-labelPoint.y * 0.5 + 0.5) * innerHeight - 6 * Math.abs(Math.sin(time * 2.6))}px)`;
       marker.material.opacity = 0.55 + 0.35 * Math.sin(time * 3.2);
@@ -137,7 +145,7 @@ function enchantedStatText(category, definition, level) {
 }
 
 export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant, onClose }) {
-  const overlay = element('div', 'workbench', root);
+  const overlay = element('div', 'workbench workshop-panel', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
   element('div', 'workbench-title', header, '🔨 Workshop');

@@ -23,7 +23,7 @@ GATHER_AND_BUILD = r'''
 TAP_WORKSHOP = r'''
 () => {
   const d = window.__debug;
-  const point = new d.camera.position.constructor(18, d.workshop.group.position.y + 0.5, -17).project(d.camera);
+  const point = new d.camera.position.constructor(d.workshop.spot.x, d.workshop.group.position.y + 0.5, d.workshop.spot.z).project(d.camera);
   return { x: (point.x * 0.5 + 0.5) * innerWidth, y: (-point.y * 0.5 + 0.5) * innerHeight };
 }
 '''
@@ -33,6 +33,7 @@ WALK_SPEED_SAMPLE = r'''
   const d = window.__debug; const p = d.player;
   const step = (seconds) => { for (let t = 0; t < seconds; t += 1/60) d.simulate(1/60); };
   d.workbenchPanel.close();
+  if (d.isUnderground()) d.exitBurrow();
   const start = d.navigation.nearestWalkable(30, -40, 10);
   Object.assign(p, { x: start.x, z: start.z });
   step(0.5);
@@ -62,29 +63,37 @@ with sync_playwright() as playwright:
     checks = {}
 
     gathered = page.evaluate(GATHER_AND_BUILD)
-    checks['goalBecomesButton'] = {**gathered, 'pass': gathered['goalIsButton'] and 'Build workshop' in gathered['goalText']}
+    page.evaluate("() => __debug.digEntranceAt(18, -17)")
+    gathered['goalText'] = page.evaluate("() => document.querySelector('#hud .goal').textContent")
+    gathered['goalIsButton'] = page.evaluate("() => document.querySelector('#hud .goal').classList.contains('action')")
+    checks['goalBecomesButton'] = {**gathered, 'pass': gathered['goalIsButton'] and 'Build the workshop' in gathered['goalText']}
 
     page.click('#hud .goal')
-    built = page.evaluate("() => { const d = __debug; return { built: d.save.workshopBuilt, visible: d.workshop.built, inventory: { ...d.save.inventory }, spotBlocked: !d.world.isWalkable(18, -17), goal: document.querySelector('#hud .goal').textContent } }")
-    checks['buildWorkshop'] = {**built, 'pass': built['built'] and built['visible'] and built['spotBlocked'] and all(v == 0 for v in built['inventory'].values())}
+    page.evaluate("() => { const d = __debug; for (let t = 0; t < 20 && !d.isUnderground(); t += 1/60) d.simulate(1/60); d.updateCamera(0, true); }")
+    page.click('#hud .goal')
+    page.click('#hud .build-panel [data-station="workshop"]')
+    cell = page.evaluate("() => { const d = __debug; d.renderScene(); const p = new d.camera.position.constructor(1003, 200, 0).project(d.camera); return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight }; }")
+    page.mouse.click(cell['x'], cell['y'])
+    built = page.evaluate("() => { const d = __debug; return { built: d.burrow.hasStation('workshop'), underground: d.isUnderground(), visible: d.workshop.built, inventory: { ...d.save.inventory }, spotBlocked: !d.world.isWalkable(18, -17), goal: document.querySelector('#hud .goal').textContent } }")
+    checks['buildWorkshop'] = {**built, 'pass': built['built'] and built['underground'] and built['visible'] and built['spotBlocked'] and all(v == 0 for v in built['inventory'].values())}
 
-    page.evaluate("() => { const d = __debug; const spot = d.navigation.nearestWalkable(30, -30, 10); Object.assign(d.player, { x: spot.x, z: spot.z }); d.simulate(1/60); d.updateCamera(0, true); }")
+    page.evaluate("() => { const d = __debug; Object.assign(d.player, { x: 997, z: -3 }); d.simulate(1/60); d.updateCamera(0, true); }")
     wait_frames(page)
     tap = page.evaluate(TAP_WORKSHOP)
     page.mouse.click(tap['x'], tap['y'])
-    walked = page.evaluate("() => { const d = __debug; let t = 0; for (; t < 20 && !d.workbenchPanel.isOpen; t += 1/60) d.simulate(1/60); return { seconds: +t.toFixed(1), open: d.workbenchPanel.isOpen, distance: +Math.hypot(d.player.x - 18, d.player.z + 17).toFixed(2) }; }")
+    walked = page.evaluate("() => { const d = __debug; let t = 0; for (; t < 20 && !d.workbenchPanel.isOpen; t += 1/60) d.simulate(1/60); return { seconds: +t.toFixed(1), open: d.workbenchPanel.isOpen, distance: +Math.hypot(d.player.x - d.workshop.spot.x, d.player.z - d.workshop.spot.z).toFixed(2) }; }")
     checks['tapOpensPanel'] = {'tap': tap, **walked, 'pass': walked['open']}
 
     page.evaluate("() => { const inv = __debug.save.inventory; inv.shellBits = 30; inv.driftwood = 12; inv.seaLettuce = 8; __debug.workbenchPanel.render(); }")
-    disabled_before = page.evaluate("() => [...document.querySelectorAll('#hud .workbench [data-craft]')].map(b => b.disabled)")
-    page.click('#hud .workbench [data-craft="shell:turban"]')
-    page.click('#hud .workbench [data-craft="shell:cone"]')
-    page.click('#hud .workbench [data-craft="claws:shellEdged"]')
+    disabled_before = page.evaluate("() => [...document.querySelectorAll('#hud .workshop-panel [data-craft]')].map(b => b.disabled)")
+    page.click('#hud .workshop-panel [data-craft="shell:turban"]')
+    page.click('#hud .workshop-panel [data-craft="shell:cone"]')
+    page.click('#hud .workshop-panel [data-craft="claws:shellEdged"]')
     crafted = page.evaluate("() => { const d = __debug; return { shells: d.gear.state.shells.map(s => s.kind), claws: d.gear.state.claws.map(c => c.kind), inventory: { ...d.save.inventory }, goalHidden: document.querySelector('#hud .goal').classList.contains('hidden') } }")
     checks['craft'] = {'buttonsEnabled': disabled_before, **crafted, 'pass': crafted['shells'] == ['snail', 'turban', 'cone'] and crafted['claws'] == ['bare', 'shellEdged'] and crafted['inventory'] == {'shellBits': 6, 'driftwood': 4, 'seaLettuce': 4} and crafted['goalHidden']}
 
     page.evaluate("() => { const inv = __debug.save.inventory; inv.shellBits = 0; __debug.workbenchPanel.render(); }")
-    blocked = page.evaluate("() => ({ disabled: document.querySelector('#hud .workbench [data-craft=\"shell:turban\"]').disabled, result: __debug.craftItem('shell', 'turban'), shells: __debug.gear.state.shells.length })")
+    blocked = page.evaluate("() => ({ disabled: document.querySelector('#hud .workshop-panel [data-craft=\"shell:turban\"]').disabled, result: __debug.craftItem('shell', 'turban'), shells: __debug.gear.state.shells.length })")
     checks['cannotCraftWithoutMaterials'] = {**blocked, 'pass': blocked['disabled'] and blocked['result'] is None and blocked['shells'] == 3}
 
     snail_speed = page.evaluate(WALK_SPEED_SAMPLE)
@@ -119,8 +128,8 @@ with sync_playwright() as playwright:
     page.evaluate("() => window.dispatchEvent(new Event('pagehide'))")
     page.reload()
     page.wait_for_function('!!window.__debug', timeout=180000)
-    restored = page.evaluate("() => { const d = __debug; return { version: d.save.version, built: d.workshop.built, spotBlocked: !d.world.isWalkable(18, -17), worn: d.gear.wornShell().kind, claws: d.gear.wornClaws().kind, shells: d.gear.state.shells.length, goalHidden: document.querySelector('#hud .goal').classList.contains('hidden') } }")
-    checks['saveRestores'] = {**restored, 'pass': restored == {'version': 3, 'built': True, 'spotBlocked': True, 'worn': 'cone', 'claws': 'shellEdged', 'shells': 3, 'goalHidden': True}}
+    restored = page.evaluate("() => { const d = __debug; return { version: d.save.version, built: d.workshop.built && d.burrow.hasStation('workshop'), spotBlocked: !d.world.isWalkable(18, -17), worn: d.gear.wornShell().kind, claws: d.gear.wornClaws().kind, shells: d.gear.state.shells.length, goalHidden: document.querySelector('#hud .goal').classList.contains('hidden') } }")
+    checks['saveRestores'] = {**restored, 'pass': restored == {'version': 4, 'built': True, 'spotBlocked': True, 'worn': 'cone', 'claws': 'shellEdged', 'shells': 3, 'goalHidden': True}}
 
     legacy_context = browser.new_context(viewport={'width': 915, 'height': 412})
     legacy_context.add_init_script("localStorage.setItem('seaofcrabs-crab-save', JSON.stringify({ version: 1, x: 20, z: -30, heading: 1, worldTime: 100, inventory: { shellBits: 4, driftwood: 2 }, nodes: null, goalAnnounced: false, hasMoved: true }))")
@@ -128,8 +137,8 @@ with sync_playwright() as playwright:
     legacy_page.on('pageerror', lambda error: errors.append(str(error)))
     legacy_page.goto(URL)
     legacy_page.wait_for_function('!!window.__debug', timeout=180000)
-    migrated = legacy_page.evaluate("() => { const d = __debug; return { version: d.save.version, x: Math.round(d.player.x), z: Math.round(d.player.z), inventory: { ...d.save.inventory }, worn: d.gear.wornShell().kind, built: d.save.workshopBuilt } }")
-    checks['migrateVersion1'] = {**migrated, 'pass': migrated['version'] == 3 and migrated['inventory'] == {'shellBits': 4, 'driftwood': 2} and migrated['worn'] == 'snail' and not migrated['built'] and abs(migrated['x'] - 20) <= 1 and abs(migrated['z'] + 30) <= 1}
+    migrated = legacy_page.evaluate("() => { const d = __debug; return { version: d.save.version, x: Math.round(d.player.x), z: Math.round(d.player.z), inventory: { ...d.save.inventory }, worn: d.gear.wornShell().kind, built: d.burrow.exists } }")
+    checks['migrateVersion1'] = {**migrated, 'pass': migrated['version'] == 4 and migrated['inventory'] == {'shellBits': 4, 'driftwood': 2} and migrated['worn'] == 'snail' and not migrated['built'] and abs(migrated['x'] - 20) <= 1 and abs(migrated['z'] + 30) <= 1}
     legacy_context.close()
 
     phone_context = browser.new_context(viewport={'width': 412, 'height': 915}, device_scale_factor=2, is_mobile=True, has_touch=True)
@@ -138,8 +147,8 @@ with sync_playwright() as playwright:
     phone.goto(URL)
     phone.wait_for_function('!!window.__debug', timeout=180000)
     phone.evaluate("() => { const d = __debug; d.save.inventory = { shellBits: 15, driftwood: 3, seaLettuce: 7 }; d.buildWorkshop(); d.workbenchPanel.open('Craft'); }")
-    phone.tap('#hud .workbench [data-craft="shell:turban"]')
-    phone.tap('#hud .workbench-close')
+    phone.tap('#hud .workshop-panel [data-craft="shell:turban"]')
+    phone.tap('#hud .workshop-panel .workbench-close')
     phone.tap('#hud .bag-button')
     phone_shell = phone.evaluate("() => __debug.gear.state.shells.find(s => s.kind === 'turban').id")
     phone.tap(f'#hud .backpack [data-wear="{phone_shell}"]')

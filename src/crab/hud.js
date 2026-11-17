@@ -20,6 +20,11 @@ export function createHud(activeQualityName) {
   bagButton.setAttribute('aria-label', 'Backpack');
   const bagDot = element('span', 'bag-dot hidden', bagButton);
   const goal = element('div', 'chip goal', topLeft);
+  const buildButton = element('button', 'build-button hidden', root, '🏗️ Build');
+  const modeBar = element('div', 'mode-bar hidden', root);
+  const modeText = element('span', 'mode-text', modeBar);
+  const modeCancel = element('button', 'mode-cancel', modeBar, 'Cancel');
+  const sceneFade = element('div', 'scene-fade', root);
 
   const vitals = element('div', 'vitals', root);
   const levelBadge = element('div', 'level-badge', vitals, 'Lv 1');
@@ -70,11 +75,15 @@ export function createHud(activeQualityName) {
   let goalListener = () => {};
   let bagListener = () => {};
   let volumeListener = () => {};
+  let buildListener = () => {};
+  let modeCancelListener = () => {};
   let toastTimer = 0;
   let resetArmed = false;
 
   pauseButton.addEventListener('click', () => pauseListener(true));
   bagButton.addEventListener('click', () => bagListener());
+  buildButton.addEventListener('click', () => buildListener());
+  modeCancel.addEventListener('click', () => modeCancelListener());
   goal.addEventListener('click', () => {
     if (goal.classList.contains('action')) goalListener();
   });
@@ -100,6 +109,23 @@ export function createHud(activeQualityName) {
     },
     onGoalTap: (listener) => { goalListener = listener; },
     onBag: (listener) => { bagListener = listener; },
+    onBuild: (listener) => { buildListener = listener; },
+    setBuildButton(visible) {
+      buildButton.classList.toggle('hidden', !visible);
+    },
+    setMode(text, onCancel = () => {}) {
+      modeBar.classList.toggle('hidden', !text);
+      buildButton.classList.toggle('dimmed', Boolean(text));
+      root.classList.toggle('placing', Boolean(text));
+      modeText.textContent = text || '';
+      modeCancelListener = onCancel;
+      if (text) hint.classList.add('hidden');
+    },
+    fade() {
+      sceneFade.classList.remove('visible');
+      void sceneFade.offsetWidth;
+      sceneFade.classList.add('visible');
+    },
     setBagDot(visible) {
       bagDot.classList.toggle('hidden', !visible);
     },

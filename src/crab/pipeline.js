@@ -148,6 +148,7 @@ export function createPipeline(renderer, quality) {
   const copyMesh = new THREE.Mesh(fullscreenTriangle, fullscreenMaterial(COPY_FRAGMENT_GLSL, { tSource: { value: sceneTarget.texture } }));
   copyMesh.frustumCulled = false;
   copyMesh.renderOrder = 0;
+  copyMesh.layers.enableAll();
   overlayScene.add(copyMesh);
 
   const bloomDownMaterial = fullscreenMaterial(BLOOM_DOWN_FRAGMENT_GLSL, { tSource: { value: null }, uTexel: { value: new THREE.Vector2() }, uPrefilter: { value: 0 } });

@@ -8,7 +8,7 @@ window.__combat = (() => {
   const d = window.__debug;
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
   const silenceOthers = (keep) => { for (const enemy of d.enemies.list) if (enemy !== keep) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 }); };
-  const place = (x, z) => { const spot = d.navigation.nearestWalkable(x, z, 20); Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null, gatherTarget: null, speed: 0 }); return spot; };
+  const place = (x, z) => { if (d.isUnderground()) d.exitBurrow(); const spot = d.navigation.nearestWalkable(x, z, 20); Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null, gatherTarget: null, speed: 0 }); return spot; };
   const equip = (shell, enchant, claws) => {
     d.gear.state.shells = [{ id: 500, kind: shell, enchant }];
     d.gear.state.claws = [{ id: 2, kind: 'bare', enchant: 0 }, { id: 501, kind: 'shellEdged', enchant }];
@@ -194,7 +194,7 @@ with sync_playwright() as playwright:
         defense: d.playerStats().defense,
         level: d.progression.state.level, experience: d.progression.state.experience,
         fullHealth: d.progression.state.health === d.progression.maxHealth(),
-        nearWorkshop: +Math.hypot(d.player.x - 18, d.player.z + 17).toFixed(1),
+        wokeInBurrow: d.isUnderground(),
         goal: document.querySelector('#hud .goal').textContent,
         crabCalmed: crab.state !== 'chase',
       };
@@ -209,14 +209,14 @@ with sync_playwright() as playwright:
       return { first, second };
     }''')
     first = death['first']
-    checks['death'] = {**death, 'pass': first['remains'] == 1 and first['dropped']['inventory'] == {k: v for k, v in first['carriedBefore'].items() if v} and sorted(first['dropped']['shells']) == ['cone+2', 'snail+0'] and first['dropped']['claws'] == ['shellEdged'] and first['backpackEmpty'] and first['naked'] and first['claws'] == 'bare' and first['defense'] == 0 and first['level'] == 3 and first['experience'] == 17 and first['fullHealth'] and first['nearWorkshop'] < 4 and 'remains' in first['goal'] and death['second']['remains'] == 2 and death['second']['firstKept']}
+    checks['death'] = {**death, 'pass': first['remains'] == 1 and first['dropped']['inventory'] == {k: v for k, v in first['carriedBefore'].items() if v} and sorted(first['dropped']['shells']) == ['cone+2', 'snail+0'] and first['dropped']['claws'] == ['shellEdged'] and first['backpackEmpty'] and first['naked'] and first['claws'] == 'bare' and first['defense'] == 0 and first['level'] == 3 and first['experience'] == 17 and first['fullHealth'] and first['wokeInBurrow'] and 'remains' in first['goal'] and death['second']['remains'] == 2 and death['second']['firstKept']}
 
     page.reload()
     page.wait_for_function('!!window.__debug', timeout=180000)
     page.evaluate("() => __debug.setPaused(false)")
     page.evaluate(HELPERS)
     reloaded = page.evaluate("() => ({ version: __debug.save.version, remains: __debug.remains.list.length, naked: !__debug.gear.wornShell(), level: __debug.progression.state.level })")
-    page.evaluate("() => { const d = __debug; const r = d.remains.list[0]; const s = d.navigation.nearestWalkable(r.x + 8, r.z + 6, 10); Object.assign(d.player, { x: s.x, z: s.z }); d.simulate(1/60); d.updateCamera(0, true); d.renderScene(); }")
+    page.evaluate("() => { const d = __debug; if (d.isUnderground()) d.exitBurrow(); const r = d.remains.list[0]; const s = d.navigation.nearestWalkable(r.x + 8, r.z + 6, 10); Object.assign(d.player, { x: s.x, z: s.z }); d.simulate(1/60); d.updateCamera(0, true); d.renderScene(); }")
     tap = page.evaluate("() => { const d = __debug; const r = d.remains.list[0]; const p = new d.camera.position.constructor(r.x, r.y + 0.6, r.z).project(d.camera); return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight }; }")
     page.mouse.click(tap['x'], tap['y'])
     recovered = page.evaluate(r'''() => {
@@ -226,7 +226,7 @@ with sync_playwright() as playwright:
       __combat.step(15, () => d.remains.list.length < before);
       return { remains: d.remains.list.length, worn: d.gear.wornShell() && `${d.gear.wornShell().kind}+${d.gear.wornShell().enchant}`, claws: d.gear.wornClaws().kind, inventory: { ...d.save.inventory }, defense: d.playerStats().defense };
     }''')
-    checks['saveAndRecoverByTap'] = {'reloaded': reloaded, 'tap': tap, 'recovered': recovered, 'pass': reloaded == {'version': 3, 'remains': 2, 'naked': True, 'level': 3} and recovered['remains'] == 1 and recovered['worn'] == 'cone+2' and recovered['claws'] == 'shellEdged' and recovered['inventory'].get('shellBits') == 4 and recovered['inventory'].get('pearls') == 1 and recovered['defense'] == 5}
+    checks['saveAndRecoverByTap'] = {'reloaded': reloaded, 'tap': tap, 'recovered': recovered, 'pass': reloaded == {'version': 4, 'remains': 2, 'naked': True, 'level': 3} and recovered['remains'] == 1 and recovered['worn'] == 'cone+2' and recovered['claws'] == 'shellEdged' and recovered['inventory'].get('shellBits') == 4 and recovered['inventory'].get('pearls') == 1 and recovered['defense'] == 5}
 
     page.evaluate("() => { const d = __debug; const c = __combat; const spot = c.place(30, -40); const hopper = c.spawnNear('sandHopper', spot, 5); d.setPaused(false); d.updateCamera(0, true); d.renderScene(); window.__hopper = hopper; }")
     enemy_tap = page.evaluate("() => { const d = __debug; const e = window.__hopper; const p = new d.camera.position.constructor(e.x, e.y + e.definition.radius * 0.8, e.z).project(d.camera); return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight }; }")
@@ -238,6 +238,7 @@ with sync_playwright() as playwright:
       const d = __debug;
       const node = d.resources.nodes.find(n => n.type === 'pearls' && !n.gathered);
       const depth = d.world.retained.levelAt(node.x, node.z) - node.y;
+      if (d.isUnderground()) d.exitBurrow();
       const spot = d.navigation.nearestWalkable(node.x + 3, node.z, 10);
       Object.assign(d.player, { x: spot.x, z: spot.z });
       const before = d.save.inventory.pearls || 0;
