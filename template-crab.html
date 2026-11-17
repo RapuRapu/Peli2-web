@@ -56,6 +56,8 @@
   #hud .quality-row button { flex: 1; padding: 8px 4px; font-size: 15px; }
   #hud .quality-row button.active { background: #2f7f8f; border-color: #bfeaf2; font-weight: bold; }
   #hud .pause-note { font-size: 12px; opacity: 0.75; }
+  #hud .volume-row { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 10px; font-size: 15px; text-align: left; pointer-events: auto; }
+  #hud .volume-row input { flex: 1; }
   #hud .goal.action { pointer-events: auto; cursor: pointer; background: #c98a2a; border: 1px solid #ffe2a8; font-weight: bold; animation: goal-pulse 1.6s ease-in-out infinite; }
   @keyframes goal-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 210, 120, 0.6); } 50% { box-shadow: 0 0 0 6px rgba(255, 210, 120, 0); } }
   #hud .goal.hidden { display: none; }

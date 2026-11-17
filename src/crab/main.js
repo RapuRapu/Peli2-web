@@ -21,6 +21,7 @@ import { createProgression, GATHER_EXPERIENCE } from './progression.js';
 import { createEnemies } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
+import { createAudio } from './audio.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -69,6 +70,12 @@ const DEATH_ANIMATION_SECONDS = 1.1;
 const KNOCKBACK_DISTANCE = 0.3;
 const STRIKING_RANGE_TOLERANCE = 0.45;
 const ITEM_LIFT_START_SHARE = 0.55;
+const AUDIO_SETTINGS_KEY = 'seaofcrabs-audio';
+const STEP_LENGTH = 0.6;
+const HEAD_UNDERWATER_DEPTH = 1.9;
+const AMBIENCE_UPDATE_SECONDS = 0.3;
+const GULL_MOOD_EDGE_Z = -85;
+const FISH_PLOP_PER_SECOND = 0.15;
 
 const POSES = {
   1: { x: HOME_SPOT.x, z: HOME_SPOT.z, distance: 32, tideShare: 0.56 },
@@ -133,6 +140,28 @@ function loadSave() {
 }
 
 const save = loadSave();
+
+function loadAudioSettings() {
+  try {
+    return { music: 0.55, effects: 0.8, ...JSON.parse(localStorage.getItem(AUDIO_SETTINGS_KEY)) };
+  } catch {
+    return { music: 0.55, effects: 0.8 };
+  }
+}
+
+const audioSettings = loadAudioSettings();
+const audio = isScreenshotMode ? null : createAudio();
+let audioUnlocked = false;
+let ambienceTimer = 0;
+
+function unlockAudio() {
+  if (!audio || audioUnlocked) return;
+  audioUnlocked = true;
+  audio.unlock();
+  audio.setVolumes(audioSettings);
+  audio.startAmbience();
+  audio.startMusic();
+}
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: isScreenshotMode });
 renderer.toneMapping = THREE.NoToneMapping;
@@ -211,7 +240,11 @@ const enemies = createEnemies({
   labelParent: hud.root,
   onAttackPlayer: hitPlayer,
   onKilled: enemyKilled,
-  onAlert: (enemy) => floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, '!', 'alert'),
+  onAlert: (enemy) => {
+    floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, '!', 'alert');
+    soundAt('alert', enemy.x, enemy.z);
+  },
+  onSound: (name, enemy) => soundAt(name, enemy.x, enemy.z),
 });
 const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
@@ -351,6 +384,7 @@ function buildWorkshop() {
   for (const [type, amount] of Object.entries(FIRST_GOAL)) save.inventory[type] -= amount;
   save.workshopBuilt = true;
   placeWorkshop();
+  soundAt('craft');
   stopWalking();
   hud.toast('🔨 Workshop built — tap it to craft');
   refreshHud(null);
@@ -363,6 +397,7 @@ function craftItem(category, kind) {
   if (!item) return null;
   const label = (category === 'shell' ? SHELLS : CLAWS)[kind].label;
   save.craftedOnce = true;
+  soundAt('craft');
   hud.toast(`🔨 New ${label.toLowerCase()}! Open 🎒 to wear it`);
   hud.setBagDot(true);
   refreshHud(null);
@@ -418,6 +453,34 @@ function stopWalking() {
   destinationMarker.visible = false;
 }
 
+function soundAt(name, x = player.x, z = player.z, volume = 1) {
+  if (!audioUnlocked) return;
+  audio.play(name, { distance: Math.hypot(x - player.x, z - player.z), volume });
+}
+
+function updateAudio(deltaTime) {
+  if (!audioUnlocked) return;
+  player.stepDistance = (player.stepDistance || 0) + player.speed * deltaTime;
+  if (player.stepDistance >= STEP_LENGTH) {
+    player.stepDistance = 0;
+    const surface = player.waterDepth > HEAD_UNDERWATER_DEPTH ? null : player.waterDepth > 0.04 ? 'stepSplash' : player.y < tideState.wetLevel ? 'stepWetSand' : 'stepSand';
+    if (surface) soundAt(surface, player.x, player.z, 0.8);
+    const inPool = world.retained.levelAt(player.x, player.z) > player.y;
+    if (inPool && random() < FISH_PLOP_PER_SECOND * 3) soundAt('fishPlop', player.x + 3, player.z + 2, 0.7);
+  }
+  ambienceTimer -= deltaTime;
+  if (ambienceTimer > 0) return;
+  ambienceTimer = AMBIENCE_UPDATE_SECONDS;
+  const heightAboveSea = player.y - tideState.seaLevel;
+  audio.setAmbience({
+    waveIntensity: Math.max(0.15, 1 - THREE.MathUtils.smoothstep(heightAboveSea, 0.5, 9)),
+    wind: THREE.MathUtils.smoothstep(-player.z, 65, 95),
+    underwater: player.waterDepth > HEAD_UNDERWATER_DEPTH,
+  });
+  const fighting = enemies.list.some((enemy) => enemy.state === 'chase' || enemy.state === 'landing');
+  audio.setMusicMood(fighting ? 'combat' : player.z < GULL_MOOD_EDGE_Z ? 'gull' : 'calm');
+}
+
 function playerStats() {
   return gear.stats(progression.attackBonus());
 }
@@ -455,6 +518,8 @@ function strike(enemy) {
   player.lastCombatTime = simulationTime;
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.7, enemy.z, isSting ? `${damage}!` : String(damage), isSting ? 'sting' : 'dealt');
   hermit.playAttack(isSting ? 'both' : player.hitCount % 2 ? 'big' : 'small');
+  soundAt('clawSnap', enemy.x, enemy.z);
+  soundAt(isSting ? 'stingHit' : 'hitThud', enemy.x, enemy.z);
   enemies.damage(enemy, damage, simulationTime, player);
 }
 
@@ -475,6 +540,7 @@ function hitPlayer(enemy) {
   tryStep(player.x + (awayX / awayLength) * KNOCKBACK_DISTANCE * strength, player.z + (awayZ / awayLength) * KNOCKBACK_DISTANCE * strength);
   const sideways = Math.sign(Math.sin(Math.atan2(-awayX, -awayZ) - player.heading)) || 1;
   hermit.playHurt(strength, sideways);
+  soundAt('shellClonk');
   const idle = !player.combatTarget && !player.gatherTarget && player.pathIndex >= player.path.length && !keyboardDirection();
   if (idle) engage(enemy);
   if (progression.state.health <= 0) die();
@@ -494,6 +560,7 @@ function enemyKilled(enemy) {
 }
 
 function announceLevel() {
+  soundAt('levelUp');
   hud.toast(`⬆ Level ${progression.state.level}! Max HP +8 · attack +1`);
 }
 
@@ -508,6 +575,7 @@ function die() {
   player.combatTarget = null;
   player.dyingTimer = DEATH_ANIMATION_SECONDS;
   hermit.playDeath();
+  soundAt('death');
   enemies.calmAll(RESPAWN_CALM_SECONDS + DEATH_ANIMATION_SECONDS, simulationTime);
   workbenchPanel.close();
   if (backpack.isOpen) backpack.close();
@@ -535,6 +603,7 @@ function recoverRemains(entry) {
   gear.restore(entry.gear);
   hermit.setShell(gear.wornLook());
   remains.remove(entry);
+  soundAt('recoverRemains');
   hud.toast('🎒 You recovered your things');
   refreshHud('remains');
   persist();
@@ -687,6 +756,7 @@ function updatePlayer(deltaTime) {
       }
       if (player.gatherProgress >= RESOURCE_TYPES[target.type].gatherSeconds) {
         resources.gather(target);
+        soundAt(`gather${target.type[0].toUpperCase()}${target.type.slice(1)}`);
         save.inventory[target.type] = (save.inventory[target.type] || 0) + 1;
         hud.toast(`+1 ${RESOURCE_TYPES[target.type].icon} ${RESOURCE_TYPES[target.type].label}`);
         floatAt(target.x, target.y + 1.4, target.z, `+${GATHER_EXPERIENCE} XP`, 'experience');
@@ -733,6 +803,7 @@ function simulate(deltaTime) {
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   seaUniforms.uCrabPosition.value.set(player.x, player.y, player.z);
+  updateAudio(deltaTime);
   tracks.update(deltaTime, simulationTime, player, tideState.seaLevel);
   ripples.update(deltaTime, simulationTime, player);
   autosaveTimer += deltaTime;
@@ -893,6 +964,8 @@ function pinchSpan() {
   return Math.hypot(first.x - second.x, first.y - second.y);
 }
 
+addEventListener('pointerdown', unlockAudio, { capture: true });
+addEventListener('keydown', unlockAudio, { capture: true });
 canvas.addEventListener('pointerdown', (event) => {
   canvas.setPointerCapture(event.pointerId);
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -938,8 +1011,22 @@ function setPaused(value) {
   paused = value;
   hud.setPaused(paused);
   if (paused) persist();
+  if (audioUnlocked) {
+    if (paused) audio.context.suspend();
+    else audio.context.resume();
+  }
 }
 hud.onPause(setPaused);
+hud.setVolumes(audioSettings);
+hud.onVolume((key, value) => {
+  audioSettings[key] = value;
+  if (audioUnlocked) audio.setVolumes(audioSettings);
+  try {
+    localStorage.setItem(AUDIO_SETTINGS_KEY, JSON.stringify(audioSettings));
+  } catch {
+    /* storage unavailable: setting lasts for this visit */
+  }
+});
 hud.onGoalTap(buildWorkshop);
 hud.onBag(openBackpack);
 hud.setBagDot(gear.hasNewItems());
@@ -1072,7 +1159,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };

@@ -18,6 +18,8 @@ const WANDER_RADIUS = 6;
 const REPATH_SECONDS = 0.5;
 const DEATH_SINK_SECONDS = 1.7;
 const PACK_ALERT_RANGE = 12;
+const STRIKE_SOUNDS = { sandHopper: 'hopperJump', shoreCrab: 'crabClatter', gull: 'wingFlap' };
+const IDLE_SOUNDS = { sandHopper: { name: 'hopperChirp', perSecond: 0.12 }, gull: { name: 'gullCall', perSecond: 0.06 } };
 const ENEMY_STRIKE_REACH = 1.9;
 const OUT_OF_REACH_RESET_SECONDS = 1;
 const PACK_SPREAD = 3.5;
@@ -234,7 +236,7 @@ function createGullModel(scene, quality) {
   return { root, torso, wings, shadow, materials: [material, wingMaterial] };
 }
 
-export function createEnemies({ scene, world, navigation, quality, spawnTable, labelParent, onAttackPlayer, onKilled, onAlert = () => {} }) {
+export function createEnemies({ scene, world, navigation, quality, spawnTable, labelParent, onAttackPlayer, onKilled, onAlert = () => {}, onSound = () => {} }) {
   const hopperMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.6, wetRoughness: 0.1, instanceFlash: true });
   const crabMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38 }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.6, wetRoughness: 0.1, instanceFlash: true });
   const counts = Object.fromEntries(Object.keys(ENEMY_KINDS).map((kind) => [kind, spawnTable.filter((entry) => entry.kind === kind).reduce((sum, entry) => sum + entry.count, 0)]));
@@ -363,6 +365,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     enemy.health = Math.max(0, enemy.health - amount);
     enemy.lastHurtTime = time;
     enemy.hurt = 1;
+    if (enemy.kind === 'gull') onSound('wingFlap', enemy);
     knockBack(enemy, attacker);
     if (enemy.definition.temperament === 'passive') {
       for (const mate of list) {
@@ -459,6 +462,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
         if (enemy.attackTimer <= 0) {
           enemy.attackTimer = definition.attackInterval;
           enemy.strike = 1;
+          onSound(STRIKE_SOUNDS[enemy.kind], enemy);
           onAttackPlayer(enemy);
         }
       }
@@ -490,6 +494,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       if (playerInside || enemy.provoked) {
         startChase(enemy);
         onAlert(enemy);
+        onSound('gullCall', enemy);
       }
     } else if (enemy.state === 'landing') {
       const awayX = enemy.x - player.x;
@@ -557,6 +562,8 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
         continue;
       }
       enemy.strike = Math.max(0, enemy.strike - deltaTime * 3);
+      const idleSound = IDLE_SOUNDS[enemy.kind];
+      if (idleSound && (enemy.state === 'idle' || enemy.state === 'circling') && random() < idleSound.perSecond * deltaTime) onSound(idleSound.name, enemy);
       enemy.hurt = Math.max(0, enemy.hurt - deltaTime / HURT_SECONDS);
       if (enemy.definition.flies) updateGull(enemy, deltaTime, time, player);
       else updateGround(enemy, deltaTime, time, player);

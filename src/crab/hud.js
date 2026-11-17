@@ -52,6 +52,15 @@ export function createHud(activeQualityName) {
     button.dataset.quality = name;
     return button;
   });
+  element('div', 'pause-note', pauseCard, 'Sound');
+  const volumeInputs = {};
+  for (const [key, label] of [['music', 'Music'], ['effects', 'Effects']]) {
+    const row = element('label', 'volume-row', pauseCard, label);
+    const input = element('input', '', row);
+    Object.assign(input, { type: 'range', min: 0, max: 1, step: 0.05 });
+    input.addEventListener('input', () => volumeListener(key, Number(input.value)));
+    volumeInputs[key] = input;
+  }
   const resetButton = element('button', 'reset', pauseCard, 'Start over');
   element('div', 'pause-note', pauseCard, 'The game saves on its own.');
 
@@ -60,6 +69,7 @@ export function createHud(activeQualityName) {
   let qualityListener = () => {};
   let goalListener = () => {};
   let bagListener = () => {};
+  let volumeListener = () => {};
   let toastTimer = 0;
   let resetArmed = false;
 
@@ -84,6 +94,10 @@ export function createHud(activeQualityName) {
     onPause: (listener) => { pauseListener = listener; },
     onReset: (listener) => { resetListener = listener; },
     onQuality: (listener) => { qualityListener = listener; },
+    onVolume: (listener) => { volumeListener = listener; },
+    setVolumes(values) {
+      for (const [key, input] of Object.entries(volumeInputs)) input.value = values[key];
+    },
     onGoalTap: (listener) => { goalListener = listener; },
     onBag: (listener) => { bagListener = listener; },
     setBagDot(visible) {
