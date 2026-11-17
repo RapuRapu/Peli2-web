@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 const TARGETS = {
   crab: { entry: 'src/crab/main.js', template: 'template-crab.html', output: 'dist/index.html' },
   classic: { entry: 'src/main.js', template: 'template.html', output: 'dist/classic.html' },
+  soundlab: { entry: 'src/soundlab/main.js', template: 'template-soundlab.html', output: 'dist/soundlab.html' },
 };
 const target = TARGETS[process.argv[2] || 'crab'];
 
