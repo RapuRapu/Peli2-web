@@ -361,3 +361,12 @@ export function createWorld(quality) {
 
   return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, terrainMesh, walkable, isWalkable, waterLevelAt, randomSpot, createRandom, blockCircle };
 }
+
+const GULL_TERRITORY_EDGE_Z = -92;
+const HIGH_TIDE_MARK = TIDE_MIDDLE + TIDE_AMPLITUDE;
+
+export const HOME_BEACH_ENEMIES = [
+  { kind: 'sandHopper', count: 6, accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && world.retained.levelAt(x, z) < height },
+  { kind: 'shoreCrab', count: 4, accept: (world, x, z, height) => { const depth = world.retained.levelAt(x, z) - height; return depth > 0.3 && depth < 1.6; } },
+  { kind: 'gull', count: 1, accept: (world, x, z) => z < -97 && z > -103 && Math.abs(x) < 40, territory: (x, z) => z < GULL_TERRITORY_EDGE_Z },
+];

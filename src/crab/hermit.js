@@ -30,7 +30,38 @@ function tinted(geometry, color, shadeByHeight = 0) {
   return geometry;
 }
 
-function buildShellGeometry(look) {
+function buildSoftAbdomenGeometry(look) {
+  const skin = linearColor(...look.light);
+  const fold = linearColor(...look.band);
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.05, 0.12, 0.42),
+    new THREE.Vector3(0.22, 0.02, 0.78),
+    new THREE.Vector3(0.36, -0.26, 0.9),
+    new THREE.Vector3(0.4, -0.5, 0.7),
+  ]);
+  const segments = 28;
+  const geometry = new THREE.TubeGeometry(curve, segments, 1, 14, false);
+  const positions = geometry.attributes.position;
+  const point = new THREE.Vector3();
+  const colors = [];
+  const color = new THREE.Color();
+  for (let index = 0; index < positions.count; index++) {
+    const along = Math.floor(index / 15) / segments;
+    curve.getPointAt(along, point);
+    const radius = look.tubeRadius * (1 - 0.7 * along) * (1 - 0.12 * Math.pow(0.5 + 0.5 * Math.cos(along * segments * 0.9), 4));
+    positions.setXYZ(index, point.x + (positions.getX(index) - point.x) * radius, point.y + (positions.getY(index) - point.y) * radius, point.z + (positions.getZ(index) - point.z) * radius);
+    color.copy(skin).lerp(fold, Math.pow(0.5 + 0.5 * Math.cos(along * segments * 0.9), 6));
+    colors.push(color.r, color.g, color.b);
+  }
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.deleteAttribute('uv');
+  geometry.computeVertexNormals();
+  return { geometry, mouthOffset: 0 };
+}
+
+export function buildShellGeometry(look) {
+  if (look.soft) return buildSoftAbdomenGeometry(look);
   const light = linearColor(...look.light);
   const bandColor = linearColor(...look.band);
   const positions = [];
@@ -127,6 +158,7 @@ export function createHermit(scene, quality, shellLook) {
     shell.geometry.dispose();
     shell.geometry = built.geometry;
     shell.position.set(built.mouthOffset, 0, 0);
+    shellMaterial.roughness = look.soft ? 0.82 : 0.32;
   }
   setShell(shellLook);
   shellPivot.add(shell);

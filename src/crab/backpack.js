@@ -2,7 +2,7 @@ import { SHELLS, CLAWS } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { element, percent, shellStatsText } from './workbench.js';
 
-export function createBackpackPanel(root, { gear, inventory, onWear, onClose }) {
+export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, onWear, onClose }) {
   const overlay = element('div', 'workbench backpack', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -20,13 +20,19 @@ export function createBackpackPanel(root, { gear, inventory, onWear, onClose }) 
       element('div', 'material-count', material, `${definition.icon} ${inventory()[type] || 0}`);
       element('div', 'material-label', material, definition.label);
     }
-    const stats = gear.stats();
-    element('div', 'summary', topRow, `Total: 🛡 ${stats.defense} · 🏃 ${percent(stats.speedFactor)} · 🗡️ ${stats.attack}`);
+    const stats = combatStats();
+    element('div', 'summary', topRow, `Total: ❤ ${maxHealth()} · 🛡 ${stats.defense} · 🏃 ${percent(stats.speedFactor)} · 🗡️ ${stats.attack}`);
   }
 
   function renderGroup(title, items, definitions, wornId, isShell) {
     element('div', 'section-title', body, title);
     const list = element('div', 'gear-list', body);
+    if (isShell && !items.some((item) => item.id === wornId)) {
+      const row = element('div', 'item worn naked', list);
+      const text = element('div', 'item-text', row);
+      element('div', 'item-name', text, 'No shell · 🛡 0');
+      element('div', 'item-ability', text, 'Exposed! Recover your remains or craft a Snail shell.');
+    }
     const sorted = [...items].sort((first, second) => Number(second.id === wornId) - Number(first.id === wornId));
     for (const item of sorted) {
       const definition = definitions[item.kind];

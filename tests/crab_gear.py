@@ -94,7 +94,7 @@ with sync_playwright() as playwright:
     page.evaluate("() => __debug.workbenchPanel.close()")
     page.click('#hud .bag-button')
     backpack_view = page.evaluate("() => ({ open: __debug.backpack.isOpen, newBadges: document.querySelectorAll('#hud .backpack .new-badge').length, materials: [...document.querySelectorAll('#hud .backpack [data-material]')].map(m => m.textContent), wearButtons: document.querySelectorAll('#hud .backpack [data-wear]').length, wornBadge: document.querySelector('#hud .backpack .item.worn .item-badge')?.textContent, hudCountersGone: !document.querySelector('#hud .slot') })")
-    checks['backpack'] = {'dotAfterCraft': bag_dot_after_craft, **backpack_view, 'pass': bag_dot_after_craft and backpack_view['open'] and backpack_view['newBadges'] == 3 and len(backpack_view['materials']) == 3 and backpack_view['wearButtons'] == 3 and backpack_view['wornBadge'] == '✓ Wearing' and backpack_view['hudCountersGone']}
+    checks['backpack'] = {'dotAfterCraft': bag_dot_after_craft, **backpack_view, 'pass': bag_dot_after_craft and backpack_view['open'] and backpack_view['newBadges'] == 3 and len(backpack_view['materials']) == 4 and backpack_view['wearButtons'] == 3 and backpack_view['wornBadge'] == '✓ Wearing' and backpack_view['hudCountersGone']}
     page.click('#hud .backpack .workbench-close')
     after_close = page.evaluate("() => ({ dotHidden: document.querySelector('#hud .bag-dot').classList.contains('hidden'), anyNew: __debug.gear.hasNewItems() })")
     checks['backpack']['afterClose'] = after_close
@@ -120,7 +120,7 @@ with sync_playwright() as playwright:
     page.reload()
     page.wait_for_function('!!window.__debug', timeout=180000)
     restored = page.evaluate("() => { const d = __debug; return { version: d.save.version, built: d.workshop.built, spotBlocked: !d.world.isWalkable(18, -17), worn: d.gear.wornShell().kind, claws: d.gear.wornClaws().kind, shells: d.gear.state.shells.length, goalHidden: document.querySelector('#hud .goal').classList.contains('hidden') } }")
-    checks['saveRestores'] = {**restored, 'pass': restored == {'version': 2, 'built': True, 'spotBlocked': True, 'worn': 'cone', 'claws': 'shellEdged', 'shells': 3, 'goalHidden': True}}
+    checks['saveRestores'] = {**restored, 'pass': restored == {'version': 3, 'built': True, 'spotBlocked': True, 'worn': 'cone', 'claws': 'shellEdged', 'shells': 3, 'goalHidden': True}}
 
     legacy_context = browser.new_context(viewport={'width': 915, 'height': 412})
     legacy_context.add_init_script("localStorage.setItem('seaofcrabs-crab-save', JSON.stringify({ version: 1, x: 20, z: -30, heading: 1, worldTime: 100, inventory: { shellBits: 4, driftwood: 2 }, nodes: null, goalAnnounced: false, hasMoved: true }))")
@@ -129,7 +129,7 @@ with sync_playwright() as playwright:
     legacy_page.goto(URL)
     legacy_page.wait_for_function('!!window.__debug', timeout=180000)
     migrated = legacy_page.evaluate("() => { const d = __debug; return { version: d.save.version, x: Math.round(d.player.x), z: Math.round(d.player.z), inventory: { ...d.save.inventory }, worn: d.gear.wornShell().kind, built: d.save.workshopBuilt } }")
-    checks['migrateVersion1'] = {**migrated, 'pass': migrated['version'] == 2 and migrated['inventory'] == {'shellBits': 4, 'driftwood': 2} and migrated['worn'] == 'snail' and not migrated['built'] and abs(migrated['x'] - 20) <= 1 and abs(migrated['z'] + 30) <= 1}
+    checks['migrateVersion1'] = {**migrated, 'pass': migrated['version'] == 3 and migrated['inventory'] == {'shellBits': 4, 'driftwood': 2} and migrated['worn'] == 'snail' and not migrated['built'] and abs(migrated['x'] - 20) <= 1 and abs(migrated['z'] + 30) <= 1}
     legacy_context.close()
 
     phone_context = browser.new_context(viewport={'width': 412, 'height': 915}, device_scale_factor=2, is_mobile=True, has_touch=True)

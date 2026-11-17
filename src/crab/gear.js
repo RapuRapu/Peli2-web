@@ -6,7 +6,7 @@ export const SHELLS = {
     speedFactor: 1,
     attackFactor: 1,
     ability: null,
-    cost: null,
+    cost: { shellBits: 3 },
     breakable: false,
     look: { turns: 2.7, spireShare: 0.86, whorlRadius: 0.5, tubeRadius: 0.6, height: 1.25, bandFrequency: 26, light: [0.98, 0.94, 0.86], band: [0.86, 0.3, 0.1], inside: [0.36, 0.22, 0.2] },
   },
@@ -34,12 +34,26 @@ export const SHELLS = {
   },
 };
 
+export const NAKED = {
+  label: 'No shell',
+  defense: 0,
+  speedFactor: 1,
+  attackFactor: 1,
+  ability: null,
+  look: { soft: true, tubeRadius: 0.34, light: [0.96, 0.72, 0.62], band: [0.66, 0.36, 0.34] },
+};
+
 export const CLAWS = {
   bare: { label: 'Bare claws', attackBonus: 0, cost: null, breakable: false },
   shellEdged: { label: 'Shell-edged claws', attackBonus: 4, cost: { shellBits: 6, driftwood: 4 }, breakable: true },
 };
 
 export const BASE_ATTACK = 4;
+export const ENCHANT_SHARE_PER_LEVEL = 0.12;
+
+export function enchantBonus(baseValue, enchantLevel) {
+  return enchantLevel * Math.max(1, Math.round(baseValue * ENCHANT_SHARE_PER_LEVEL));
+}
 
 export function canAfford(cost, inventory) {
   return Object.entries(cost).every(([type, amount]) => (inventory[type] || 0) >= amount);
@@ -77,15 +91,41 @@ export function createGear(saved) {
     return true;
   }
 
-  function stats() {
-    const shell = SHELLS[wornShell().kind];
-    const claws = CLAWS[wornClaws().kind];
+  const wornShellDefinition = () => (wornShell() ? SHELLS[wornShell().kind] : NAKED);
+  const wornLook = () => wornShellDefinition().look;
+
+  function stats(levelAttackBonus = 0) {
+    const shellItem = wornShell();
+    const shell = wornShellDefinition();
+    const clawsItem = wornClaws();
+    const claws = CLAWS[clawsItem.kind];
     return {
-      defense: shell.defense,
+      defense: shell.defense + (shellItem ? enchantBonus(shell.defense, shellItem.enchant || 0) : 0),
       speedFactor: shell.speedFactor,
-      attack: Math.round((BASE_ATTACK + claws.attackBonus) * shell.attackFactor),
+      attack: Math.round((BASE_ATTACK + levelAttackBonus + claws.attackBonus + enchantBonus(claws.attackBonus, clawsItem.enchant || 0)) * shell.attackFactor),
       ability: shell.ability,
     };
+  }
+
+  function dropAll() {
+    const dropped = {
+      shells: state.shells,
+      claws: state.claws.filter((item) => CLAWS[item.kind].cost),
+      wornShellId: state.wornShellId,
+      wornClawsId: state.wornClawsId,
+    };
+    state.shells = [];
+    state.claws = state.claws.filter((item) => !CLAWS[item.kind].cost);
+    state.wornShellId = null;
+    state.wornClawsId = state.claws[0].id;
+    return dropped;
+  }
+
+  function restore(dropped) {
+    state.shells.push(...dropped.shells);
+    state.claws.push(...dropped.claws);
+    if (!wornShell() && dropped.shells.some((item) => item.id === dropped.wornShellId)) state.wornShellId = dropped.wornShellId;
+    if (!CLAWS[wornClaws().kind].cost && dropped.claws.some((item) => item.id === dropped.wornClawsId)) state.wornClawsId = dropped.wornClawsId;
   }
 
   function hasNewItems() {
@@ -103,6 +143,10 @@ export function createGear(saved) {
     craft,
     wear,
     stats,
+    dropAll,
+    restore,
+    wornLook,
+    wornShellDefinition,
     wornShell,
     wornClaws,
     serialize: () => structuredClone(state),

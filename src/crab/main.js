@@ -3,7 +3,7 @@ import { createPerformanceMonitor } from '../performance.js';
 import { QUALITY_LEVELS, chosenQualityName, storeQualityName } from './quality.js';
 import { seaUniforms, SEA_COMMON_GLSL, lighting } from './seaside.js';
 import { createNoiseTexture, createWaveGradientTexture } from './textures.js';
-import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS } from './world.js';
+import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES } from './world.js';
 import { createPipeline } from './pipeline.js';
 import { createWater } from './water.js';
 import { createProps } from './props.js';
@@ -17,6 +17,10 @@ import { createRipples } from './ripples.js';
 import { createGear, SHELLS, CLAWS } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel, WORKSHOP_REACH, WORKSHOP_BLOCK_RADIUS } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
+import { createProgression, GATHER_EXPERIENCE } from './progression.js';
+import { createEnemies } from './enemies.js';
+import { createRemains, REMAINS_REACH } from './remains.js';
+import { random, randomSource } from './random.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -25,7 +29,7 @@ const qualityName = chosenQualityName(searchParameters);
 const quality = QUALITY_LEVELS[qualityName];
 
 const SAVE_KEY = 'seaofcrabs-crab-save';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 const AUTOSAVE_INTERVAL_SECONDS = 5;
 const FIXED_STEP = 1 / 60;
 const CAMERA_YAW = 0.3;
@@ -50,6 +54,17 @@ const STARTING_HEADING = 2.3;
 const BODY_WET_MINIMUM_DEPTH = 0.04;
 const BODY_WET_MAXIMUM_HEIGHT_PER_SIZE = 2.0;
 const BODY_DRYING_SECONDS = 30;
+const PLAYER_ATTACK_REACH = 1.6;
+const PLAYER_ATTACK_INTERVAL = 0.9;
+const PLAYER_FIRST_STRIKE_SECONDS = 0.3;
+const COMBAT_REPATH_SECONDS = 0.4;
+const DAMAGE_SPREAD = 0.15;
+const HEALTH_REGEN_DELAY_SECONDS = 5;
+const HEALTH_REGEN_PER_SECOND = 1;
+const BRACE_DAMAGE_FACTOR = 0.7;
+const BRACE_MAXIMUM_SPEED = 0.5;
+const STING_EVERY_HITS = 4;
+const RESPAWN_CALM_SECONDS = 4;
 
 const POSES = {
   1: { x: HOME_SPOT.x, z: HOME_SPOT.z, distance: 32, tideShare: 0.56 },
@@ -73,10 +88,24 @@ const POSES = {
   20: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['turban', 'cone'] },
   21: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, crafted: ['turban'] },
   19: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 12, driftwood: 3, seaLettuce: 5 } },
+  22: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, naked: true },
+  23: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, remainsAt: { x: 24, z: -12 } },
+  29: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, remainsAt: { x: -20, z: -40 } },
+  30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
+  24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
+  25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
+  26: { x: 0, z: -104, distance: 40, tideShare: 0.56, heading: 3.2, level: 6, enemy: { kind: 'gull', offsetX: -2, offsetZ: -5.5 }, fightSeconds: 3.4 },
+  27: { x: 4, z: -80, distance: 50, tideShare: 0.56, heading: 3.4, gullCircling: true },
+  28: { x: 30, z: -40, distance: 30, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 2.5 },
 };
 
 function createEmptySave() {
-  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false };
+  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [] };
+}
+
+function migrateSave(stored) {
+  const gearItemCount = stored.gear ? stored.gear.shells.length + stored.gear.claws.length : 0;
+  return { ...createEmptySave(), ...stored, version: SAVE_VERSION, craftedOnce: gearItemCount > 2 };
 }
 
 function loadSave() {
@@ -84,7 +113,7 @@ function loadSave() {
   try {
     const stored = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (stored && stored.version === SAVE_VERSION) return { ...createEmptySave(), ...stored };
-    if (stored && stored.version === 1) return { ...createEmptySave(), ...stored, version: SAVE_VERSION };
+    if (stored && (stored.version === 1 || stored.version === 2)) return migrateSave(stored);
   } catch {
     /* unreadable or blocked storage: start a new game */
   }
@@ -153,12 +182,24 @@ pipeline.overlayScene.add(water.mesh);
 
 const navigation = createNavigation(world);
 const gear = createGear(save.gear);
-const hermit = createHermit(scene, quality, SHELLS[gear.wornShell().kind].look);
+const progression = createProgression(save.progression);
+const hermit = createHermit(scene, quality, gear.wornLook());
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
 const hud = createHud(qualityName);
 const tracks = createTracks(scene, world);
 const ripples = createRipples(water.uniforms);
 const workshop = createWorkbenchModel(scene, world, quality, WORKSHOP_SPOT, hud.root);
+const remains = createRemains(scene, world, quality, hud.root, save.remains);
+const enemies = createEnemies({
+  scene,
+  world,
+  navigation,
+  quality,
+  spawnTable: HOME_BEACH_ENEMIES.map((entry) => ({ ...entry, avoid: HOME_SPOT })),
+  labelParent: hud.root,
+  onAttackPlayer: hitPlayer,
+  onKilled: enemyKilled,
+});
 const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
@@ -168,6 +209,8 @@ const workbenchPanel = createWorkbenchPanel(hud.root, {
 const backpack = createBackpackPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
+  combatStats: () => playerStats(),
+  maxHealth: () => progression.maxHealth(),
   onWear: wearItem,
   onClose: () => {
     backpack.close();
@@ -203,7 +246,7 @@ const camera = new THREE.PerspectiveCamera(LANDSCAPE_FIELD_OF_VIEW, 1, 1.5, 1600
 const cameraFocus = new THREE.Vector3();
 let cameraDistance = 32;
 
-const player = { x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight };
+const player = { x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
 const startPoint = navigation.nearestWalkable(player.x, player.z, 40) || HOME_SPOT;
 player.x = startPoint.x;
 player.z = startPoint.z;
@@ -241,9 +284,11 @@ function tideLabel() {
   return tideState.rising ? 'Rising' : 'Falling';
 }
 
+let startingOver = false;
+
 function persist() {
-  if (isScreenshotMode) return;
-  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize() });
+  if (isScreenshotMode || startingOver) return;
+  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize() });
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
@@ -261,13 +306,15 @@ function goalReached() {
 }
 
 function hasCraftedGear() {
-  return gear.state.shells.length + gear.state.claws.length > 2;
+  return save.craftedOnce;
 }
 
 function refreshHud(bumpedType) {
   if (bumpedType) hud.bumpBag();
   if (backpack.isOpen) backpack.render();
-  if (!save.workshopBuilt) {
+  if (remains.list.length) {
+    hud.setGoal('💀 Recover your remains');
+  } else if (!save.workshopBuilt) {
     if (goalReached()) hud.setGoal('🔨 Build workshop', { action: true });
     else hud.setGoal(goalText());
   } else if (!hasCraftedGear()) {
@@ -302,6 +349,7 @@ function craftItem(category, kind) {
   const item = gear.craft(category, kind, save.inventory);
   if (!item) return null;
   const label = (category === 'shell' ? SHELLS : CLAWS)[kind].label;
+  save.craftedOnce = true;
   hud.toast(`🔨 New ${label.toLowerCase()}! Open 🎒 to wear it`);
   hud.setBagDot(true);
   refreshHud(null);
@@ -312,7 +360,7 @@ function craftItem(category, kind) {
 
 function wearItem(id) {
   if (!gear.wear(id)) return false;
-  hermit.setShell(SHELLS[gear.wornShell().kind].look);
+  hermit.setShell(gear.wornLook());
   backpack.render();
   persist();
   return true;
@@ -339,6 +387,7 @@ function setDestination(x, z, gatherTarget = null) {
   player.gatherTarget = gatherTarget;
   player.gatherProgress = 0;
   player.headingToWorkshop = false;
+  player.combatTarget = null;
   const end = path[path.length - 1];
   destinationMarker.position.set(end.x, world.heightAt(end.x, end.z) + 0.12, end.z);
   destinationMarker.visible = !gatherTarget;
@@ -354,6 +403,113 @@ function stopWalking() {
   player.path = [];
   player.pathIndex = 0;
   destinationMarker.visible = false;
+}
+
+function playerStats() {
+  return gear.stats(progression.attackBonus());
+}
+
+function rollDamage(attack, defense) {
+  const spread = 1 - DAMAGE_SPREAD + 2 * DAMAGE_SPREAD * random();
+  return Math.max(1, Math.round(Math.max(1, attack - defense / 2) * spread));
+}
+
+function floatAt(x, y, z, text, kind) {
+  projected.set(x, y, z).project(camera);
+  if (projected.z > 1) return;
+  hud.floatText((projected.x * 0.5 + 0.5) * innerWidth, (-projected.y * 0.5 + 0.5) * innerHeight, text, kind);
+}
+
+function engage(enemy) {
+  if (!enemies.alive(enemy)) return false;
+  stopWalking();
+  player.gatherTarget = null;
+  player.combatTarget = enemy;
+  player.attackTimer = PLAYER_FIRST_STRIKE_SECONDS;
+  player.combatRepathTimer = 0;
+  if (!save.hasMoved) {
+    save.hasMoved = true;
+    hud.setHint(null);
+  }
+  return true;
+}
+
+function strike(enemy) {
+  const stats = playerStats();
+  player.hitCount++;
+  const isSting = stats.ability && stats.ability.id === 'sting' && player.hitCount % STING_EVERY_HITS === 0;
+  const damage = rollDamage(stats.attack, enemy.definition.defense) * (isSting ? 2 : 1);
+  player.lastCombatTime = simulationTime;
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.7, enemy.z, isSting ? `${damage}!` : String(damage), isSting ? 'sting' : 'dealt');
+  enemies.damage(enemy, damage, simulationTime);
+}
+
+function hitPlayer(enemy) {
+  const stats = playerStats();
+  let damage = rollDamage(enemy.definition.attack, stats.defense);
+  const braced = stats.ability && stats.ability.id === 'brace' && player.speed < BRACE_MAXIMUM_SPEED;
+  if (braced) damage = Math.max(1, Math.round(damage * BRACE_DAMAGE_FACTOR));
+  progression.state.health -= damage;
+  player.lastCombatTime = simulationTime;
+  floatAt(player.x, player.y + 2.4, player.z, `−${damage}`, 'taken');
+  hud.flashHurt();
+  const idle = !player.combatTarget && !player.gatherTarget && player.pathIndex >= player.path.length && !keyboardDirection();
+  if (idle) engage(enemy);
+  if (progression.state.health <= 0) die();
+}
+
+function enemyKilled(enemy) {
+  if (player.combatTarget === enemy) player.combatTarget = null;
+  const levelsGained = progression.gainExperience(enemy.definition.experience);
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${enemy.definition.experience} XP`, 'experience');
+  if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
+    save.inventory.pearls = (save.inventory.pearls || 0) + 1;
+    hud.toast('🦪 The shore crab dropped a pearl!');
+    refreshHud('pearls');
+  }
+  if (levelsGained) announceLevel();
+  persist();
+}
+
+function announceLevel() {
+  hud.toast(`⬆ Level ${progression.state.level}! Max HP +8 · attack +1`);
+}
+
+function wakeSpot() {
+  const spot = save.workshopBuilt ? { x: WORKSHOP_SPOT.x - 2.4, z: WORKSHOP_SPOT.z - 1.6 } : HOME_SPOT;
+  return navigation.nearestWalkable(spot.x, spot.z, 10) || HOME_SPOT;
+}
+
+function die() {
+  const dropped = gear.dropAll();
+  const carried = Object.fromEntries(Object.entries(save.inventory).filter(([, amount]) => amount > 0));
+  if (dropped.shells.length || dropped.claws.length || Object.keys(carried).length) remains.add({ x: player.x, z: player.z, inventory: carried, gear: dropped });
+  save.inventory = {};
+  hermit.setShell(gear.wornLook());
+  progression.state.health = progression.maxHealth();
+  stopWalking();
+  player.gatherTarget = null;
+  player.combatTarget = null;
+  player.lastCombatTime = -100;
+  const spot = wakeSpot();
+  Object.assign(player, { x: spot.x, z: spot.z, speed: 0 });
+  enemies.calmAll(RESPAWN_CALM_SECONDS, simulationTime);
+  workbenchPanel.close();
+  if (backpack.isOpen) backpack.close();
+  hud.showDeath();
+  hud.toast('💀 You were defeated — your things wait in your remains');
+  refreshHud(null);
+  persist();
+}
+
+function recoverRemains(entry) {
+  for (const [type, amount] of Object.entries(entry.inventory)) save.inventory[type] = (save.inventory[type] || 0) + amount;
+  gear.restore(entry.gear);
+  hermit.setShell(gear.wornLook());
+  remains.remove(entry);
+  hud.toast('🎒 You recovered your things');
+  refreshHud('remains');
+  persist();
 }
 
 function tryStep(nextX, nextZ) {
@@ -396,9 +552,29 @@ function updatePlayer(deltaTime) {
   const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * gear.stats().speedFactor;
   let targetSpeed = 0;
   const steering = keyboardDirection();
+  const combatTarget = player.combatTarget && enemies.alive(player.combatTarget) ? player.combatTarget : null;
+  if (!combatTarget) player.combatTarget = null;
+  let inStrikingRange = false;
+  if (combatTarget && !steering) {
+    const reach = PLAYER_ATTACK_REACH + combatTarget.definition.radius;
+    const distance = Math.hypot(combatTarget.x - player.x, combatTarget.z - player.z);
+    if (distance <= reach) {
+      inStrikingRange = true;
+      player.path = [];
+      player.pathIndex = 0;
+    } else {
+      player.combatRepathTimer -= deltaTime;
+      if (player.combatRepathTimer <= 0 || player.pathIndex >= player.path.length) {
+        player.combatRepathTimer = COMBAT_REPATH_SECONDS;
+        player.path = navigation.findPath(player.x, player.z, combatTarget.x, combatTarget.z);
+        player.pathIndex = 0;
+      }
+    }
+  }
   if (steering) {
     stopWalking();
     player.gatherTarget = null;
+    player.combatTarget = null;
     turnToward(Math.atan2(steering.x, steering.z), deltaTime);
     targetSpeed = topSpeed;
     if (!tryStep(player.x + steering.x * player.speed * deltaTime, player.z + steering.z * player.speed * deltaTime)) targetSpeed = 0;
@@ -440,6 +616,19 @@ function updatePlayer(deltaTime) {
 
   const target = player.gatherTarget;
   let working = false;
+  if (inStrikingRange) {
+    working = true;
+    turnToward(Math.atan2(combatTarget.x - player.x, combatTarget.z - player.z), deltaTime);
+    player.attackTimer -= deltaTime;
+    if (player.attackTimer <= 0) {
+      player.attackTimer = PLAYER_ATTACK_INTERVAL;
+      strike(combatTarget);
+    }
+  } else if (combatTarget) {
+    player.attackTimer = Math.max(player.attackTimer, PLAYER_FIRST_STRIKE_SECONDS);
+  }
+  const nearbyRemains = remains.list.find((entry) => Math.hypot(entry.x - player.x, entry.z - player.z) <= REMAINS_REACH);
+  if (nearbyRemains) recoverRemains(nearbyRemains);
   if (target && !target.gathered && player.pathIndex >= player.path.length) {
     const distance = Math.hypot(target.x - player.x, target.z - player.z);
     if (distance <= GATHER_REACH) {
@@ -450,6 +639,8 @@ function updatePlayer(deltaTime) {
         resources.gather(target);
         save.inventory[target.type] = (save.inventory[target.type] || 0) + 1;
         hud.toast(`+1 ${RESOURCE_TYPES[target.type].icon} ${RESOURCE_TYPES[target.type].label}`);
+        floatAt(target.x, target.y + 1.4, target.z, `+${GATHER_EXPERIENCE} XP`, 'experience');
+        if (progression.gainExperience(GATHER_EXPERIENCE)) announceLevel();
         refreshHud(target.type);
         player.gatherTarget = null;
         if (goalReached() && !save.goalAnnounced) {
@@ -477,12 +668,18 @@ function updateBodyWetness(deltaTime) {
   hermit.wetnessUniforms.uBodyWetTop.value = player.y + player.wetHeight;
 }
 
+function updateHealth(deltaTime) {
+  if (simulationTime - player.lastCombatTime > HEALTH_REGEN_DELAY_SECONDS) progression.state.health = Math.min(progression.maxHealth(), progression.state.health + HEALTH_REGEN_PER_SECOND * deltaTime);
+}
+
 function simulate(deltaTime) {
   simulationTime += deltaTime;
   save.worldTime += deltaTime;
   seaUniforms.uTime.value = simulationTime;
   updateTide(deltaTime);
   updatePlayer(deltaTime);
+  enemies.update(deltaTime, simulationTime, player);
+  updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   tracks.update(deltaTime, simulationTime, player, tideState.seaLevel);
   ripples.update(deltaTime, simulationTime, player);
@@ -549,6 +746,9 @@ function renderScene() {
   resources.update(simulationTime, Math.min(drawingBufferSize.x, drawingBufferSize.y) * 2.4);
   destinationMarker.scale.setScalar(1 + 0.12 * Math.sin(simulationTime * 5));
   workshop.update(simulationTime, !hasCraftedGear() && !anyPanelOpen(), camera);
+  enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null);
+  remains.update(simulationTime, camera, player);
+  hud.setVitals(progression.state.level, progression.state.health, progression.maxHealth(), progression.state.experience, progression.experienceToNext());
   const farZoomShare = THREE.MathUtils.smoothstep(cameraDistance, ...FAR_ZOOM_RING_DISTANCES);
   playerRing.position.set(player.x, player.y + 0.15, player.z);
   playerRing.scale.setScalar(1 + farZoomShare * 0.9);
@@ -607,6 +807,16 @@ function workshopUnder(clientX, clientY) {
 
 function handleTap(clientX, clientY, isNewTouch) {
   if (paused || anyPanelOpen()) return;
+  const enemy = isNewTouch ? enemies.pick(clientX, clientY, camera) : null;
+  if (enemy) {
+    engage(enemy);
+    return;
+  }
+  const remainsEntry = isNewTouch ? remains.pick(clientX, clientY, camera) : null;
+  if (remainsEntry) {
+    setDestination(remainsEntry.x, remainsEntry.z);
+    return;
+  }
   if (isNewTouch && workshopUnder(clientX, clientY)) {
     if (Math.hypot(WORKSHOP_SPOT.x - player.x, WORKSHOP_SPOT.z - player.z) <= WORKSHOP_REACH) workbenchPanel.open();
     else walkToWorkshop();
@@ -646,7 +856,7 @@ canvas.addEventListener('pointermove', (event) => {
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (activePointers.size === 2) {
     cameraDistance = THREE.MathUtils.clamp((pinchStartDistance * pinchStartSpan) / Math.max(20, pinchSpan()), ...CAMERA_DISTANCE_LIMITS);
-  } else if (performance.now() - lastSteerTime > 120 && !player.gatherTarget && !player.headingToWorkshop) {
+  } else if (performance.now() - lastSteerTime > 120 && !player.gatherTarget && !player.headingToWorkshop && !player.combatTarget) {
     lastSteerTime = performance.now();
     handleTap(event.clientX, event.clientY, false);
   }
@@ -681,14 +891,16 @@ hud.onPause(setPaused);
 hud.onGoalTap(buildWorkshop);
 hud.onBag(openBackpack);
 hud.setBagDot(gear.hasNewItems());
-hud.onReset(() => {
+function startOver() {
+  startingOver = true;
   try {
     localStorage.removeItem(SAVE_KEY);
   } catch {
     /* nothing stored */
   }
   location.reload();
-});
+}
+hud.onReset(startOver);
 hud.onQuality((name) => {
   if (name === qualityName) return;
   persist();
@@ -725,6 +937,12 @@ if (isScreenshotMode) {
     craftItem('shell', kind);
   }
   if (pose.shell) hermit.setShell(SHELLS[pose.shell].look);
+  if (pose.level) progression.setLevel(pose.level);
+  if (pose.naked) {
+    gear.dropAll();
+    hermit.setShell(gear.wornLook());
+  }
+  if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', enchant: 0 }], claws: [], wornShellId: 90, wornClawsId: null } });
   refreshHud(null);
   if (pose.panel) workbenchPanel.open(pose.panel);
   if (pose.backpack) openBackpack();
@@ -740,8 +958,27 @@ if (isScreenshotMode) {
       player.heading = pose.heading;
       for (let step = 0; step < 20; step++) simulate(FIXED_STEP);
     }
+  } else if (pose.enemy) {
+    const enemySpot = navigation.nearestWalkable(spot.x + pose.enemy.offsetX, spot.z + pose.enemy.offsetZ, 10);
+    const enemy = enemies.spawn(pose.enemy.kind, enemySpot.x, enemySpot.z);
+    for (const other of enemies.list.filter((candidate) => candidate !== enemy)) Object.assign(other, { state: 'dead', respawnTimer: 999 });
+    enemy.heading = Math.atan2(spot.x - enemySpot.x, spot.z - enemySpot.z);
+    if (enemy.definition.flies) {
+      enemy.altitude = 0;
+      enemy.state = 'chase';
+      enemy.anchor = { x: enemy.x, z: enemy.z };
+      enemy.attackTimer = enemy.definition.windup;
+    }
+    if (pose.fightSeconds) engage(enemy);
+    for (let step = 0; step < Math.max(30, pose.fightSeconds / FIXED_STEP); step++) simulate(FIXED_STEP);
   } else {
-    for (let step = 0; step < 90; step++) simulate(FIXED_STEP);
+    for (let step = 0; step < (pose.gullCircling ? 240 : 90); step++) simulate(FIXED_STEP);
+    const gull = pose.gullCircling && enemies.list.find((enemy) => enemy.kind === 'gull');
+    if (gull) {
+      const watchSpot = navigation.nearestWalkable(gull.x + 6, gull.z + 7, 20);
+      Object.assign(player, { x: watchSpot.x, z: watchSpot.z });
+      simulate(FIXED_STEP);
+    }
   }
   updateCamera(0, true);
   renderScene();
@@ -751,7 +988,7 @@ if (isScreenshotMode) {
   updateCamera(0, true);
   renderer.setAnimationLoop((now) => {
     if (!performanceMonitor.shouldRender(now)) return;
-    const deltaTime = Math.min(0.05, (now - previousFrameTime) / 1000);
+    const deltaTime = Math.max(0, Math.min(0.05, (now - previousFrameTime) / 1000));
     previousFrameTime = now;
     if (!paused) simulate(deltaTime);
     updateCamera(deltaTime, false);
@@ -763,6 +1000,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
+  progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };

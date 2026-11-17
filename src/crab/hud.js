@@ -21,6 +21,18 @@ export function createHud(activeQualityName) {
   const bagDot = element('span', 'bag-dot hidden', bagButton);
   const goal = element('div', 'chip goal', topLeft);
 
+  const vitals = element('div', 'vitals', root);
+  const levelBadge = element('div', 'level-badge', vitals, 'Lv 1');
+  const bars = element('div', 'vital-bars', vitals);
+  const healthTrack = element('div', 'health-track', bars);
+  const healthFill = element('div', 'health-fill', healthTrack);
+  const healthText = element('div', 'health-text', healthTrack);
+  const experienceTrack = element('div', 'experience-track', bars);
+  const experienceFill = element('div', 'experience-fill', experienceTrack);
+  const hurtFlash = element('div', 'hurt-flash', root);
+  const deathFade = element('div', 'death-fade', root);
+  const floatLayer = element('div', 'float-layer', root);
+
   const topRight = element('div', 'top-right', root);
   const tide = element('div', 'chip tide', topRight);
   const tideLabel = element('span', '', tide, '🌊');
@@ -98,6 +110,30 @@ export function createHud(activeQualityName) {
     setTide(label, fraction) {
       tideLabel.textContent = `🌊 ${label}`;
       tideFill.style.width = `${Math.round(fraction * 100)}%`;
+    },
+    setVitals(level, health, maxHealth, experience, experienceToNext) {
+      const levelText = `Lv ${level}`;
+      if (levelBadge.textContent !== levelText) levelBadge.textContent = levelText;
+      healthFill.style.width = `${(Math.max(0, health) / maxHealth) * 100}%`;
+      const healthLabel = `${Math.ceil(Math.max(0, health))}/${maxHealth}`;
+      if (healthText.textContent !== healthLabel) healthText.textContent = healthLabel;
+      experienceFill.style.width = experienceToNext ? `${(experience / experienceToNext) * 100}%` : '100%';
+    },
+    floatText(x, y, text, kind) {
+      const label = element('div', `float-text ${kind}`, floatLayer, text);
+      label.style.left = `${x + (Math.random() - 0.5) * 18}px`;
+      label.style.top = `${y}px`;
+      setTimeout(() => label.remove(), 1000);
+    },
+    flashHurt() {
+      hurtFlash.classList.remove('visible');
+      void hurtFlash.offsetWidth;
+      hurtFlash.classList.add('visible');
+    },
+    showDeath() {
+      deathFade.classList.remove('visible');
+      void deathFade.offsetWidth;
+      deathFade.classList.add('visible');
     },
     toast(text) {
       toastBox.textContent = text;

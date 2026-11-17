@@ -10,7 +10,10 @@ export const RESOURCE_TYPES = {
   shellBits: { label: 'Shell bits', icon: '🐚', count: 16, gatherSeconds: 1.0 },
   driftwood: { label: 'Driftwood', icon: '🪵', count: 12, gatherSeconds: 1.3 },
   seaLettuce: { label: 'Sea lettuce', icon: '🥬', count: 12, gatherSeconds: 0.9 },
+  pearls: { label: 'Pearls', icon: '🦪', count: 3, gatherSeconds: 1.6 },
 };
+
+const PEARL_MINIMUM_POOL_DEPTH = 1.4;
 
 function paint(geometry, colorAt) {
   const positions = geometry.attributes.position;
@@ -82,6 +85,24 @@ function buildSeaLettuceGeometry() {
   return mergeGeometries(leaves);
 }
 
+function buildPearlGeometry() {
+  const rough = linearColor(0.42, 0.38, 0.34);
+  const nacre = linearColor(0.92, 0.9, 0.94);
+  const pearlWhite = linearColor(1, 0.97, 0.93);
+  const valve = new THREE.SphereGeometry(0.62, 18, 8, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5).scale(1, 0.32, 1.25);
+  const valvePositions = valve.attributes.position;
+  for (let index = 0; index < valvePositions.count; index++) {
+    const x = valvePositions.getX(index);
+    const z = valvePositions.getZ(index);
+    const ruffle = 1 + 0.08 * Math.sin(Math.atan2(z, x) * 9);
+    valvePositions.setXYZ(index, x * ruffle, valvePositions.getY(index) + 0.2, z * ruffle);
+  }
+  valve.computeVertexNormals();
+  const shellHalf = paint(valve, (color, x, y) => color.copy(nacre).lerp(rough, THREE.MathUtils.smoothstep(0.2 - y, 0.0, 0.16)));
+  const pearl = paint(new THREE.SphereGeometry(0.22, 16, 12).translate(0.05, 0.24, 0.05), (color) => color.copy(pearlWhite));
+  return mergeGeometries([shellHalf, pearl]);
+}
+
 const SPARKLE_VERTEX_GLSL = /* glsl */ `
 attribute float aPhase;
 uniform float uTime;
@@ -112,12 +133,13 @@ void main() {
 
 export function createResources(scene, overlay, world, quality, savedNodes, starterSpots) {
   const random = createRandom(2024);
-  const geometries = { shellBits: buildShellBitGeometry(), driftwood: buildDriftwoodGeometry(), seaLettuce: buildSeaLettuceGeometry() };
+  const geometries = { shellBits: buildShellBitGeometry(), driftwood: buildDriftwoodGeometry(), seaLettuce: buildSeaLettuceGeometry(), pearls: buildPearlGeometry() };
   const highTideMark = TIDE_MIDDLE + TIDE_AMPLITUDE;
   const accepts = {
     shellBits: (x, z, height) => height > TIDE_MIDDLE - 1.4 && height < highTideMark + 1.6 && world.retained.levelAt(x, z) - height < 0.2,
     driftwood: (x, z, height) => height > highTideMark + 0.4 && height < highTideMark + 3.6,
     seaLettuce: (x, z, height) => world.retained.levelAt(x, z) - height > 0.2 || (height > TIDE_MIDDLE - 1.6 && height < TIDE_MIDDLE + 0.6),
+    pearls: (x, z, height) => world.retained.levelAt(x, z) - height > PEARL_MINIMUM_POOL_DEPTH,
   };
   const transform = new THREE.Object3D();
   const nodes = [];
@@ -127,7 +149,7 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
   const sparklePhases = [];
 
   for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
-    const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: type === 'shellBits' ? 0.3 : 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: type === 'shellBits' ? 0.15 : 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
+    const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: type === 'shellBits' || type === 'pearls' ? 0.3 : 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: type === 'shellBits' || type === 'pearls' ? 0.15 : 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
     const mesh = new THREE.InstancedMesh(geometries[type], material, definition.count);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
