@@ -107,7 +107,7 @@ export function createWorkbenchModel(scene, world, quality, spot, labelParent) {
   };
 }
 
-function element(tag, className, parent, text) {
+export function element(tag, className, parent, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
@@ -115,11 +115,11 @@ function element(tag, className, parent, text) {
   return node;
 }
 
-function percent(value) {
+export function percent(value) {
   return `${Math.round(value * 100)}%`;
 }
 
-function shellStatsText(definition) {
+export function shellStatsText(definition) {
   return `🛡 ${definition.defense} · 🏃 ${percent(definition.speedFactor)} · 🗡️ ×${definition.attackFactor.toFixed(2)}`;
 }
 
@@ -131,7 +131,7 @@ function costRow(cost, inventory, parent) {
   }
 }
 
-export function createWorkbenchPanel(root, { gear, inventory, onCraft, onWear, onClose }) {
+export function createWorkbenchPanel(root, { gear, inventory, onCraft, onClose }) {
   const overlay = element('div', 'workbench', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -139,7 +139,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onWear, o
   const closeButton = element('button', 'workbench-close', header, '✕');
   closeButton.setAttribute('aria-label', 'Close');
   const tabRow = element('div', 'workbench-tabs', card);
-  const tabNames = ['Craft', 'Shells', 'Enchant'];
+  const tabNames = ['Craft', 'Enchant'];
   const tabButtons = tabNames.map((name) => {
     const button = element('button', '', tabRow, name);
     button.dataset.tab = name;
@@ -169,29 +169,6 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onWear, o
     }
   }
 
-  function renderShells() {
-    const stats = gear.stats();
-    element('div', 'summary', body, `Now: 🛡 ${stats.defense}  ·  🏃 ${percent(stats.speedFactor)}  ·  🗡️ ${stats.attack} attack`);
-    const listings = [
-      ...gear.state.shells.map((item) => ({ item, definition: SHELLS[item.kind], worn: item.id === gear.state.wornShellId, isShell: true })),
-      ...gear.state.claws.map((item) => ({ item, definition: CLAWS[item.kind], worn: item.id === gear.state.wornClawsId, isShell: false })),
-    ];
-    for (const { item, definition, worn, isShell } of listings) {
-      const row = element('div', worn ? 'item worn' : 'item', body);
-      const text = element('div', 'item-text', row);
-      element('div', 'item-name', text, isShell ? `${definition.label} · ${definition.role}` : definition.label);
-      element('div', 'item-stats', text, isShell ? shellStatsText(definition) : `🗡️ +${definition.attackBonus} attack`);
-      if (isShell && definition.ability) element('div', 'item-ability', text, `${definition.ability.label} — ${definition.ability.description}`);
-      if (worn) {
-        element('div', 'item-badge', row, 'Wearing');
-      } else {
-        const button = element('button', 'item-action', row, 'Wear');
-        button.dataset.wear = String(item.id);
-        button.addEventListener('click', () => onWear(item.id));
-      }
-    }
-  }
-
   function renderEnchant() {
     element('div', 'placeholder', body, 'Enchanting needs pearls 🦪. Find them in the deep parts of the tide pools — coming soon.');
   }
@@ -200,7 +177,6 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onWear, o
     body.replaceChildren();
     for (const button of tabButtons) button.classList.toggle('active', button.dataset.tab === activeTab);
     if (activeTab === 'Craft') renderCraft();
-    else if (activeTab === 'Shells') renderShells();
     else renderEnchant();
   }
 

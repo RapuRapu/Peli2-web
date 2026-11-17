@@ -1,4 +1,3 @@
-import { RESOURCE_TYPES } from './resources.js';
 import { QUALITY_LEVELS } from './quality.js';
 
 function element(tag, className, parent, text) {
@@ -17,15 +16,12 @@ export function createHud(activeQualityName) {
   const pauseButton = element('button', 'pause-button', topLeft);
   pauseButton.setAttribute('aria-label', 'Pause');
   pauseButton.innerHTML = '<svg viewBox="0 0 14 16"><rect x="1" y="1" width="4" height="14" rx="1" fill="#fff8e8"/><rect x="9" y="1" width="4" height="14" rx="1" fill="#fff8e8"/></svg>';
+  const bagButton = element('button', 'bag-button', topLeft, '🎒');
+  bagButton.setAttribute('aria-label', 'Backpack');
+  const bagDot = element('span', 'bag-dot hidden', bagButton);
   const goal = element('div', 'chip goal', topLeft);
 
   const topRight = element('div', 'top-right', root);
-  const inventory = element('div', 'inventory', topRight);
-  const slots = {};
-  for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
-    slots[type] = element('div', 'chip slot', inventory, `${definition.icon} 0`);
-    slots[type].title = definition.label;
-  }
   const tide = element('div', 'chip tide', topRight);
   const tideLabel = element('span', '', tide, '🌊');
   const tideFill = element('div', 'tide-fill', element('div', 'tide-gauge', tide));
@@ -51,10 +47,12 @@ export function createHud(activeQualityName) {
   let resetListener = () => {};
   let qualityListener = () => {};
   let goalListener = () => {};
+  let bagListener = () => {};
   let toastTimer = 0;
   let resetArmed = false;
 
   pauseButton.addEventListener('click', () => pauseListener(true));
+  bagButton.addEventListener('click', () => bagListener());
   goal.addEventListener('click', () => {
     if (goal.classList.contains('action')) goalListener();
   });
@@ -75,6 +73,10 @@ export function createHud(activeQualityName) {
     onReset: (listener) => { resetListener = listener; },
     onQuality: (listener) => { qualityListener = listener; },
     onGoalTap: (listener) => { goalListener = listener; },
+    onBag: (listener) => { bagListener = listener; },
+    setBagDot(visible) {
+      bagDot.classList.toggle('hidden', !visible);
+    },
     root,
     setPaused(paused) {
       pauseMenu.classList.toggle('visible', paused);
@@ -82,13 +84,10 @@ export function createHud(activeQualityName) {
       resetButton.classList.remove('armed');
       resetButton.textContent = 'Start over';
     },
-    setInventory(counts, bumpedType) {
-      for (const [type, definition] of Object.entries(RESOURCE_TYPES)) slots[type].textContent = `${definition.icon} ${counts[type] || 0}`;
-      if (bumpedType) {
-        slots[bumpedType].classList.remove('bump');
-        void slots[bumpedType].offsetWidth;
-        slots[bumpedType].classList.add('bump');
-      }
+    bumpBag() {
+      bagButton.classList.remove('bump');
+      void bagButton.offsetWidth;
+      bagButton.classList.add('bump');
     },
     setGoal(text, { done = false, action = false } = {}) {
       goal.classList.toggle('hidden', !text);

@@ -65,7 +65,7 @@ export function createGear(saved) {
     const definition = (category === 'shell' ? SHELLS : CLAWS)[kind];
     if (!definition || !definition.cost || !canAfford(definition.cost, inventory)) return null;
     for (const [type, amount] of Object.entries(definition.cost)) inventory[type] -= amount;
-    const item = { id: state.nextId++, kind, enchant: 0 };
+    const item = { id: state.nextId++, kind, enchant: 0, isNew: true };
     (category === 'shell' ? state.shells : state.claws).push(item);
     return item;
   }
@@ -88,8 +88,18 @@ export function createGear(saved) {
     };
   }
 
+  function hasNewItems() {
+    return [...state.shells, ...state.claws].some((item) => item.isNew);
+  }
+
+  function markAllSeen() {
+    for (const item of [...state.shells, ...state.claws]) delete item.isNew;
+  }
+
   return {
     state,
+    hasNewItems,
+    markAllSeen,
     craft,
     wear,
     stats,

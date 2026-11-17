@@ -90,19 +90,31 @@ with sync_playwright() as playwright:
     snail_speed = page.evaluate(WALK_SPEED_SAMPLE)
     speeds = {'snail': snail_speed}
     stats = {}
+    bag_dot_after_craft = page.evaluate("() => !document.querySelector('#hud .bag-dot').classList.contains('hidden')")
+    page.evaluate("() => __debug.workbenchPanel.close()")
+    page.click('#hud .bag-button')
+    backpack_view = page.evaluate("() => ({ open: __debug.backpack.isOpen, newBadges: document.querySelectorAll('#hud .backpack .new-badge').length, materials: [...document.querySelectorAll('#hud .backpack [data-material]')].map(m => m.textContent), wearButtons: document.querySelectorAll('#hud .backpack [data-wear]').length, wornBadge: document.querySelector('#hud .backpack .item.worn .item-badge')?.textContent, hudCountersGone: !document.querySelector('#hud .slot') })")
+    checks['backpack'] = {'dotAfterCraft': bag_dot_after_craft, **backpack_view, 'pass': bag_dot_after_craft and backpack_view['open'] and backpack_view['newBadges'] == 3 and len(backpack_view['materials']) == 3 and backpack_view['wearButtons'] == 3 and backpack_view['wornBadge'] == '✓ Wearing' and backpack_view['hudCountersGone']}
+    page.click('#hud .backpack .workbench-close')
+    after_close = page.evaluate("() => ({ dotHidden: document.querySelector('#hud .bag-dot').classList.contains('hidden'), anyNew: __debug.gear.hasNewItems() })")
+    checks['backpack']['afterClose'] = after_close
+    checks['backpack']['pass'] = checks['backpack']['pass'] and after_close['dotHidden'] and not after_close['anyNew']
     for kind in ('turban', 'cone'):
-        page.evaluate("() => __debug.workbenchPanel.open('Shells')")
+        page.click('#hud .bag-button')
         shell_id = page.evaluate(f"() => __debug.gear.state.shells.find(s => s.kind === '{kind}').id")
-        page.click(f'#hud .workbench [data-wear="{shell_id}"]')
+        page.click(f'#hud .backpack [data-wear="{shell_id}"]')
+        page.evaluate("() => __debug.backpack.close()")
         stats[kind] = page.evaluate("() => __debug.gear.stats()")
         speeds[kind] = page.evaluate(WALK_SPEED_SAMPLE)
     claws_id = page.evaluate("() => __debug.gear.state.claws.find(c => c.kind === 'shellEdged').id")
-    page.evaluate("() => __debug.workbenchPanel.open('Shells')")
-    page.click(f'#hud .workbench [data-wear="{claws_id}"]')
+    page.click('#hud .bag-button')
+    page.click(f'#hud .backpack [data-wear="{claws_id}"]')
+    worn_first = page.evaluate("() => document.querySelector('#hud .backpack .item').classList.contains('worn')")
+    page.evaluate("() => __debug.backpack.close()")
     stats['cone+shellEdged'] = page.evaluate("() => __debug.gear.stats()")
     ratio = {kind: round(speeds[kind] / speeds['snail'], 3) for kind in ('turban', 'cone')}
     checks['wearAndStats'] = {'speeds': {k: round(v, 2) for k, v in speeds.items()}, 'ratio': ratio, 'stats': stats,
-        'pass': abs(ratio['turban'] - 0.88) < 0.02 and abs(ratio['cone'] - 1.05) < 0.02 and stats['turban']['defense'] == 7 and stats['cone']['defense'] == 3 and stats['cone']['attack'] == 5 and stats['cone+shellEdged']['attack'] == 10}
+        'pass': abs(ratio['turban'] - 0.88) < 0.02 and abs(ratio['cone'] - 1.05) < 0.02 and stats['turban']['defense'] == 7 and stats['cone']['defense'] == 3 and stats['cone']['attack'] == 5 and stats['cone+shellEdged']['attack'] == 10 and worn_first}
 
     page.evaluate("() => window.dispatchEvent(new Event('pagehide'))")
     page.reload()
@@ -119,6 +131,21 @@ with sync_playwright() as playwright:
     migrated = legacy_page.evaluate("() => { const d = __debug; return { version: d.save.version, x: Math.round(d.player.x), z: Math.round(d.player.z), inventory: { ...d.save.inventory }, worn: d.gear.wornShell().kind, built: d.save.workshopBuilt } }")
     checks['migrateVersion1'] = {**migrated, 'pass': migrated['version'] == 2 and migrated['inventory'] == {'shellBits': 4, 'driftwood': 2} and migrated['worn'] == 'snail' and not migrated['built'] and abs(migrated['x'] - 20) <= 1 and abs(migrated['z'] + 30) <= 1}
     legacy_context.close()
+
+    phone_context = browser.new_context(viewport={'width': 412, 'height': 915}, device_scale_factor=2, is_mobile=True, has_touch=True)
+    phone = phone_context.new_page()
+    phone.on('pageerror', lambda error: errors.append(str(error)))
+    phone.goto(URL)
+    phone.wait_for_function('!!window.__debug', timeout=180000)
+    phone.evaluate("() => { const d = __debug; d.save.inventory = { shellBits: 15, driftwood: 3, seaLettuce: 7 }; d.buildWorkshop(); d.workbenchPanel.open('Craft'); }")
+    phone.tap('#hud .workbench [data-craft="shell:turban"]')
+    phone.tap('#hud .workbench-close')
+    phone.tap('#hud .bag-button')
+    phone_shell = phone.evaluate("() => __debug.gear.state.shells.find(s => s.kind === 'turban').id")
+    phone.tap(f'#hud .backpack [data-wear="{phone_shell}"]')
+    phone_result = phone.evaluate("() => ({ worn: __debug.gear.wornShell().kind, badgeOnTurban: document.querySelector('#hud .backpack .item.worn .item-name').textContent })")
+    checks['phoneTouchWear'] = {**phone_result, 'pass': phone_result['worn'] == 'turban' and phone_result['badgeOnTurban'].startswith('Turban')}
+    phone_context.close()
 
     for quality in ('medium', 'high'):
         page.goto(URL.replace('quality=low', f'quality={quality}'))

@@ -21,8 +21,21 @@
   #hud .pause-button svg { width: 14px; height: 16px; display: block; margin: 0 auto; }
   #hud .goal { overflow: hidden; text-overflow: ellipsis; }
   #hud .goal.done { background: rgba(48, 110, 60, 0.75); }
-  #hud .inventory { display: flex; gap: 6px; }
-  #hud .slot.bump { animation: slot-bump 0.45s ease-out; }
+  #hud .bag-button { position: relative; width: 44px; height: 34px; padding: 0; border-radius: 12px; border: 1px solid rgba(255, 244, 214, 0.5); background: rgba(26, 34, 38, 0.6); font-size: 19px; line-height: 1; flex-shrink: 0; }
+  #hud .bag-button.bump { animation: slot-bump 0.45s ease-out; }
+  #hud .bag-dot { position: absolute; top: -4px; right: -4px; width: 13px; height: 13px; border-radius: 50%; background: #ff9c3a; border: 2px solid #fff3d6; }
+  #hud .bag-dot.hidden { display: none; }
+  #hud .workbench .section-title { font-size: 13px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.7; padding: 4px 4px 0; }
+  #hud .workbench .materials { display: flex; flex-wrap: wrap; gap: 8px; }
+  #hud .workbench .material { padding: 7px 11px; border-radius: 11px; background: #384449; font-size: 15px; }
+  #hud .workbench .item.worn .item-badge { background: none; color: #bfeaf2; font-weight: bold; padding: 4px 2px; }
+  #hud .workbench .backpack-top { display: flex; flex-direction: column; gap: 8px; }
+  #hud .workbench .material { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 11px; }
+  #hud .workbench .material-label { font-size: 11px; opacity: 0.7; }
+  #hud .workbench .gear-list { display: flex; flex-direction: column; gap: 8px; }
+  #hud .workbench .new-badge { margin-left: 8px; padding: 1px 7px; border-radius: 8px; background: #ff9c3a; color: #2a1606; font-size: 12px; vertical-align: 2px; }
+  #hud .bag-dot { width: 15px; height: 15px; }
+  @media (min-width: 640px) and (max-height: 500px) { #hud .backpack .workbench-card { width: min(96vw, 860px); } #hud .workbench .backpack-top { flex-direction: row; align-items: center; justify-content: space-between; } #hud .workbench .gear-list { display: grid; grid-template-columns: 1fr 1fr; } #hud .workbench .section-title { padding-top: 0; } }
   @keyframes slot-bump { 30% { transform: scale(1.25); background: rgba(210, 150, 50, 0.9); } }
   #hud .tide { display: flex; align-items: center; gap: 7px; font-size: 14px; background: rgba(18, 60, 78, 0.6); }
   #hud .tide-gauge { width: 44px; height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.4); overflow: hidden; }

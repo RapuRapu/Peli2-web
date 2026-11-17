@@ -16,6 +16,7 @@ import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
 import { createGear, SHELLS, CLAWS } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel, WORKSHOP_REACH, WORKSHOP_BLOCK_RADIUS } from './workbench.js';
+import { createBackpackPanel } from './backpack.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -68,7 +69,9 @@ const POSES = {
   15: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'snail' },
   16: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'turban' },
   17: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'cone' },
-  18: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Shells', crafted: ['turban', 'cone'] },
+  18: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['turban', 'cone'] },
+  20: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['turban', 'cone'] },
+  21: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, crafted: ['turban'] },
   19: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 12, driftwood: 3, seaLettuce: 5 } },
 };
 
@@ -160,9 +163,27 @@ const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
   onCraft: craftItem,
-  onWear: wearItem,
   onClose: () => workbenchPanel.close(),
 });
+const backpack = createBackpackPanel(hud.root, {
+  gear,
+  inventory: () => save.inventory,
+  onWear: wearItem,
+  onClose: () => {
+    backpack.close();
+    hud.setBagDot(false);
+    persist();
+  },
+});
+
+function openBackpack() {
+  workbenchPanel.close();
+  backpack.open();
+}
+
+function anyPanelOpen() {
+  return workbenchPanel.isOpen || backpack.isOpen;
+}
 
 const destinationMarker = new THREE.Mesh(
   new THREE.RingGeometry(0.55, 0.78, 40).rotateX(-Math.PI / 2),
@@ -244,7 +265,8 @@ function hasCraftedGear() {
 }
 
 function refreshHud(bumpedType) {
-  hud.setInventory(save.inventory, bumpedType);
+  if (bumpedType) hud.bumpBag();
+  if (backpack.isOpen) backpack.render();
   if (!save.workshopBuilt) {
     if (goalReached()) hud.setGoal('🔨 Build workshop', { action: true });
     else hud.setGoal(goalText());
@@ -280,7 +302,8 @@ function craftItem(category, kind) {
   const item = gear.craft(category, kind, save.inventory);
   if (!item) return null;
   const label = (category === 'shell' ? SHELLS : CLAWS)[kind].label;
-  hud.toast(`🔨 ${label} crafted — wear it under Shells`);
+  hud.toast(`🔨 New ${label.toLowerCase()}! Open 🎒 to wear it`);
+  hud.setBagDot(true);
   refreshHud(null);
   workbenchPanel.render();
   persist();
@@ -290,7 +313,7 @@ function craftItem(category, kind) {
 function wearItem(id) {
   if (!gear.wear(id)) return false;
   hermit.setShell(SHELLS[gear.wornShell().kind].look);
-  workbenchPanel.render();
+  backpack.render();
   persist();
   return true;
 }
@@ -525,7 +548,7 @@ function renderScene() {
   renderer.getDrawingBufferSize(drawingBufferSize);
   resources.update(simulationTime, Math.min(drawingBufferSize.x, drawingBufferSize.y) * 2.4);
   destinationMarker.scale.setScalar(1 + 0.12 * Math.sin(simulationTime * 5));
-  workshop.update(simulationTime, !hasCraftedGear() && !workbenchPanel.isOpen, camera);
+  workshop.update(simulationTime, !hasCraftedGear() && !anyPanelOpen(), camera);
   const farZoomShare = THREE.MathUtils.smoothstep(cameraDistance, ...FAR_ZOOM_RING_DISTANCES);
   playerRing.position.set(player.x, player.y + 0.15, player.z);
   playerRing.scale.setScalar(1 + farZoomShare * 0.9);
@@ -583,7 +606,7 @@ function workshopUnder(clientX, clientY) {
 }
 
 function handleTap(clientX, clientY, isNewTouch) {
-  if (paused || workbenchPanel.isOpen) return;
+  if (paused || anyPanelOpen()) return;
   if (isNewTouch && workshopUnder(clientX, clientY)) {
     if (Math.hypot(WORKSHOP_SPOT.x - player.x, WORKSHOP_SPOT.z - player.z) <= WORKSHOP_REACH) workbenchPanel.open();
     else walkToWorkshop();
@@ -638,7 +661,11 @@ canvas.addEventListener('wheel', (event) => {
   cameraDistance = THREE.MathUtils.clamp(cameraDistance * Math.exp(event.deltaY * 0.0012), ...CAMERA_DISTANCE_LIMITS);
 }, { passive: false });
 addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && workbenchPanel.isOpen) workbenchPanel.close();
+  if (event.key === 'Escape') {
+    workbenchPanel.close();
+    if (backpack.isOpen) backpack.close();
+    hud.setBagDot(gear.hasNewItems());
+  }
   heldKeys.add(event.key.toLowerCase());
 });
 addEventListener('keyup', (event) => heldKeys.delete(event.key.toLowerCase()));
@@ -652,6 +679,8 @@ function setPaused(value) {
 }
 hud.onPause(setPaused);
 hud.onGoalTap(buildWorkshop);
+hud.onBag(openBackpack);
+hud.setBagDot(gear.hasNewItems());
 hud.onReset(() => {
   try {
     localStorage.removeItem(SAVE_KEY);
@@ -698,6 +727,7 @@ if (isScreenshotMode) {
   if (pose.shell) hermit.setShell(SHELLS[pose.shell].look);
   refreshHud(null);
   if (pose.panel) workbenchPanel.open(pose.panel);
+  if (pose.backpack) openBackpack();
   if (pose.walkFrom) {
     const walkStart = navigation.nearestWalkable(pose.walkFrom.x, pose.walkFrom.z, 40);
     Object.assign(player, { x: walkStart.x, z: walkStart.z });
@@ -732,7 +762,7 @@ if (isScreenshotMode) {
 
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
-  tracks, ripples, hermit, gear, workshop, workbenchPanel, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
+  tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };
