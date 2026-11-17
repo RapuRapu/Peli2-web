@@ -108,8 +108,10 @@ function buildClaw(material, size) {
 }
 
 export function createHermit(scene, quality) {
-  const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), { wetDarkening: 0.9, wetRoughness: 0.14, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics });
-  const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: 0.1, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics });
+  const wetnessUniforms = { uBodyWetness: { value: 0 }, uBodyWetTop: { value: -1000 } };
+  const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
+  const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), wetSurface);
+  const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12 });
   const eyeMaterial = new THREE.MeshStandardMaterial({ color: EYE, roughness: 0.08 });
 
   const root = new THREE.Group();
@@ -223,5 +225,5 @@ export function createHermit(scene, quality) {
     antennae[1].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(pose.idleTime * 2.3 + 0.9) * 0.09;
   }
 
-  return { root, update };
+  return { root, update, wetnessUniforms };
 }

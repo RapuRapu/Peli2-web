@@ -5,16 +5,19 @@ const TRACK_CAPACITY = 420;
 const TRACK_LIFETIME_SECONDS = 75;
 const STEP_LENGTH = 0.62;
 const FOOT_SPREAD = 0.42;
+const WET_TRACK_STRENGTH = 1.8;
+const WET_TRACK_THRESHOLD = 0.3;
 
 const TRACK_VERTEX_GLSL = /* glsl */ `
 attribute vec4 aTrack;
 attribute float aHeading;
+attribute float aStrength;
 uniform float uTime;
 varying float vFade;
 varying vec2 vLocal;
 void main() {
   float age = uTime - aTrack.w;
-  vFade = (1.0 - smoothstep(${(TRACK_LIFETIME_SECONDS * 0.55).toFixed(1)}, ${TRACK_LIFETIME_SECONDS.toFixed(1)}, age)) * step(0.0, age);
+  vFade = aStrength * (1.0 - smoothstep(${(TRACK_LIFETIME_SECONDS * 0.55).toFixed(1)}, ${TRACK_LIFETIME_SECONDS.toFixed(1)}, age)) * step(0.0, age);
   vLocal = position.xz;
   vec2 turned = vec2(position.x * cos(aHeading) + position.z * sin(aHeading), -position.x * sin(aHeading) + position.z * cos(aHeading));
   gl_Position = projectionMatrix * viewMatrix * vec4(aTrack.x + turned.x, aTrack.y, aTrack.z + turned.y, 1.0);
@@ -27,7 +30,7 @@ varying vec2 vLocal;
 void main() {
   float dent = 1.0 - smoothstep(0.35, 1.0, length(vLocal * vec2(9.0, 5.0)));
   if (dent * vFade < 0.01) discard;
-  gl_FragColor = vec4(vec3(0.2, 0.14, 0.08), dent * vFade * 0.42);
+  gl_FragColor = vec4(vec3(0.2, 0.14, 0.08), min(1.0, dent * vFade * 0.42));
 }
 `;
 
@@ -40,6 +43,9 @@ export function createTracks(scene, world) {
   const headings = new Float32Array(TRACK_CAPACITY);
   const trackAttribute = new THREE.InstancedBufferAttribute(trackData, 4);
   const headingAttribute = new THREE.InstancedBufferAttribute(headings, 1);
+  const strengths = new Float32Array(TRACK_CAPACITY).fill(1);
+  const strengthAttribute = new THREE.InstancedBufferAttribute(strengths, 1);
+  geometry.setAttribute('aStrength', strengthAttribute);
   geometry.setAttribute('aTrack', trackAttribute);
   geometry.setAttribute('aHeading', headingAttribute);
   geometry.instanceCount = TRACK_CAPACITY;
@@ -55,12 +61,14 @@ export function createTracks(scene, world) {
   let previousZ = null;
   let wipeTimer = 0;
 
-  function stamp(x, z, heading, time) {
+  function stamp(x, z, heading, time, strength) {
     trackData.set([x, world.heightAt(x, z) + 0.03, z, time], nextSlot * 4);
     headings[nextSlot] = heading;
+    strengths[nextSlot] = strength;
     nextSlot = (nextSlot + 1) % TRACK_CAPACITY;
     trackAttribute.needsUpdate = true;
     headingAttribute.needsUpdate = true;
+    strengthAttribute.needsUpdate = true;
   }
 
   function update(deltaTime, time, player, seaLevel) {
@@ -73,10 +81,11 @@ export function createTracks(scene, world) {
       leftSide = !leftSide;
       if (!standsInWater) {
         const side = leftSide ? -1 : 1;
+        const strength = player.wetness > WET_TRACK_THRESHOLD ? WET_TRACK_STRENGTH : 1;
         const sideX = Math.cos(player.heading) * FOOT_SPREAD * side;
         const sideZ = -Math.sin(player.heading) * FOOT_SPREAD * side;
-        stamp(player.x + sideX, player.z + sideZ, player.heading, time);
-        stamp(player.x + sideX * 1.5 - Math.sin(player.heading) * 0.45, player.z + sideZ * 1.5 - Math.cos(player.heading) * 0.45, player.heading + side * 0.5, time);
+        stamp(player.x + sideX, player.z + sideZ, player.heading, time, strength);
+        stamp(player.x + sideX * 1.5 - Math.sin(player.heading) * 0.45, player.z + sideZ * 1.5 - Math.cos(player.heading) * 0.45, player.heading + side * 0.5, time, strength);
       }
     }
     wipeTimer += deltaTime;

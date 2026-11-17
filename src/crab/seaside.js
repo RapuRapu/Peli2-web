@@ -80,6 +80,11 @@ float seaPoolWeight = smoothstep(0.22, 0.5, seaPool.g);
 float seaWetLine = mix(uWetLevel, max(uWetLevel, seaPool.b + 0.3), seaPoolWeight);
 float seaAboveWater = vSeaWorld.y - mix(uSeaLevel, max(uSeaLevel, seaPool.b), seaPoolWeight);
 float seaWet = 1.0 - smoothstep(0.0, 0.55, vSeaWorld.y - seaWetLine - seaWetEdge);
+#ifdef SEA_BODY_WETNESS
+  float seaBelowWetTop = uBodyWetTop - vSeaWorld.y;
+  float seaTideLine = smoothstep(0.0, 0.03, seaBelowWetTop) * (1.0 - smoothstep(0.07, 0.16, seaBelowWetTop));
+  seaWet = max(step(0.0, seaDepth), uBodyWetness * (smoothstep(-0.03, 0.03, seaBelowWetTop) + 0.7 * seaTideLine));
+#endif
 `;
 
 const SAND_FUNCTIONS_GLSL = /* glsl */ `
@@ -119,7 +124,11 @@ const SAND_NORMAL_GLSL = /* glsl */ `
 
 const WET_ROUGHNESS_GLSL = /* glsl */ `
 #include <roughnessmap_fragment>
-float seaGloss = seaWet * (1.0 - smoothstep(-0.05, 0.25, seaDepth)) * (1.0 - smoothstep(0.05, 1.1, seaAboveWater)) * WET_GLOSS;
+#ifdef SEA_BODY_WETNESS
+  float seaGloss = seaWet * (1.0 - smoothstep(-0.05, 0.25, seaDepth)) * WET_GLOSS;
+#else
+  float seaGloss = seaWet * (1.0 - smoothstep(-0.05, 0.25, seaDepth)) * (1.0 - smoothstep(0.05, 1.1, seaAboveWater)) * WET_GLOSS;
+#endif
 diffuseColor.rgb *= mix(1.0, WET_DARKENING, seaWet);
 roughnessFactor = mix(roughnessFactor, WET_ROUGHNESS, seaGloss);
 `;
@@ -147,6 +156,16 @@ if (seaDepth > 0.0) {
   float sparkleSeed = texture2D(uNoise, vSeaWorld.xz * 2.3).a * texture2D(uNoise, vSeaWorld.xz * 1.3 + 0.5).g;
   float sparkleAlign = pow(max(dot(reflect(-sparkleSun, normal), sparkleView), 0.0), 14.0);
   outgoingLight += uSunColor * smoothstep(0.52, 0.6, sparkleSeed) * sparkleAlign * 2.6 * (1.0 - smoothstep(-0.2, 0.2, seaDepth));
+}
+#endif
+#ifdef SEA_BODY_WETNESS
+{
+  float wetAboveWater = seaWet * (1.0 - step(0.0, seaDepth));
+  float wetRim = pow(1.0 - max(dot(normal, normalize(-vViewPosition)), 0.0), 5.0);
+  outgoingLight += vec3(0.62, 0.72, 0.82) * wetRim * min(wetAboveWater, 1.0) * 0.05;
+  vec3 wetSunView = normalize((viewMatrix * vec4(uSunDirection, 0.0)).xyz);
+  float wetGlint = pow(max(dot(reflect(-wetSunView, normal), normalize(-vViewPosition)), 0.0), 36.0);
+  outgoingLight += uSunColor * wetGlint * min(wetAboveWater, 1.0) * 3.5;
 }
 #endif
 #ifdef SEA_GLOW
@@ -220,24 +239,25 @@ export function createMotionDepthMaterial(vertexMotion) {
   return material;
 }
 
-export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null } = {}) {
+export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null } = {}) {
   const surfaceCode = surface ? SURFACES[surface] : null;
   material.defines = { ...(material.defines || {}), WET_DARKENING: wetDarkening.toFixed(3), WET_ROUGHNESS: wetRoughness.toFixed(3), CAUSTIC_STRENGTH: causticStrength.toFixed(3), WET_GLOSS: wetGloss.toFixed(3) };
   if (surface === 'sand') material.defines.SEA_SAND = '';
   if (chromaticCaustics) material.defines.SEA_CHROMATIC_CAUSTICS = '';
   if (glow > 0) material.defines.SEA_GLOW = glow.toFixed(3);
   if (glowPulse) material.defines.SEA_GLOW_PULSE = '';
+  if (bodyWetness) material.defines.SEA_BODY_WETNESS = '';
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {});
+    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {});
     shader.vertexShader = injectVertexMotion(shader.vertexShader.replace('#include <project_vertex>', VERTEX_WORLD_GLSL), vertexMotion)
       .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vSeaWorld;\n${SEA_COMMON_GLSL}${surfaceCode ? surfaceCode.functions : ''}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vSeaWorld;\n${bodyWetness ? 'uniform float uBodyWetness;\nuniform float uBodyWetTop;\n' : ''}${SEA_COMMON_GLSL}${surfaceCode ? surfaceCode.functions : ''}`)
       .replace('#include <color_fragment>', WET_COLOR_GLSL + (surfaceCode ? surfaceCode.color : ''))
       .replace('#include <roughnessmap_fragment>', WET_ROUGHNESS_GLSL)
       .replace('#include <opaque_fragment>', CAUSTICS_GLSL);
     if (surfaceCode) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', surfaceCode.normal);
   };
-  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}`;
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}`;
   return material;
 }
