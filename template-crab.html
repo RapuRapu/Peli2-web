@@ -140,6 +140,15 @@
   #hud:not(.underground) .burrow-label { display: none; }
   #hud.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); }
   #hud.panel-open .burrow-buttons, #hud.panel-open .mode-bar, #hud.panel-open .world-label { visibility: hidden; }
+  #hud .travel-button { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 8px); padding: 12px 18px; border-radius: 14px; border: 2px solid #5a3d1c; background: rgba(255, 244, 214, 0.97); color: #3a2a14; text-shadow: none; font-size: 18px; font-weight: bold; pointer-events: auto; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
+  #hud .travel-button.hidden { display: none; }
+  #hud .travel-button.bump { animation: slot-bump 0.45s ease-out; }
+  #hud.underground .travel-button { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px); }
+  #hud.travel-shown:not(.underground) .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); }
+  #hud.travel-shown.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 124px); }
+  #hud.panel-open .travel-button, #hud.placing .travel-button { visibility: hidden; }
+  #hud.travel-shown .entrance-label, #hud.travel-shown .exit-label { visibility: hidden; }
+  @media (max-height: 500px) { #hud.underground .hint, #hud.travel-shown.underground .hint { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 84px); width: min(92vw, 820px); } }
   #hud.placing .burrow-label { visibility: hidden; }
   #hud .workbench .item-action.small:disabled { opacity: 0.28; }
   #hud .workbench .item-action.small { padding: 7px 11px; font-size: 14px; }

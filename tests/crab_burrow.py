@@ -27,7 +27,12 @@ FLOW = r'''
   out.burrowExists = d.burrow.exists;
   out.goalAfterDig = goal.textContent;
   d.walkToEntrance();
-  out.enterSeconds = window.__step(20, () => d.isUnderground());
+  out.walkSeconds = window.__step(20, () => d.travelOption() === 'enter');
+  out.stayedOutsideAfterWalk = !d.isUnderground();
+  d.renderScene();
+  out.travelButtonShown = !document.querySelector('#hud .travel-button').classList.contains('hidden');
+  document.querySelector('#hud .travel-button').click();
+  out.enterSeconds = window.__step(2, () => d.isUnderground());
   out.underground = d.isUnderground();
   out.hudUnderground = document.querySelector('#hud').classList.contains('underground');
   out.cameraOnBurrowLayer = d.camera.layers.mask === 2;
@@ -143,6 +148,7 @@ with sync_playwright() as playwright:
         'startsWithDigGoal': flow['firstGoal'] == '🕳️ Dig a burrow' and flow['firstGoalIsAction'] and flow['modeShown'],
         'wetSpotRefused': flow['wetRefused'],
         'entranceDug': flow['spotAccepted'] and flow['burrowExists'] and flow['goalAfterDig'].startswith('Workshop:'),
+        'entersOnlyByButton': flow['stayedOutsideAfterWalk'] and flow['travelButtonShown'],
         'entersBurrow': flow['underground'] and flow['hudUnderground'] and flow['cameraOnBurrowLayer'] and flow['buildButtonShown'] and abs(flow['playerY'] - 200) < 0.01,
         'digsCell': flow['digStarted'] and flow['cellDug'] and flow['notAdjacentRefused'],
         'buildPanelPlacement': flow['buildPanelOpen'] and flow['placingAfterChoose'] and after['workshopBuilt'] and after['inventoryAfterWorkshop'].get('shellBits') == 0,
@@ -184,8 +190,10 @@ with sync_playwright() as playwright:
     dug_by_touch = touch.evaluate('() => window.__debug.burrow.exists')
     entrance_screen = touch.evaluate('() => { const d = window.__debug; d.updateCamera(0, true); d.renderScene(); const e = d.burrow.state.entrance; return window.__screenOf(e.x, d.world.heightAt(e.x, e.z) + 0.4, e.z); }')
     touch.touchscreen.tap(entrance_screen['x'], entrance_screen['y'])
-    touch.evaluate('() => window.__step(20, () => window.__debug.isUnderground())')
-    entered_by_touch = touch.evaluate('() => window.__debug.isUnderground()')
+    touch.evaluate('() => { window.__step(20, () => window.__debug.travelOption() === "enter"); window.__debug.renderScene(); }')
+    outside_after_tap = touch.evaluate('() => !window.__debug.isUnderground()')
+    touch.tap('#hud .travel-button')
+    entered_by_touch = outside_after_tap and touch.evaluate('() => window.__debug.isUnderground()')
     checks['touchDigAndEnter'] = previewed and dug_by_touch and entered_by_touch
     print(json.dumps({'touchDug': dug_by_touch, 'touchEntered': entered_by_touch}))
     mobile.close()

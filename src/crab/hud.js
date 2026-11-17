@@ -23,6 +23,7 @@ export function createHud(activeQualityName) {
   const burrowButtons = element('div', 'burrow-buttons hidden', root);
   const helpersButton = element('button', 'build-button helpers-button', burrowButtons, '🦀 Helpers');
   const buildButton = element('button', 'build-button build-open', burrowButtons, '🏗️ Build');
+  const travelButton = element('button', 'travel-button hidden', root);
   const modeBar = element('div', 'mode-bar hidden', root);
   const modeText = element('span', 'mode-text', modeBar);
   const modeCancel = element('button', 'mode-cancel', modeBar, 'Cancel');
@@ -81,6 +82,8 @@ export function createHud(activeQualityName) {
   let buildListener = () => {};
   let helpersListener = () => {};
   let modeCancelListener = () => {};
+  let travelListener = () => {};
+  let travelShown = null;
   let toastTimer = 0;
   let resetArmed = false;
 
@@ -89,6 +92,7 @@ export function createHud(activeQualityName) {
   buildButton.addEventListener('click', () => buildListener());
   helpersButton.addEventListener('click', () => helpersListener());
   modeCancel.addEventListener('click', () => modeCancelListener());
+  travelButton.addEventListener('click', () => travelListener());
   goal.addEventListener('click', () => {
     if (goal.classList.contains('action')) goalListener();
   });
@@ -116,6 +120,19 @@ export function createHud(activeQualityName) {
     onBag: (listener) => { bagListener = listener; },
     onBuild: (listener) => { buildListener = listener; },
     onHelpers: (listener) => { helpersListener = listener; },
+    onTravel: (listener) => { travelListener = listener; },
+    setTravel(option) {
+      if (option === travelShown) return;
+      travelShown = option;
+      travelButton.classList.toggle('hidden', !option);
+      root.classList.toggle('travel-shown', Boolean(option));
+      if (option) travelButton.textContent = option === 'enter' ? '⬇ Enter burrow' : '⬆ Go outside';
+    },
+    bumpTravel() {
+      travelButton.classList.remove('bump');
+      void travelButton.offsetWidth;
+      travelButton.classList.add('bump');
+    },
     setBuildButton(visible) {
       burrowButtons.classList.toggle('hidden', !visible);
     },

@@ -199,7 +199,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   entranceGroup.add(mound);
   entranceGroup.visible = false;
   scene.add(entranceGroup);
-  const entranceLabel = element('div', 'world-label surface-label hidden', labelParent, '🕳️ Burrow');
+  const entranceLabel = element('div', 'world-label surface-label entrance-label hidden', labelParent, '🕳️ Burrow');
 
   const interior = new THREE.Group();
   interior.position.set(BURROW_ORIGIN.x, BURROW_ORIGIN.y, BURROW_ORIGIN.z);
@@ -240,7 +240,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   highlights.renderOrder = 6;
   interior.add(highlights);
   scene.add(interior);
-  const exitLabel = element('div', 'world-label burrow-label hidden', labelParent, '⬆ Exit');
+  const exitLabel = element('div', 'world-label burrow-label exit-label hidden', labelParent, '⬆ Exit');
   const stationMeshes = new Map();
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
@@ -479,9 +479,9 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     return Math.hypot((projected.x * 0.5 + 0.5) * innerWidth - clientX, (-projected.y * 0.5 + 0.5) * innerHeight - clientY);
   }
 
-  function entranceUnder(clientX, clientY, camera) {
+  function entranceUnder(clientX, clientY, camera, radiusPixels = PICK_RADIUS_PIXELS) {
     if (!state.entrance) return false;
-    return screenDistance(state.entrance.x, entranceGroup.position.y + 0.4, state.entrance.z, clientX, clientY, camera) < PICK_RADIUS_PIXELS;
+    return screenDistance(state.entrance.x, entranceGroup.position.y + 0.4, state.entrance.z, clientX, clientY, camera) < radiusPixels;
   }
 
   function shaftUnder(clientX, clientY, camera) {

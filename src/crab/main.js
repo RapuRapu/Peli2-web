@@ -47,6 +47,12 @@ const WADE_SPEED = 5.2;
 const TURN_RATE = 9;
 const GATHER_REACH = 2.5;
 const PICK_RADIUS_PIXELS = 46;
+const ENTRANCE_PICK_RADIUS_PIXELS = 30;
+const DRAG_START_PIXELS = 14;
+const SURFACE_CAMERA_DISTANCE = 32;
+const BURROW_FRAMED_WIDTH = 11;
+const BURROW_FRAMED_DEPTH = 17;
+const TRAVEL_REACH_SURFACE = ENTRANCE_REACH + 0.6;
 const STARTING_TIDE_TIME = TIDE_PERIOD_SECONDS * 0.56;
 const WET_SAND_DRYING_RATE = 0.006;
 const HOME_SPOT = { x: 13, z: -21 };
@@ -461,7 +467,20 @@ for (const marker of [destinationMarker, playerRing]) marker.layers.enable(BURRO
 
 const camera = new THREE.PerspectiveCamera(LANDSCAPE_FIELD_OF_VIEW, 1, 1.5, 1600);
 const cameraFocus = new THREE.Vector3();
-let cameraDistance = 32;
+const cameraDistances = { surface: save.cameraDistances?.surface ?? SURFACE_CAMERA_DISTANCE, burrow: save.cameraDistances?.burrow ?? null };
+let cameraDistance = cameraDistances.surface;
+
+function framedBurrowCameraDistance() {
+  const aspect = innerWidth / innerHeight;
+  const verticalHalfTangent = Math.max(Math.tan(THREE.MathUtils.degToRad(LANDSCAPE_FIELD_OF_VIEW / 2)), Math.tan(THREE.MathUtils.degToRad(MINIMUM_HORIZONTAL_FIELD_OF_VIEW / 2)) / aspect);
+  const forWidth = BURROW_FRAMED_WIDTH / (2 * verticalHalfTangent * aspect);
+  const forDepth = (BURROW_FRAMED_DEPTH * Math.sin(CAMERA_PITCH)) / (2 * verticalHalfTangent);
+  return THREE.MathUtils.clamp(Math.max(forWidth, forDepth), ...CAMERA_DISTANCE_LIMITS);
+}
+
+function cameraDistanceFor(isUnderground) {
+  return isUnderground ? cameraDistances.burrow ?? framedBurrowCameraDistance() : cameraDistances.surface;
+}
 
 const player = { wellFedUntil: save.wellFedSeconds || 0, x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
 const startPoint = (underground ? burrow.space.nearestWalkable(player.x, player.z) : navigation.nearestWalkable(player.x, player.z, 40)) || HOME_SPOT;
@@ -505,7 +524,7 @@ let startingOver = false;
 
 function persist() {
   if (isScreenshotMode || startingOver) return;
-  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, helpers: helpers.serialize(), rack: rack.serialize(), wellFedSeconds: Math.max(0, (player.wellFedUntil || 0) - simulationTime) });
+  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, cameraDistances: { ...cameraDistances, [underground ? 'burrow' : 'surface']: cameraDistance }, helpers: helpers.serialize(), rack: rack.serialize(), wellFedSeconds: Math.max(0, (player.wellFedUntil || 0) - simulationTime) });
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
@@ -605,7 +624,7 @@ function digEntranceAt(x, z) {
   blockEntrance();
   save.burrow = burrow.serialize();
   soundAt('craft');
-  hud.toast('🕳️ Burrow dug — tap it to go inside');
+  hud.toast('🕳️ Burrow dug — walk to it, then tap ⬇ Enter burrow');
   refreshHud(null);
   persist();
 }
@@ -731,7 +750,7 @@ function goalTapped() {
     return;
   }
   if (!underground) {
-    walkToEntrance();
+    walkToEntrance({ enter: true });
     return;
   }
   if (!burrow.hasStation('workshop') && goalReached()) {
@@ -745,6 +764,10 @@ function workshopSpot() {
 }
 
 function setUnderground(value) {
+  if (value !== underground) {
+    cameraDistances[underground ? 'burrow' : 'surface'] = cameraDistance;
+    cameraDistance = cameraDistanceFor(value);
+  }
   underground = value;
   save.underground = value;
   camera.layers.set(value ? BURROW_LAYER : 0);
@@ -768,7 +791,7 @@ function enterBurrow() {
   Object.assign(player, { x: arrival.x, z: arrival.z, y: BURROW_ORIGIN.y, speed: 0, heading: 0 });
   hud.fade();
   updateCamera(0, true);
-  if (!save.burrowDug) hud.setHint('Tap the floor to walk · tap sand marked ✦ to dig · ⬆\u00a0Exit to go up');
+  if (!save.burrowDug) hud.setHint('Tap the floor to walk · tap sand marked ✦ to dig · walk into the light, then tap ⬆\u00a0Go outside');
   else hud.setHint(null);
   refreshHud(null);
   persist();
@@ -792,25 +815,46 @@ function exitBurrow() {
   return true;
 }
 
-function walkToEntrance() {
+function walkToEntrance({ enter = false } = {}) {
   if (!burrow.exists || underground) return false;
   const { x, z } = burrow.state.entrance;
-  if (Math.hypot(x - player.x, z - player.z) <= ENTRANCE_REACH + 0.3) return enterBurrow();
+  if (Math.hypot(x - player.x, z - player.z) <= ENTRANCE_REACH + 0.3) {
+    if (enter) return enterBurrow();
+    stopWalking();
+    hud.bumpTravel();
+    return true;
+  }
   const awayX = player.x - x;
   const awayZ = player.z - z;
   const awayLength = Math.hypot(awayX, awayZ) || 1;
   const stand = navigation.nearestWalkable(x + (awayX / awayLength) * (ENTRANCE_BLOCK_RADIUS + 0.8), z + (awayZ / awayLength) * (ENTRANCE_BLOCK_RADIUS + 0.8), 6);
   if (!stand || !setDestination(stand.x, stand.z)) return false;
-  player.walkGoal = 'entrance';
+  player.walkGoal = enter ? 'enterBurrow' : 'entrance';
   return true;
+}
+
+function travelOption() {
+  if (!burrow.exists || placement.entrance || placement.station || player.dyingTimer > 0) return null;
+  if (player.pathIndex < player.path.length || player.digTarget) return null;
+  if (underground) return Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH ? 'exit' : null;
+  return Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= TRAVEL_REACH_SURFACE ? 'enter' : null;
+}
+
+function travel() {
+  const option = travelOption();
+  if (option === 'enter') return enterBurrow();
+  if (option === 'exit') return exitBurrow();
+  return false;
 }
 
 function walkToShaft() {
   if (!underground) return false;
-  if (Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH) return exitBurrow();
-  if (!setDestination(burrow.shaftCenter.x, burrow.shaftCenter.z)) return false;
-  player.walkGoal = 'shaft';
-  return true;
+  if (Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH) {
+    stopWalking();
+    hud.bumpTravel();
+    return true;
+  }
+  return setDestination(burrow.shaftCenter.x, burrow.shaftCenter.z);
 }
 
 function walkToStation(station) {
@@ -883,7 +927,7 @@ function wearItem(id) {
 function walkToWorkshop() {
   const station = burrow.stationOf('workshop');
   if (!station) return false;
-  if (!underground) return walkToEntrance();
+  if (!underground) return walkToEntrance({ enter: true });
   return walkToStation(station);
 }
 
@@ -1185,12 +1229,11 @@ function updatePlayer(deltaTime) {
   if (player.walkGoal && arrived) {
     const goal = player.walkGoal;
     player.walkGoal = null;
-    if (goal === 'entrance' && !underground && Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= ENTRANCE_REACH + 0.6) enterBurrow();
+    if (goal === 'enterBurrow' && !underground && Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= TRAVEL_REACH_SURFACE) enterBurrow();
     else if (goal === 'rack' && !underground && Math.hypot(rack.state.x - player.x, rack.state.z - player.z) <= RACK_REACH + 0.8) {
       stopWalking();
       rackPanel.open();
-    } else if (goal === 'shaft' && underground && Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH) exitBurrow();
-    else if (typeof goal === 'object' && underground) {
+    } else if (typeof goal === 'object' && underground) {
       const spot = burrow.stationSpot(goal);
       if (Math.hypot(spot.x - player.x, spot.z - player.z) <= STATION_REACH) openStation(goal);
     }
@@ -1400,6 +1443,7 @@ function renderScene() {
   hud.setBuff(isWellFed() ? `🍂 Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null);
   if (rackPanel.isOpen && Math.floor(simulationTime) !== Math.floor(simulationTime - 1 / 60)) rackPanel.render();
   if (helpersPanel.isOpen && Math.floor(simulationTime * 2) !== Math.floor((simulationTime - 1 / 60) * 2)) helpersPanel.render();
+  hud.setTravel(travelOption());
   spotFeedback.visible = spotFeedback.visible && simulationTime < spotFeedbackUntil && !underground;
   spotFeedback.scale.setScalar(1 + 0.08 * Math.sin(simulationTime * 5));
   enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null);
@@ -1496,12 +1540,12 @@ function handleTap(clientX, clientY, isNewTouch) {
     if (spot) previewEntranceSpot(spot.x, spot.z);
     return;
   }
-  if (isNewTouch && burrow.entranceUnder(clientX, clientY, camera)) {
-    walkToEntrance();
-    return;
-  }
   if (isNewTouch && rack.under(clientX, clientY, camera)) {
     walkToRack();
+    return;
+  }
+  if (isNewTouch && burrow.entranceUnder(clientX, clientY, camera, ENTRANCE_PICK_RADIUS_PIXELS)) {
+    walkToEntrance();
     return;
   }
   const enemy = isNewTouch ? enemies.pick(clientX, clientY, camera) : null;
@@ -1524,6 +1568,7 @@ function handleTap(clientX, clientY, isNewTouch) {
 }
 
 const activePointers = new Map();
+const gesture = { pointerId: null, startX: 0, startY: 0, dragging: false, pinched: false };
 let pinchStartSpan = 0;
 let pinchStartDistance = 0;
 let lastSteerTime = 0;
@@ -1533,16 +1578,22 @@ function pinchSpan() {
   return Math.hypot(first.x - second.x, first.y - second.y);
 }
 
+function canSteer() {
+  return !player.gatherTarget && !player.headingToWorkshop && !player.combatTarget && !player.walkGoal && !player.digTarget && !placement.entrance && !placement.station;
+}
+
 addEventListener('pointerdown', unlockAudio, { capture: true });
 addEventListener('keydown', unlockAudio, { capture: true });
 canvas.addEventListener('pointerdown', (event) => {
   canvas.setPointerCapture(event.pointerId);
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-  if (activePointers.size === 2) {
+  if (activePointers.size === 1) {
+    Object.assign(gesture, { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, dragging: false, pinched: false });
+  } else if (activePointers.size === 2) {
+    if (gesture.dragging) stopWalking();
+    gesture.pinched = true;
     pinchStartSpan = pinchSpan();
     pinchStartDistance = cameraDistance;
-  } else if (activePointers.size === 1) {
-    handleTap(event.clientX, event.clientY, true);
   }
 });
 canvas.addEventListener('pointermove', (event) => {
@@ -1550,13 +1601,24 @@ canvas.addEventListener('pointermove', (event) => {
   activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
   if (activePointers.size === 2) {
     cameraDistance = THREE.MathUtils.clamp((pinchStartDistance * pinchStartSpan) / Math.max(20, pinchSpan()), ...CAMERA_DISTANCE_LIMITS);
-  } else if (performance.now() - lastSteerTime > 120 && !player.gatherTarget && !player.headingToWorkshop && !player.combatTarget && !player.walkGoal && !player.digTarget && !placement.entrance && !placement.station) {
+    return;
+  }
+  if (gesture.pinched || event.pointerId !== gesture.pointerId || placement.entrance || placement.station) return;
+  if (!gesture.dragging) {
+    if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) < DRAG_START_PIXELS) return;
+    gesture.dragging = true;
+    lastSteerTime = performance.now();
+    handleTap(event.clientX, event.clientY, false);
+  } else if (performance.now() - lastSteerTime > 120 && canSteer()) {
     lastSteerTime = performance.now();
     handleTap(event.clientX, event.clientY, false);
   }
 });
 function endPointer(event) {
-  activePointers.delete(event.pointerId);
+  if (!activePointers.delete(event.pointerId)) return;
+  const isTap = event.type === 'pointerup' && event.pointerId === gesture.pointerId && !gesture.pinched && !gesture.dragging && activePointers.size === 0;
+  if (event.pointerId === gesture.pointerId) gesture.pointerId = null;
+  if (isTap) handleTap(event.clientX, event.clientY, true);
 }
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', endPointer);
@@ -1597,6 +1659,7 @@ hud.onVolume((key, value) => {
   }
 });
 hud.onGoalTap(goalTapped);
+hud.onTravel(travel);
 hud.onBuild(() => {
   if (underground && !anyPanelOpen()) buildPanel.open();
 });
@@ -1628,6 +1691,7 @@ addEventListener('pagehide', persist);
 
 if (burrow.exists) blockEntrance();
 setUnderground(underground);
+cameraDistance = cameraDistanceFor(underground);
 refreshHud(null);
 if (!save.hasMoved) hud.setHint('Tap to walk · tap a ✦ to gather · pinch to zoom');
 tideState.wetLevel = TIDE_MIDDLE + TIDE_AMPLITUDE * 0.9;
@@ -1692,6 +1756,7 @@ if (isScreenshotMode) {
   for (let step = 0; step < (pose.simulateSeconds || 0) / FIXED_STEP; step++) simulate(FIXED_STEP);
   if (pose.inBurrow) {
     enterBurrow();
+    cameraDistance = pose.distance;
     player.heading = pose.heading ?? 0;
     for (let step = 0; step < 20; step++) simulate(FIXED_STEP);
   }
@@ -1783,7 +1848,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
 };
