@@ -11,6 +11,7 @@ const EYE = linearColor(0.03, 0.03, 0.04);
 
 const SHELL_RINGS = 96;
 const SHELL_SIDES = 20;
+const KNOB_TIP_COLOR = linearColor(1, 0.86, 0.8);
 const SHELL_LEAN_BACK = -0.5;
 const ANTENNA_FORWARD_TILT = 1.32;
 const LEG_RISE = 0.28;
@@ -85,9 +86,12 @@ export function buildShellGeometry(look) {
       const around = (side / SHELL_SIDES) * Math.PI * 2;
       const outward = Math.cos(around);
       const lift = Math.sin(around);
-      positions.push(centerX + Math.cos(angle) * outward * tubeRadius, centerY + lift * tubeRadius, centerZ + Math.sin(angle) * outward * tubeRadius);
+      const knob = look.knobs ? Math.pow(Math.max(0, Math.sin(along * look.turns * look.knobs) * Math.sin(around * 5 + ring * 0.7)), 3) : 0;
+      const knobbedRadius = tubeRadius * (1 + 0.2 * knob);
+      positions.push(centerX + Math.cos(angle) * outward * knobbedRadius, centerY + lift * knobbedRadius, centerZ + Math.sin(angle) * outward * knobbedRadius);
       const band = 0.5 + 0.5 * Math.sin(along * look.turns * look.bandFrequency + lift * 1.4);
-      color.copy(light).lerp(bandColor, THREE.MathUtils.smoothstep(band, 0.55, 0.8) * 0.85);
+      color.copy(light).lerp(bandColor, look.knobs ? 0.25 * (1 - knob) + 0.45 * Math.max(0, Math.sin(around * 13 + along * 40)) * (1 - knob) : THREE.MathUtils.smoothstep(band, 0.55, 0.8) * 0.85);
+      if (knob > 0) color.lerp(KNOB_TIP_COLOR, knob * 0.8);
       const seamShade = 0.62 + 0.38 * THREE.MathUtils.smoothstep(outward, -0.9, 0.2);
       colors.push(color.r * seamShade, color.g * seamShade, color.b * seamShade);
     }
@@ -407,5 +411,10 @@ export function createHermit(scene, quality, shellLook) {
     for (const eye of eyes) eye.rotation.x += retract * 0.9;
   }
 
-  return { root, update, wetnessUniforms, setShell, setEnchant, playAttack, playHurt, playDeath, resetPose, clawPosition };
+  function setClawTint(tint) {
+    if (tint) clawMaterial.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
+    else clawMaterial.color.setRGB(1, 1, 1);
+  }
+
+  return { root, update, wetnessUniforms, setShell, setEnchant, setClawTint, playAttack, playHurt, playDeath, resetPose, clawPosition };
 }

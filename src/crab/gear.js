@@ -32,6 +32,28 @@ export const SHELLS = {
     breakable: true,
     look: { turns: 3.4, spireShare: 0.92, whorlRadius: 0.24, tubeRadius: 0.5, height: 1.9, bandFrequency: 40, light: [0.96, 0.84, 0.6], band: [0.42, 0.2, 0.08], inside: [0.94, 0.72, 0.62] },
   },
+  coral: {
+    label: 'Coral shell',
+    role: 'Reef tank',
+    defense: 12,
+    speedFactor: 0.85,
+    attackFactor: 1,
+    ability: { id: 'brace', label: 'Brace+ · Spikes', description: '−40% damage taken while standing still; attackers take 3 damage', damageFactor: 0.6, thorns: 3 },
+    cost: { coral: 6, seaGlass: 2, shellBits: 6 },
+    breakable: true,
+    look: { turns: 2.3, spireShare: 0.88, whorlRadius: 0.62, tubeRadius: 0.82, height: 0.95, bandFrequency: 30, knobs: 34, light: [0.96, 0.42, 0.4], band: [0.62, 0.12, 0.2], inside: [0.98, 0.88, 0.82] },
+  },
+  whelk: {
+    label: 'Spiral whelk',
+    role: 'Reef striker',
+    defense: 5,
+    speedFactor: 1.1,
+    attackFactor: 1.35,
+    ability: { id: 'sting', label: 'Sting+', description: 'every 3rd hit deals double damage', everyHits: 3 },
+    cost: { seaGlass: 4, coral: 3, shellBits: 6 },
+    breakable: true,
+    look: { turns: 4.2, spireShare: 0.94, whorlRadius: 0.32, tubeRadius: 0.56, height: 1.75, bandFrequency: 52, light: [0.86, 0.9, 0.94], band: [0.2, 0.42, 0.62], inside: [0.96, 0.82, 0.72] },
+  },
 };
 
 export const NAKED = {
@@ -47,6 +69,7 @@ export const CLAWS = {
   bare: { label: 'Bare claws', attackBonus: 0, cost: null, breakable: false, enchantable: false },
   shellEdged: { label: 'Shell-edged claws', attackBonus: 4, cost: { shellBits: 6, driftwood: 4 }, breakable: true },
   kelpWrapped: { label: 'Kelp-wrapped claws', attackBonus: 2, cost: { driedKelp: 4, shellBits: 4 }, breakable: true, healOnHit: 1 },
+  coralTipped: { label: 'Coral-tipped claws', attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, breakable: true, tint: [1.7, 1.25, 1.6] },
 };
 
 export const BASE_ATTACK = 4;

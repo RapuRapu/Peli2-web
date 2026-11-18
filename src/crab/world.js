@@ -347,7 +347,10 @@ const REEF_PROP_KINDS = [
   { kind: 'urchin', count: 40, radius: [0.5, 0.75], blockShare: 1.6 },
 ];
 const REEF_PROP_CLEARANCE = 2.2;
-const REEF_PROP_KEEP_CLEAR = [{ x: 14, z: 57, radius: 5 }];
+export const LOBSTER_LAIR = { x: -62, z: 96, territoryRadius: 13 };
+const REEF_PROP_KEEP_CLEAR = [{ x: 14, z: 57, radius: 5 }, { x: LOBSTER_LAIR.x, z: LOBSTER_LAIR.z, radius: 9 }];
+const MORAY_DEN_COUNT = 4;
+const MORAY_DEN_SPACING = 30;
 
 function placeReefProps(sampleHeight, boulders) {
   const random = createRandom(5150);
@@ -371,6 +374,27 @@ function placeReefProps(sampleHeight, boulders) {
     }
   }
   return props;
+}
+
+function placeMorayDens(props) {
+  const dens = [];
+  const hosts = [...props.barnacleRock, ...props.brainCoral].sort((first, second) => first.seed - second.seed);
+  const everyProp = Object.values(props).flat();
+  for (const host of hosts) {
+    if (dens.length >= MORAY_DEN_COUNT) break;
+    for (let turn = 0; turn < 8; turn++) {
+      const angle = host.heading + turn * (Math.PI / 4);
+      const x = host.x + Math.cos(angle) * (host.radius + 1.3);
+      const z = host.z + Math.sin(angle) * (host.radius + 1.3);
+      if (!isOnReef(x, z) || z < 66 || z > reefOuterEdgeAt(x) - 4) continue;
+      if (everyProp.some((prop) => prop !== host && Math.hypot(prop.x - x, prop.z - z) < prop.radius + 1.6)) continue;
+      if (dens.some((den) => Math.hypot(den.x - x, den.z - z) < MORAY_DEN_SPACING)) continue;
+      if (Math.hypot(x - LOBSTER_LAIR.x, z - LOBSTER_LAIR.z) < LOBSTER_LAIR.territoryRadius + 6) continue;
+      dens.push({ x, z, host });
+      break;
+    }
+  }
+  return dens;
 }
 
 function buildWalkability(ground, boulders, logs, reefProps) {
@@ -411,6 +435,7 @@ export function createWorld(quality) {
   const boulders = BOULDERS.map((boulder) => ({ ...boulder, y: collisionField.sample(boulder.x, boulder.z) - boulder.radius * boulder.squash * 0.22 }));
   const logs = DRIFT_LOGS.map((log) => ({ ...log, y: collisionField.sample(log.x, log.z) }));
   const reefProps = placeReefProps(collisionField.sample, boulders);
+  const morayDens = placeMorayDens(reefProps);
   const terrainMesh = buildTerrainMesh(ground, boulders, logs, quality);
   const walkable = buildWalkability(ground, boulders, logs, reefProps);
 
@@ -445,7 +470,7 @@ export function createWorld(quality) {
     return null;
   }
 
-  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
+  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
 }
 
 const GULL_TERRITORY_EDGE_Z = -92;
@@ -455,4 +480,13 @@ export const HOME_BEACH_ENEMIES = [
   { kind: 'sandHopper', count: 10, packSize: [3, 4], accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && world.retained.levelAt(x, z) < height },
   { kind: 'shoreCrab', count: 4, accept: (world, x, z, height) => { if (isOnReef(x, z)) return false; const depth = world.retained.levelAt(x, z) - height; return depth > 0.3 && depth < 1.6; } },
   { kind: 'gull', count: 1, accept: (world, x, z) => z < -97 && z > -103 && Math.abs(x) < 40, territory: (x, z) => z < GULL_TERRITORY_EDGE_Z },
+];
+
+const awayFromLair = (x, z, margin) => Math.hypot(x - LOBSTER_LAIR.x, z - LOBSTER_LAIR.z) > LOBSTER_LAIR.territoryRadius + margin;
+
+export const REEF_ENEMIES = [
+  { kind: 'moray', count: MORAY_DEN_COUNT, spotsFrom: (world) => world.morayDens, accept: () => true },
+  { kind: 'octopus', count: 2, accept: (world, x, z, height) => isOnReef(x, z) && z > 68 && height < -2.5 && awayFromLair(x, z, 4) },
+  { kind: 'mantisShrimp', count: 4, accept: (world, x, z, height) => isOnReef(x, z) && z > 64 && height > -3.2 && awayFromLair(x, z, 4) },
+  { kind: 'giantLobster', count: 1, spotsFrom: () => [LOBSTER_LAIR], accept: (world, x, z) => !awayFromLair(x, z, -LOBSTER_LAIR.territoryRadius + 4), territory: (x, z) => !awayFromLair(x, z, 0) },
 ];

@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createNoise2D, createRandom, smoothstep } from '../noise.js';
 import { applySeaside } from './seaside.js';
+import { buildDenGeometry } from './reefCreatures.js';
+
+export const MORAY_DEN_SCALE = 1.45;
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const BRANCH_CORAL_PALETTES = [
@@ -186,6 +189,10 @@ export function createReefProps(scene, world, quality) {
       geometry.rotateY(prop.heading).translate(prop.x, prop.y - 0.1, prop.z);
       chunks[chunkOf(prop.x)].push(geometry);
     }
+  }
+  for (const den of world.morayDens) {
+    const denGeometry = mergeVertices(buildDenGeometry(), 1e-4).scale(MORAY_DEN_SCALE, MORAY_DEN_SCALE, MORAY_DEN_SCALE).translate(den.x, world.heightAt(den.x, den.z), den.z);
+    chunks[chunkOf(den.x)].push(denGeometry);
   }
   for (const piece of buildRubble(world, quality)) {
     piece.computeBoundingBox();

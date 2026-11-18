@@ -3,7 +3,7 @@ import { createPerformanceMonitor } from '../performance.js';
 import { QUALITY_LEVELS, chosenQualityName, storeQualityName } from './quality.js';
 import { seaUniforms, SEA_COMMON_GLSL, lighting } from './seaside.js';
 import { createNoiseTexture, createWaveGradientTexture } from './textures.js';
-import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES } from './world.js';
+import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES, REEF_ENEMIES } from './world.js';
 import { createPipeline } from './pipeline.js';
 import { createWater } from './water.js';
 import { createProps } from './props.js';
@@ -165,6 +165,15 @@ const POSES = {
   63: { x: HOME_SPOT.x, z: HOME_SPOT.z, distance: 32, tideShare: 0.75, workshop: true, crafted: ['snail'] },
   64: { x: -30, z: 98, distance: 30, tideShare: 0.75, heading: 0.3 },
   65: { x: 8, z: 72, distance: 30, tideShare: 0.75, heading: 0.5 },
+  66: { x: -1.6, z: 66.6, distance: 20, tideShare: 0.75, heading: -1.2, level: 8, enemy: { kind: 'moray', offsetX: -2.6, offsetZ: 1.8 }, fightSeconds: 0.9 },
+  67: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 5.2 },
+  74: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 4.5 },
+  68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
+  69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
+  70: { x: -60, z: 91, distance: 32, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
+  71: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 7, driftwood: 3 }, scrollPanel: true },
+  72: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'coral', claws: 'coralTipped', level: 0 } },
+  73: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'whelk', claws: 'coralTipped', level: 3 } },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -292,6 +301,7 @@ hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
 function applyWornLook() {
   hermit.setShell(gear.wornLook());
   hermit.setEnchant(gear.wornShell() ? gear.wornShell().enchant || 0 : 0, gear.wornClaws().enchant || 0);
+  hermit.setClawTint(CLAWS[gear.wornClaws().kind].tint || null);
 }
 applyWornLook();
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
@@ -320,7 +330,7 @@ const enemies = createEnemies({
   world,
   navigation,
   quality,
-  spawnTable: HOME_BEACH_ENEMIES.map((entry) => ({ ...entry, avoid: HOME_SPOT })),
+  spawnTable: [...HOME_BEACH_ENEMIES, ...REEF_ENEMIES].map((entry) => ({ ...entry, avoid: HOME_SPOT })),
   labelParent: hud.root,
   onAttackPlayer: hitPlayer,
   onKilled: enemyKilled,
@@ -329,6 +339,20 @@ const enemies = createEnemies({
     soundAt('alert', enemy.x, enemy.z);
   },
   onSound: (name, enemy) => soundAt(name, enemy.x, enemy.z),
+  onWarn: (enemy, text) => {
+    if (text) floatAt(enemy.x, enemy.y + enemy.definition.barHeight, enemy.z, text, 'alert');
+    soundAt('alert', enemy.x, enemy.z, 0.6);
+  },
+  onInk: (enemy, seconds, factor) => {
+    player.inkedUntil = simulationTime + seconds;
+    player.inkSpeedFactor = factor;
+    player.lastCombatTime = simulationTime;
+    floatAt(player.x, player.y + 2.4, player.z, `Slowed ${Math.round((1 - factor) * 100)}%`, 'taken');
+  },
+  onDodge: (enemy) => {
+    floatAt(player.x, player.y + 2.4, player.z, 'Dodged!', 'experience');
+    soundAt('hitThud', enemy.x, enemy.z, 0.7);
+  },
 });
 const buildPanel = createBuildPanel(hud.root, {
   inventory: () => save.inventory,
@@ -1055,7 +1079,7 @@ function engage(enemy) {
 function strike(enemy) {
   const stats = playerStats();
   player.hitCount++;
-  const isSting = stats.ability && stats.ability.id === 'sting' && player.hitCount % STING_EVERY_HITS === 0;
+  const isSting = stats.ability && stats.ability.id === 'sting' && player.hitCount % (stats.ability.everyHits || STING_EVERY_HITS) === 0;
   const damage = rollDamage(stats.attack, enemy.definition.defense) * (isSting ? 2 : 1);
   player.lastCombatTime = simulationTime;
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.7, enemy.z, isSting ? `${damage}!` : String(damage), isSting ? 'sting' : 'dealt');
@@ -1074,7 +1098,11 @@ function hitPlayer(enemy) {
   const stats = playerStats();
   let damage = rollDamage(enemy.definition.attack, stats.defense);
   const braced = stats.ability && stats.ability.id === 'brace' && player.speed < BRACE_MAXIMUM_SPEED;
-  if (braced) damage = Math.max(1, Math.round(damage * BRACE_DAMAGE_FACTOR));
+  if (braced) damage = Math.max(1, Math.round(damage * (stats.ability.damageFactor || BRACE_DAMAGE_FACTOR)));
+  if (stats.ability && stats.ability.thorns && enemies.alive(enemy)) {
+    floatAt(enemy.x, enemy.y + enemy.definition.barHeight * 0.7, enemy.z, `${stats.ability.thorns}`, 'sting');
+    enemies.damage(enemy, stats.ability.thorns, simulationTime);
+  }
   progression.state.health -= damage;
   player.lastCombatTime = simulationTime;
   floatAt(player.x, player.y + 2.4, player.z, `−${damage}`, 'taken');
@@ -1097,8 +1125,9 @@ function enemyKilled(enemy) {
   const levelsGained = progression.gainExperience(enemy.definition.experience);
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${enemy.definition.experience} XP`, 'experience');
   if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
-    save.inventory.pearls = (save.inventory.pearls || 0) + 1;
-    hud.toast('🦪 The shore crab dropped a pearl!');
+    const pearls = enemy.definition.pearlCount || 1;
+    save.inventory.pearls = (save.inventory.pearls || 0) + pearls;
+    hud.toast(pearls > 1 ? `🦪 The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `🦪 The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
     refreshHud('pearls');
   }
   if (levelsGained) announceLevel();
@@ -1201,7 +1230,8 @@ function updatePlayer(deltaTime) {
     return;
   }
   const waterDepth = space().waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
-  const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * gear.stats().speedFactor;
+  const inkSlow = simulationTime < (player.inkedUntil || 0) ? player.inkSpeedFactor : 1;
+  const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * gear.stats().speedFactor * inkSlow;
   let targetSpeed = 0;
   const steering = keyboardDirection();
   const combatTarget = player.combatTarget && enemies.alive(player.combatTarget) ? player.combatTarget : null;
@@ -1429,6 +1459,7 @@ function updateCamera(deltaTime, snap) {
   camera.updateMatrixWorld();
   const reefInView = !underground && cameraFocus.z + cameraDistance * REEF_VIEW_REACH_PER_DISTANCE > REEF_VIEW_THRESHOLD_Z;
   reefProps.setVisible(reefInView);
+  enemies.setReefVisible(reefInView);
   resources.setReefVisible(reefInView);
 
   const shadowReach = THREE.MathUtils.clamp(cameraDistance * 1.7, 42, 120);
@@ -1478,7 +1509,8 @@ function renderScene() {
   burrow.update(simulationTime, camera, underground);
   helpers.render(simulationTime);
   rack.render(simulationTime, camera, !underground);
-  hud.setBuff(isWellFed() ? `🍂 Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null);
+  const buffs = [isWellFed() ? `🍂 Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null, simulationTime < (player.inkedUntil || 0) ? `🦑 Inked · ${Math.ceil(player.inkedUntil - simulationTime)} s` : null].filter(Boolean);
+  hud.setBuff(buffs.length ? buffs.join('  ') : null);
   if (rackPanel.isOpen && Math.floor(simulationTime) !== Math.floor(simulationTime - 1 / 60)) rackPanel.render();
   if (helpersPanel.isOpen && Math.floor(simulationTime * 2) !== Math.floor((simulationTime - 1 / 60) * 2)) helpersPanel.render();
   hud.setTravel(travelOption());
@@ -1884,7 +1916,7 @@ if (isScreenshotMode) {
 }
 
 window.__debug = {
-  simulate, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
+  simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
   audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
