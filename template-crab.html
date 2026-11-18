@@ -88,14 +88,17 @@
   #hud .workbench .item-action:disabled { opacity: 0.4; cursor: default; }
   #hud .workbench .item-badge { font-size: 13px; padding: 4px 9px; border-radius: 9px; background: rgba(191, 234, 242, 0.2); }
   #hud .workbench .summary { font-size: 15px; padding: 2px 4px 4px; }
-  #hud .workbench .enchant-odds { font-size: 13px; color: #bfeaf2; }
-  #hud .workbench .enchant-odds.risky { color: #bfeaf2; }
-  #hud .workbench .enchant-break { color: #ff7a66; font-weight: bold; }
-  #hud .workbench .enchant-worn { margin-left: 8px; font-size: 12px; font-weight: normal; color: #bfeaf2; }
-  #hud .workbench .enchant-hint { font-size: 13px; padding: 0 4px; opacity: 0.8; }
-  #hud .workbench .enchant-result { padding: 9px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; text-align: center; }
-  #hud .workbench .enchant-result.success { background: #2f6a4a; border: 1px solid #a8f0c4; }
-  #hud .workbench .enchant-result.broke { background: #6a2f2f; border: 1px solid #ffb0a0; }
+  #hud .workbench .worn-mark { margin-left: 8px; font-size: 12px; font-weight: normal; color: #bfeaf2; }
+  #hud .workbench .panel-hint { font-size: 13px; padding: 0 4px; opacity: 0.8; }
+  #hud .workbench .improve-result { padding: 9px 12px; border-radius: 12px; font-size: 16px; font-weight: bold; text-align: center; background: #2f6a4a; border: 1px solid #a8f0c4; }
+  #hud .workbench .item-quality { font-size: 13px; color: #d8cdb8; }
+  #hud .workbench .item-quality.quality-masterwork { color: #ffd98c; }
+  #hud .workbench .item-quality.quality-crude { color: #c9a38a; }
+  #hud .workbench .improve-options { display: flex; flex-direction: column; gap: 6px; margin: -2px 0 4px 18px; }
+  #hud .workbench .option-row { background: rgba(255, 255, 255, 0.05); }
+  #hud .workbench .option-row.current { border-color: #a8f0c4; }
+  #hud .workbench .tools-row { border-color: #ffd98c; }
+  #hud .workbench .item-action.secondary-action { background: rgba(255, 255, 255, 0.12); border-color: #bfeaf2; color: #fff8e8; }
   #hud .workbench .item-action.risky-action { border: 2px solid #ff7a66; }
   #hud .workbench .item-action.armed { background: #c2412f; border-color: #ffc2b4; }
   #hud .workbench .placeholder { font-size: 15px; padding: 14px 6px; line-height: 1.45; opacity: 0.85; }
@@ -136,7 +139,8 @@
   #hud .slot-emoji { font-size: 28px; pointer-events: none; }
   #hud .slot-count { position: absolute; right: 4px; bottom: 2px; font-size: 13px; font-weight: bold; text-shadow: 0 1px 2px #000; pointer-events: none; }
   #hud .slot-tier { position: absolute; left: 3px; top: 2px; font-size: 10px; font-weight: bold; padding: 0 3px; border-radius: 5px; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
-  #hud .slot-enchant { position: absolute; right: 3px; bottom: 2px; font-size: 13px; font-weight: bold; color: #ffe2a8; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  #hud .slot-quality { position: absolute; right: 3px; bottom: 2px; font-size: 13px; font-weight: bold; color: #ffe2a8; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  #hud .slot-quality.quality-crude { color: #cbbba2; }
   #hud .workbench .slot-new { position: absolute; right: -5px; top: -7px; margin: 0; padding: 0 4px; font-size: 9px; line-height: 14px; pointer-events: none; }
   #hud .item-tier { font-size: 12px; font-weight: bold; }
   #hud .item-tier.tier-2 { color: #7be08f; }
@@ -183,7 +187,7 @@
   #hud .death-fade.visible { animation: death-fade 2.6s ease-in-out; }
   @keyframes death-fade { 0% { opacity: 0; } 25% { opacity: 0.2; } 42% { opacity: 0.95; } 58% { opacity: 0.95; } 100% { opacity: 0; } }
   #hud .remains-label { background: rgba(70, 76, 110, 0.92); border-color: #d6dcff; }
-  #hud .burrow-buttons { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 8px); display: flex; gap: 8px; }
+  #hud .burrow-buttons { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 8px); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: calc(100vw - 130px); }
   #hud .burrow-buttons.hidden { display: none; }
   #hud .burrow-buttons.dimmed { opacity: 0.35; pointer-events: none; }
   #hud .build-button { padding: 10px 16px; border-radius: 14px; border: 1px solid #ffe2a8; background: rgba(201, 138, 42, 0.92); font-size: 17px; font-weight: bold; }
@@ -195,17 +199,17 @@
   @keyframes scene-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
   #hud.underground .enemy-bar, #hud.underground .remains-arrow, #hud.underground .remains-label, #hud.underground .surface-label { display: none; }
   #hud:not(.underground) .burrow-label { display: none; }
-  #hud.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); }
+  #hud.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 128px); }
   #hud.panel-open .burrow-buttons, #hud.panel-open .mode-bar, #hud.panel-open .world-label { visibility: hidden; }
   #hud .travel-button { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 8px); padding: 12px 18px; border-radius: 14px; border: 2px solid #5a3d1c; background: rgba(255, 244, 214, 0.97); color: #3a2a14; text-shadow: none; font-size: 18px; font-weight: bold; pointer-events: auto; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); }
   #hud .travel-button.hidden { display: none; }
   #hud .travel-button.bump { animation: slot-bump 0.45s ease-out; }
   #hud.underground .travel-button { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px); }
   #hud.travel-shown:not(.underground) .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 70px); }
-  #hud.travel-shown.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 124px); }
+  #hud.travel-shown.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 182px); }
   #hud.panel-open .travel-button, #hud.placing .travel-button { visibility: hidden; }
   #hud.travel-shown .entrance-label, #hud.travel-shown .exit-label { visibility: hidden; }
-  @media (max-height: 500px) { #hud.underground .hint, #hud.travel-shown.underground .hint { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 84px); width: min(92vw, 820px); } }
+  @media (max-height: 500px) { #hud.underground .hint, #hud.travel-shown.underground .hint { bottom: auto; top: calc(max(8px, env(safe-area-inset-top)) + 128px); width: min(92vw, 820px); } }
   #hud.placing .burrow-label { visibility: hidden; }
   #hud .workbench .item-action.small:disabled { opacity: 0.28; }
   #hud .workbench .item-action.small { padding: 7px 11px; font-size: 14px; }
@@ -228,6 +232,8 @@
   #hud .buff-chip { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 96px); left: max(10px, env(safe-area-inset-left)); padding: 3px 10px; border-radius: 11px; background: rgba(90, 70, 30, 0.82); border: 1px solid #ffe2a8; font-size: 14px; }
   #hud .buff-chip.hidden { display: none; }
   #hud .helpers-button { background: rgba(47, 127, 143, 0.92); border-color: #bfeaf2; }
+  #hud .molt-button { background: rgba(150, 70, 120, 0.92); border-color: #ffc6e6; }
+  #hud .molt-button.hidden { display: none; }
   #hud .storage-panel .workbench-card { max-height: min(92vh, 780px); }
   #hud .remains-arrow { position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: rgba(70, 76, 110, 0.9); border: 2px solid #d6dcff; font-size: 20px; }
   #hud .remains-arrow.hidden { display: none; }

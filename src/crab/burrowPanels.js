@@ -278,7 +278,7 @@ export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLo
     const loadText = element('div', 'item-text', loadRow);
     element('div', 'item-name', loadText, `Hang ${batch} 🥬 to dry`);
     element('div', have >= batch ? 'item-stats' : 'item-stats short-text', loadText, `You have 🥬 ${have}`);
-    if (have < batch) element('div', 'enchant-hint', loadText, 'Sea lettuce grows at the waterline and in tide pools.');
+    if (have < batch) element('div', 'panel-hint', loadText, 'Sea lettuce grows at the waterline and in tide pools.');
     const loadButton = element('button', 'item-action', loadRow, 'Hang');
     loadButton.dataset.rackLoad = '1';
     loadButton.disabled = have < batch || rack.freeSlots() === 0;

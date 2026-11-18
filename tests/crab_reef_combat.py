@@ -10,19 +10,13 @@ window.__reef = (() => {
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
   const silenceOthers = (keep) => { for (const enemy of d.enemies.list) if (enemy !== keep) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 }); };
   const place = (x, z) => { if (d.isUnderground()) d.exitBurrow(); const spot = d.navigation.nearestWalkable(x, z, 20); Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null, gatherTarget: null, speed: 0, inkedUntil: 0 }); return spot; };
-  const equip = (shell, shellEnchant, claws, clawEnchant) => {
-    d.gear.state.shells = [{ id: 500, kind: shell, enchant: shellEnchant }];
-    d.gear.state.claws = [{ id: 2, kind: 'bare', enchant: 0 }, { id: 501, kind: claws, enchant: clawEnchant }];
-    d.gear.state.wornShellId = 500;
-    d.gear.state.wornClawsId = claws === 'bare' ? 2 : 501;
-    d.hermit.setShell(d.gear.wornLook());
-  };
+  const equip = (shell, shellInvestment, claws, clawInvestment) => d.equipBuild(shell, claws, shellInvestment > 0 || clawInvestment > 0);
   const arena = { moray: null, octopus: { x: 10, z: 82 }, mantisShrimp: { x: 10, z: 76 }, giantLobster: { x: -62, z: 92 } };
-  function setup(kind, level, shell, shellEnchant, claws, clawEnchant, fed) {
+  function setup(kind, level, shell, shellInvestment, claws, clawInvestment, fed) {
     d.progression.setLevel(level);
     d.progression.state.experience = -1e9;
     d.progression.state.health = d.progression.maxHealth();
-    equip(shell, shellEnchant, claws, clawEnchant);
+    equip(shell, shellInvestment, claws, clawInvestment);
     d.save.inventory = {};
     while (d.remains.list.length) d.remains.remove(d.remains.list[0]);
     let enemy;
@@ -43,8 +37,8 @@ window.__reef = (() => {
     d.player.wellFedUntil = fed ? d.simulationTime() + 999 : 0;
     return enemy;
   }
-  function fight(kind, level, shell, shellEnchant, claws, clawEnchant, fed) {
-    const enemy = setup(kind, level, shell, shellEnchant, claws, clawEnchant, fed);
+  function fight(kind, level, shell, shellInvestment, claws, clawInvestment, fed) {
+    const enemy = setup(kind, level, shell, shellInvestment, claws, clawInvestment, fed);
     d.engage(enemy);
     const seconds = step(300, () => enemy.state === 'dying' || enemy.state === 'dead' || d.remains.list.length > 0);
     const won = enemy.state === 'dying' || enemy.state === 'dead';
@@ -81,16 +75,16 @@ with sync_playwright() as playwright:
         'mantis L3 turban edged': "'mantisShrimp', 3, 'turban', 0, 'shellEdged', 0, false",
         'moray L3 turban edged': "'moray', 3, 'turban', 0, 'shellEdged', 0, false",
         'octopus L3 turban edged': "'octopus', 3, 'turban', 0, 'shellEdged', 0, false",
-        'mantis L6 turban+4 edged+4': "'mantisShrimp', 6, 'turban', 4, 'shellEdged', 4, false",
-        'moray L6 turban+4 edged+4': "'moray', 6, 'turban', 4, 'shellEdged', 4, false",
-        'mantis L6 cone+4 edged+4': "'mantisShrimp', 6, 'cone', 4, 'shellEdged', 4, false",
-        'moray L6 cone+4 edged+4': "'moray', 6, 'cone', 4, 'shellEdged', 4, false",
-        'octopus L6 turban+4 edged+4': "'octopus', 6, 'turban', 4, 'shellEdged', 4, false",
-        'lobster L10 turban+6 edged+6 fed': "'giantLobster', 10, 'turban', 6, 'shellEdged', 6, true",
-        'lobster L10 cone+6 edged+6 fed': "'giantLobster', 10, 'cone', 6, 'shellEdged', 6, true",
-        'lobster L10 coral+0 coralTipped+0 fed': "'giantLobster', 10, 'coral', 0, 'coralTipped', 0, true",
-        'lobster L10 coral+6 coralTipped+6 fed': "'giantLobster', 10, 'coral', 6, 'coralTipped', 6, true",
-        'lobster L10 whelk+6 coralTipped+6 fed': "'giantLobster', 10, 'whelk', 6, 'coralTipped', 6, true",
+        'mantis L6 turban★ edged★': "'mantisShrimp', 6, 'turban', 4, 'shellEdged', 4, false",
+        'moray L6 turban★ edged★': "'moray', 6, 'turban', 4, 'shellEdged', 4, false",
+        'mantis L6 cone★ edged★': "'mantisShrimp', 6, 'cone', 4, 'shellEdged', 4, false",
+        'moray L6 cone★ edged★': "'moray', 6, 'cone', 4, 'shellEdged', 4, false",
+        'octopus L6 turban★ edged★': "'octopus', 6, 'turban', 4, 'shellEdged', 4, false",
+        'lobster L10 turban★ edged★ fed': "'giantLobster', 10, 'turban', 6, 'shellEdged', 6, true",
+        'lobster L10 cone★ edged★ fed': "'giantLobster', 10, 'cone', 6, 'shellEdged', 6, true",
+        'lobster L10 coral coralTipped fed': "'giantLobster', 10, 'coral', 0, 'coralTipped', 0, true",
+        'lobster L10 coral★ coralTipped★ fed': "'giantLobster', 10, 'coral', 6, 'coralTipped', 6, true",
+        'lobster L10 whelk★ coralTipped★ fed': "'giantLobster', 10, 'whelk', 6, 'coralTipped', 6, true",
     }
     balance = {}
     for name, arguments in scenarios.items():
@@ -99,8 +93,8 @@ with sync_playwright() as playwright:
         print(name, balance[name], flush=True)
     wins = lambda name: int(balance[name]['wins'].split('/')[0])
     checks['earlyLevelsLose'] = all(wins(name) <= 2 for name in balance if ' L1 ' in name) and all(wins(f'{kind} L3 turban edged') <= 3 for kind in ('mantis', 'moray', 'octopus'))
-    checks['level6WinsMantisAndMoray'] = all(wins(name) >= 8 for name in ('mantis L6 turban+4 edged+4', 'moray L6 turban+4 edged+4', 'mantis L6 cone+4 edged+4', 'moray L6 cone+4 edged+4'))
-    checks['bossNeedsReefGear'] = wins('lobster L10 turban+6 edged+6 fed') <= 3 and wins('lobster L10 cone+6 edged+6 fed') <= 3 and wins('lobster L10 coral+6 coralTipped+6 fed') >= 7
+    checks['level6WinsMantisAndMoray'] = all(wins(name) >= 8 for name in ('mantis L6 turban★ edged★', 'moray L6 turban★ edged★', 'mantis L6 cone★ edged★', 'moray L6 cone★ edged★'))
+    checks['bossNeedsReefGear'] = wins('lobster L10 turban★ edged★ fed') <= 3 and wins('lobster L10 cone★ edged★ fed') <= 3 and wins('lobster L10 coral★ coralTipped★ fed') >= 7
 
     behaviour = page.evaluate(r'''() => {
       const d = window.__debug; const r = window.__reef; const out = {};

@@ -17,10 +17,11 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
-import { createGear, SHELLS, CLAWS, ENCHANT_LEVELS, canAfford, BOSS_TROPHIES, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE } from './gear.js';
+import { createGear, SHELLS, CLAWS, canAfford, BOSS_TROPHIES, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE, gearGlowLook, normalizeItem } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
-import { createProgression, GATHER_EXPERIENCE } from './progression.js';
+import { createProgression, GATHER_EXPERIENCE, MOLT_KINDS, MOLT_SECONDS, SOFT_SECONDS, SOFT_DEFENSE_FACTOR } from './progression.js';
+import { createMoltPanel } from './moltPanel.js';
 import { createEnemies, ENEMY_KINDS } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
@@ -38,7 +39,8 @@ const qualityName = chosenQualityName(searchParameters);
 const quality = QUALITY_LEVELS[qualityName];
 
 const SAVE_KEY = 'seaofcrabs-crab-save';
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
+const CLAW_GROWTH_PER_MOLT = 0.05;
 const AUTOSAVE_INTERVAL_SECONDS = 5;
 const FIXED_STEP = 1 / 60;
 const CAMERA_YAW = 0.3;
@@ -152,12 +154,12 @@ const POSES = {
   36: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: -2.4, offsetZ: 0.8 }, fightSeconds: 0.6, moment: 'dying' },
   37: { x: 12, z: -14, distance: 11, tideShare: 0.56, heading: 2.6, gather: { type: 'seaLettuce', share: 0.5 } },
   38: { x: 0, z: -104, distance: 34, tideShare: 0.56, heading: 3.2, level: 6, enemy: { kind: 'gull', offsetX: -2, offsetZ: -5.5 }, fightSeconds: 2.2, moment: 'enemyHurt' },
-  39: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'cone', claws: 'shellEdged', level: 3 } },
-  40: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'turban', claws: 'shellEdged', level: 6 } },
-  41: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'cone', claws: 'shellEdged', level: 9 } },
-  42: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Enchant', enchanted: { shell: 'turban', claws: 'shellEdged', level: 3 }, inventory: { pearls: 2, shellBits: 9 }, armEnchant: true },
-  43: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Enchant', enchanted: { shell: 'turban', claws: 'shellEdged', level: 3 }, inventory: { pearls: 2, shellBits: 9 }, armEnchant: true },
-  44: { x: 22, z: -14, distance: 14, tideShare: 0.56, heading: 1.2, naked: true, remainsAt: { x: 24, z: -12 }, remainsEnchant: 6 },
+  39: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'cone', claws: 'shellEdged', quality: 'crude' } },
+  40: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'turban', claws: 'shellEdged', quality: 'fine', reinforcement: 'coralCrust', binding: 'kelp' } },
+  41: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'cone', claws: 'shellEdged', quality: 'masterwork' } },
+  42: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Improve', outfit: { shell: 'turban', claws: 'shellEdged', quality: 'fine' }, inventory: { pearls: 2, shellBits: 9 }, expandImprove: true },
+  43: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Improve', outfit: { shell: 'turban', claws: 'shellEdged', quality: 'fine' }, inventory: { pearls: 2, shellBits: 9 }, expandImprove: true },
+  44: { x: 22, z: -14, distance: 14, tideShare: 0.56, heading: 1.2, naked: true, remainsAt: { x: 24, z: -12 }, remainsQuality: 'masterwork' },
   45: { x: 21, z: -24, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 } },
   46: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[5, 7], [6, 7], [7, 5]], inBurrow: true },
   47: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], dug: [[5, 7]], inBurrow: true, placingStation: 'storage' },
@@ -184,36 +186,40 @@ const POSES = {
   74: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 4.5 },
   75: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -78, z: -40, distance: 60, tideShare: 0.56, heading: 3.6 },
   76: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -84, z: -48, distance: 30, tideShare: 0.56, heading: 3.4 },
-  77: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -70, z: -60, distance: 24, tideShare: 0.56, heading: 3.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 3 }, enemy: { kind: 'rat', offsetX: -2, offsetZ: -3 }, fightSeconds: 1.2 },
-  78: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 5.4 },
-  79: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
-  80: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 0 } },
-  81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'bottle', claws: 'fishhook', level: 0 } },
+  77: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -70, z: -60, distance: 24, tideShare: 0.56, heading: 3.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' }, enemy: { kind: 'rat', offsetX: -2, offsetZ: -3 }, fightSeconds: 1.2 },
+  78: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 5.4 },
+  79: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
+  80: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'fine' } },
+  81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'bottle', claws: 'fishhook', quality: 'fine' } },
   82: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 9, scrap: 10, cloth: 6, driftwood: 3 }, scrollPanel: true },
   83: { x: -20, z: -30, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   84: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -46, distance: 60, tideShare: 0.56, heading: 3.4 },
-  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 3 } },
-  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 3 }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
-  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'skull', claws: 'fork', level: 4 }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'skull', claws: 'fork', level: 4 }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'skull', claws: 'fork', level: 0 } },
-  90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'thimble', claws: 'fork', level: 0 } },
+  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'fine' } },
+  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'fine' }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
+  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'skull', claws: 'fork', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'skull', claws: 'fork', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'skull', claws: 'fork', quality: 'fine' } },
+  90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'thimble', claws: 'fork', quality: 'fine' } },
   91: { x: 40, z: -40, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'] },
-  93: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 11 } },
-  94: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 14 } },
-  95: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 16 } },
-  96: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: -96, z: -76, distance: 30, tideShare: 0.56, heading: 0.2, level: 10, enchanted: { shell: 'tinCan', claws: 'whisker', level: 3 }, restingBosses: ['shipCat'] },
-  97: { x: 24, z: -27, distance: 40, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'lobster', claws: 'cleaver', level: 16 } },
-  98: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], enchanted: { shell: 'tinCan', claws: 'fishhook', level: 6 }, extraGear: [{ category: 'shell', kind: 'skull', enchant: 11 }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', enchant: 14 }, { category: 'claws', kind: 'coralTipped', enchant: 2 }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', enchant: 5 }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 1 },
-  99: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], enchanted: { shell: 'tinCan', claws: 'fishhook', level: 6 }, extraGear: [{ category: 'shell', kind: 'skull', enchant: 11 }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', enchant: 14 }, { category: 'claws', kind: 'coralTipped', enchant: 2 }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', enchant: 5 }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 3 },
-  100: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, coral: 4 }, extraGear: [{ category: 'shell', kind: 'coral', enchant: 4, stored: true }, { category: 'claws', kind: 'fork', enchant: 9, stored: true }], storagePanel: true },
+  93: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fork', quality: 'masterwork' } },
+  94: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fork', quality: 'masterwork' } },
+  95: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fork', quality: 'masterwork' } },
+  96: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: -96, z: -76, distance: 30, tideShare: 0.56, heading: 0.2, level: 10, outfit: { shell: 'tinCan', claws: 'whisker', quality: 'fine' }, restingBosses: ['shipCat'] },
+  97: { x: 24, z: -27, distance: 40, tideShare: 0.56, heading: 1.75, outfit: { shell: 'lobster', claws: 'cleaver', quality: 'masterwork' } },
+  98: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, extraGear: [{ category: 'shell', kind: 'skull', quality: 'masterwork' }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', quality: 'masterwork' }, { category: 'claws', kind: 'coralTipped', quality: 'fine' }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', quality: 'masterwork' }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 1 },
+  99: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, extraGear: [{ category: 'shell', kind: 'skull', quality: 'masterwork' }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', quality: 'masterwork' }, { category: 'claws', kind: 'coralTipped', quality: 'fine' }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', quality: 'masterwork' }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 3 },
+  100: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, coral: 4 }, extraGear: [{ category: 'shell', kind: 'coral', quality: 'masterwork', stored: true }, { category: 'claws', kind: 'fork', quality: 'masterwork', stored: true }], storagePanel: true },
+  101: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molts: ['crusher'], moltPanel: true },
+  102: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molting: true },
+  103: { x: 24, z: -27, distance: 9, tideShare: 0.56, heading: 1.75, molts: ['crusher', 'crusher', 'crusher', 'crusher', 'crusher', 'cutter'], outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork', reinforcement: 'metalPlate' } },
+  104: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molts: ['crusher'] },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
-  69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
-  70: { x: -60, z: 91, distance: 32, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
+  69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
+  70: { x: -60, z: 91, distance: 32, tideShare: 0.75, heading: 0.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
   71: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 7, driftwood: 3 }, scrollPanel: true },
-  72: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'coral', claws: 'coralTipped', level: 0 } },
-  73: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'whelk', claws: 'coralTipped', level: 3 } },
+  72: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
+  73: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'whelk', claws: 'coralTipped', quality: 'fine' } },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -342,7 +348,8 @@ hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
 
 function applyWornLook() {
   hermit.setShell(gear.wornLook());
-  hermit.setEnchant(gear.wornShell() ? gear.wornShell().enchant || 0 : 0, gear.wornClaws().enchant || 0);
+  hermit.setGearGlow(gearGlowLook(gear.wornShell()), gearGlowLook(gear.wornClaws()));
+  hermit.setClawGrowth(1 + CLAW_GROWTH_PER_MOLT * progression.moltCount('crusher'), 1 + CLAW_GROWTH_PER_MOLT * progression.moltCount('cutter'));
   hermit.setClawTint(CLAWS[gear.wornClaws().kind].tint || null);
   hermit.setClawTines(Boolean(CLAWS[gear.wornClaws().kind].tines));
 }
@@ -356,6 +363,7 @@ const burrow = createBurrow(scene, world, quality, hud.root, save.burrow);
 burrow.attachStations(workshop);
 if (burrow.hasStation('workshop')) workshop.build();
 const storage = save.storage;
+for (const item of [...storage.shells, ...storage.claws]) normalizeItem(item);
 let underground = Boolean(save.underground && burrow.exists);
 const surfaceSpace = {
   heightAt: (x, z) => world.heightAt(x, z),
@@ -502,14 +510,22 @@ const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
   onCraft: craftItem,
-  onEnchant: enchantItem,
+  onUpgradeTools: upgradeTools,
+  onRefine: refineItem,
+  onModify: modifyItem,
   onClose: () => workbenchPanel.close(),
+});
+const moltPanel = createMoltPanel(hud.root, {
+  progression,
+  onMolt: startMolt,
+  onClose: () => moltPanel.close(),
 });
 const backpack = createBackpackPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
   combatStats: () => playerStats(),
   maxHealth: () => progression.maxHealth(),
+  growthText: () => `Molts: 🔨 Crusher ${progression.moltCount('crusher')} · ✂️ Cutter ${progression.moltCount('cutter')} · Claw skill ${progression.state.clawSkill.toFixed(1)}/20 (+${Math.round(progression.state.clawSkill)}% dmg)`,
   thumbnails,
   onWear: wearItem,
   onUnequip: unequipItem,
@@ -527,7 +543,7 @@ function openBackpack() {
 }
 
 function anyPanelOpen() {
-  return workbenchPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen || helpersPanel.isOpen || rackPanel.isOpen;
+  return workbenchPanel.isOpen || moltPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen || helpersPanel.isOpen || rackPanel.isOpen;
 }
 
 function closePanels() {
@@ -588,7 +604,7 @@ function cameraDistanceFor(isUnderground) {
   return isUnderground ? cameraDistances.burrow ?? framedBurrowCameraDistance() : cameraDistances.surface;
 }
 
-const player = { wellFedUntil: save.wellFedSeconds || 0, x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
+const player = { wellFedUntil: save.wellFedSeconds || 0, softUntil: save.softSeconds || 0, moltTimer: save.moltSeconds || 0, moltKind: save.moltKind || null, x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
 const startPoint = (underground ? burrow.space.nearestWalkable(player.x, player.z) : navigation.nearestWalkable(player.x, player.z, 40)) || HOME_SPOT;
 player.x = startPoint.x;
 player.z = startPoint.z;
@@ -630,7 +646,7 @@ let startingOver = false;
 
 function persist() {
   if (isScreenshotMode || startingOver) return;
-  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, cameraDistances: { ...cameraDistances, [underground ? 'burrow' : 'surface']: cameraDistance }, helpers: helpers.serialize(), rack: rack.serialize(), wellFedSeconds: Math.max(0, (player.wellFedUntil || 0) - simulationTime) });
+  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, cameraDistances: { ...cameraDistances, [underground ? 'burrow' : 'surface']: cameraDistance }, helpers: helpers.serialize(), rack: rack.serialize(), wellFedSeconds: Math.max(0, (player.wellFedUntil || 0) - simulationTime), softSeconds: Math.max(0, (player.softUntil || 0) - simulationTime), moltSeconds: Math.max(0, player.moltTimer || 0), moltKind: player.moltKind || null });
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
@@ -655,6 +671,7 @@ function refreshHud(bumpedType) {
   if (bumpedType) hud.bumpBag();
   if (backpack.isOpen) backpack.render();
   hud.setBuildButton(underground);
+  hud.setMoltButton(underground && progression.moltsAvailable() && !isMolting() ? `🦀 Molt · ${progression.moltsAvailable()}` : null);
   if (placement.entrance) {
     hud.setGoal(null);
   } else if (remains.list.length) {
@@ -1023,7 +1040,7 @@ function walkToEntrance({ enter = false } = {}) {
 }
 
 function travelOption() {
-  if (!burrow.exists || placement.entrance || placement.station || player.dyingTimer > 0) return null;
+  if (!burrow.exists || placement.entrance || placement.station || player.dyingTimer > 0 || isMolting()) return null;
   if (player.pathIndex < player.path.length || player.digTarget) return null;
   if (underground) return Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH ? 'exit' : null;
   return Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= TRAVEL_REACH_SURFACE ? 'enter' : null;
@@ -1091,21 +1108,70 @@ function craftItem(category, kind) {
   return item;
 }
 
-function enchantItem(id) {
-  const result = gear.enchant(id, save.inventory, random);
-  if (!result) return null;
-  const label = (result.category === 'shell' ? SHELLS : CLAWS)[result.item.kind].label;
-  if (result.success) {
-    soundAt('enchantSuccess');
-    hud.toast(`✨ ${label} +${result.level}!`);
-  } else {
-    soundAt('enchantBreak');
-    hud.toast(result.wasWorn ? `💥 Your ${label.toLowerCase()} broke` : `💥 ${label} broke`);
-  }
+function gearChanged(message) {
+  if (message) hud.toast(message);
   applyWornLook();
   refreshHud(null);
   persist();
-  return result;
+}
+
+function upgradeTools() {
+  const tools = gear.upgradeTools(save.inventory);
+  if (!tools) return null;
+  soundAt('craft');
+  gearChanged(`🔨 New tools: ${tools.label}`);
+  return tools;
+}
+
+function refineItem(id) {
+  const found = gear.refine(id, save.inventory);
+  if (!found) return null;
+  soundAt('craft');
+  gearChanged(`★ ${found.definition.label} refined`);
+  return found;
+}
+
+function modifyItem(id, modification) {
+  const found = gear.modify(id, modification, save.inventory);
+  if (!found) return null;
+  soundAt('craft');
+  gearChanged();
+  return found;
+}
+
+function isMolting() {
+  return (player.moltTimer || 0) > 0;
+}
+
+function isSoft() {
+  return simulationTime < (player.softUntil || 0);
+}
+
+function startMolt(kind) {
+  if (!underground || isMolting() || !progression.moltsAvailable() || !MOLT_KINDS[kind]) return false;
+  stopWalking();
+  player.combatTarget = null;
+  player.gatherTarget = null;
+  player.moltKind = kind;
+  player.moltTimer = MOLT_SECONDS;
+  moltPanel.close();
+  hud.toast(`🦀 Molting… ${MOLT_SECONDS} s`);
+  refreshHud(null);
+  persist();
+  return true;
+}
+
+function finishMolt() {
+  const kind = player.moltKind;
+  player.moltTimer = 0;
+  player.moltKind = null;
+  if (!progression.molt(kind)) return;
+  player.softUntil = simulationTime + SOFT_SECONDS;
+  soundAt('levelUp');
+  applyWornLook();
+  hud.toast(`${MOLT_KINDS[kind].icon} New skin! ${MOLT_KINDS[kind].label} claw grew · soft for ${SOFT_SECONDS / 60} min`);
+  refreshHud(null);
+  persist();
 }
 
 function wearItem(id) {
@@ -1190,7 +1256,7 @@ function updateAudio(deltaTime) {
 }
 
 function playerStats() {
-  return gear.stats(progression.attackBonus());
+  return gear.stats(progression.attackBonus(), { ...progression.combatModifiers(), defenseFactor: isSoft() ? SOFT_DEFENSE_FACTOR : 1 });
 }
 
 function rollDamage(attack, defense) {
@@ -1229,6 +1295,7 @@ function strike(enemy) {
   soundAt('clawSnap', enemy.x, enemy.z);
   soundAt(isSting ? 'stingHit' : 'hitThud', enemy.x, enemy.z);
   enemies.damage(enemy, damage, simulationTime, player);
+  progression.practiceClaws();
   if (stats.healOnHit && progression.state.health < progression.maxHealth()) {
     progression.state.health = Math.min(progression.maxHealth(), progression.state.health + stats.healOnHit);
     floatAt(player.x, player.y + 2.2, player.z, `+${stats.healOnHit} ❤`, 'experience');
@@ -1242,9 +1309,9 @@ function hitPlayer(enemy) {
   if (stats.ability && stats.ability.dreadFactor) damage = Math.max(1, Math.round(damage * stats.ability.dreadFactor));
   const braced = stats.ability && stats.ability.id === 'brace' && player.speed < BRACE_MAXIMUM_SPEED;
   if (braced) damage = Math.max(1, Math.round(damage * (stats.ability.damageFactor || BRACE_DAMAGE_FACTOR)));
-  if (stats.ability && stats.ability.thorns && enemies.alive(enemy)) {
-    floatAt(enemy.x, enemy.y + enemy.definition.barHeight * 0.7, enemy.z, `${stats.ability.thorns}`, 'sting');
-    enemies.damage(enemy, stats.ability.thorns, simulationTime);
+  if (stats.thorns && enemies.alive(enemy)) {
+    floatAt(enemy.x, enemy.y + enemy.definition.barHeight * 0.7, enemy.z, `${stats.thorns}`, 'sting');
+    enemies.damage(enemy, stats.thorns, simulationTime);
   }
   progression.state.health -= damage;
   player.lastCombatTime = simulationTime;
@@ -1323,7 +1390,8 @@ function enemyKilled(enemy) {
 
 function announceLevel() {
   soundAt('levelUp');
-  hud.toast(`⬆ Level ${progression.state.level}! Max HP +8 · attack +1`);
+  const moltReady = progression.moltsAvailable() ? ' · 🦀 you can molt in your burrow' : '';
+  hud.toast(`⬆ Level ${progression.state.level}! Max HP +8 · attack +1${moltReady}`);
 }
 
 function wakeSpot() {
@@ -1346,6 +1414,8 @@ function die() {
 
 function finishDeath() {
   const dropped = gear.dropAll();
+  progression.loseSkillOnDeath();
+  player.softUntil = 0;
   const carried = Object.fromEntries(Object.entries(save.inventory).filter(([, amount]) => amount > 0));
   if (dropped.shells.length || dropped.claws.length || Object.keys(carried).length) remains.add({ x: player.x, z: player.z, inventory: carried, gear: dropped });
   save.inventory = {};
@@ -1409,6 +1479,13 @@ function turnToward(targetHeading, deltaTime) {
 }
 
 function updatePlayer(deltaTime) {
+  if (isMolting()) {
+    player.moltTimer -= deltaTime;
+    player.speed = 0;
+    if (player.moltTimer <= 0) finishMolt();
+    hermit.update(deltaTime, { x: player.x, y: player.y, z: player.z, heading: player.heading, speed: 0, working: false, withdrawn: true, groundNormal: player.groundNormal });
+    return;
+  }
   if (player.dyingTimer > 0) {
     player.dyingTimer -= deltaTime;
     player.speed = 0;
@@ -1418,7 +1495,7 @@ function updatePlayer(deltaTime) {
   }
   const waterDepth = space().waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
   const inkSlow = simulationTime < (player.inkedUntil || 0) ? player.inkSpeedFactor : 1;
-  const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * gear.stats().speedFactor * inkSlow;
+  const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * playerStats().speedFactor * inkSlow;
   let targetSpeed = 0;
   const steering = keyboardDirection();
   const combatTarget = player.combatTarget && enemies.alive(player.combatTarget) ? player.combatTarget : null;
@@ -1716,7 +1793,7 @@ function renderScene() {
   rack.render(simulationTime, camera, !underground);
   campProps.update(simulationTime);
   holdProps.update(simulationTime);
-  const buffs = [isWellFed() ? `🍂 Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null, simulationTime < (player.inkedUntil || 0) ? `🦑 Inked · ${Math.ceil(player.inkedUntil - simulationTime)} s` : null].filter(Boolean);
+  const buffs = [isMolting() ? `🦀 Molting · ${Math.ceil(player.moltTimer)} s` : null, isSoft() ? `🫧 Soft skin · 🛡 −50% · ${Math.ceil(player.softUntil - simulationTime)} s` : null, isWellFed() ? `🍂 Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null, simulationTime < (player.inkedUntil || 0) ? `🦑 Inked · ${Math.ceil(player.inkedUntil - simulationTime)} s` : null].filter(Boolean);
   hud.setBuff(buffs.length ? buffs.join('  ') : null);
   if (rackPanel.isOpen && Math.floor(simulationTime) !== Math.floor(simulationTime - 1 / 60)) rackPanel.render();
   if (helpersPanel.isOpen && Math.floor(simulationTime * 2) !== Math.floor((simulationTime - 1 / 60) * 2)) helpersPanel.render();
@@ -1808,7 +1885,7 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
 }
 
 function handleTap(clientX, clientY, isNewTouch) {
-  if (paused || anyPanelOpen() || player.dyingTimer > 0) return;
+  if (paused || anyPanelOpen() || player.dyingTimer > 0 || isMolting()) return;
   if (underground) {
     handleBurrowTap(clientX, clientY, isNewTouch);
     return;
@@ -1942,6 +2019,9 @@ hud.onTravel(travel);
 hud.onBuild(() => {
   if (underground && !anyPanelOpen()) buildPanel.open();
 });
+hud.onMolt(() => {
+  if (underground && !anyPanelOpen() && !isMolting()) moltPanel.open();
+});
 hud.onHelpers(() => {
   if (underground && !anyPanelOpen()) helpersPanel.open();
 });
@@ -2007,17 +2087,23 @@ if (isScreenshotMode) {
     gear.dropAll();
     applyWornLook();
   }
-  if (pose.enchanted) {
-    for (const [category, kind] of [['shell', pose.enchanted.shell], ['claws', pose.enchanted.claws]]) {
+  if (pose.molts) {
+    progression.state.molts = [...pose.molts];
+    applyWornLook();
+  }
+  if (pose.outfit) {
+    for (const [category, kind] of [['shell', pose.outfit.shell], ['claws', pose.outfit.claws]]) {
       for (const [type, amount] of Object.entries((category === 'shell' ? SHELLS : CLAWS)[kind].cost)) save.inventory[type] = (save.inventory[type] || 0) + amount;
       const item = gear.craft(category, kind, save.inventory);
-      item.enchant = pose.enchanted.level;
+      item.quality = pose.outfit.quality;
+      if (category === 'shell' && pose.outfit.reinforcement) item.reinforcement = pose.outfit.reinforcement;
+      if (category === 'claws' && pose.outfit.binding) item.binding = pose.outfit.binding;
       gear.wear(item.id);
     }
     gear.markAllSeen();
     applyWornLook();
   }
-  if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', enchant: pose.remainsEnchant || 0 }], claws: [], wornShellId: 90, wornClawsId: null } });
+  if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', quality: pose.remainsQuality || 'fine' }], claws: [], wornShellId: 90, wornClawsId: null } });
   if (pose.burrowAt) digEntranceAt(pose.burrowAt.x, pose.burrowAt.z);
   for (const [column, row] of pose.dug || []) burrow.finishDig(column, row);
   for (const kind of pose.stations || []) {
@@ -2028,7 +2114,7 @@ if (isScreenshotMode) {
   if (pose.stored) Object.assign(storage.inventory, pose.stored);
   for (const extra of pose.extraGear || []) {
     const item = gear.grant(extra.category, extra.kind);
-    item.enchant = extra.enchant || 0;
+    item.quality = extra.quality || 'fine';
     if (extra.stored) {
       const list = extra.category === 'shell' ? gear.state.shells : gear.state.claws;
       list.splice(list.indexOf(item), 1);
@@ -2066,7 +2152,9 @@ if (isScreenshotMode) {
   refreshHud(null);
   if (pose.panel) workbenchPanel.open(pose.panel);
   if (pose.scrollPanel) for (const body of hud.root.querySelectorAll('.workbench.visible .workbench-body')) body.scrollTop = body.scrollHeight;
-  if (pose.armEnchant) hud.root.querySelector('.workbench .enchant-odds.risky')?.closest('.item').querySelector('[data-enchant]').click();
+  if (pose.expandImprove) hud.root.querySelector('.workbench [data-expand]')?.click();
+  if (pose.moltPanel) moltPanel.open();
+  if (pose.molting) startMolt('crusher');
   if (pose.backpack) openBackpack();
   const poseSlot = pose.selectSlot && hud.root.querySelector(`.backpack .slot-grid [data-slot-key]:nth-child(${pose.selectSlot})`);
   if (poseSlot) backpack.select(poseSlot.dataset.slotKey);
@@ -2144,9 +2232,20 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
   advanceWallClock: (milliseconds) => { wallClockOffsetMs += milliseconds; },
   bossRestRemainingMs, dropLoot, regionAt,
+  equipBuild(shellKind, clawKind, invested) {
+    gear.state.shells = shellKind ? [{ id: 500, kind: shellKind, quality: invested ? 'masterwork' : 'fine', reinforcement: invested ? 'metalPlate' : undefined }] : [];
+    gear.state.claws = [{ id: 2, kind: 'bare', quality: 'fine' }, { id: 501, kind: clawKind, quality: invested ? 'masterwork' : 'fine', binding: invested && clawKind !== 'bare' ? 'wire' : undefined }];
+    gear.state.wornShellId = shellKind ? 500 : null;
+    gear.state.wornClawsId = clawKind === 'bare' ? 2 : 501;
+    progression.state.molts = Array(progression.moltsEarned()).fill('crusher');
+    progression.state.clawSkill = EXPECTED_CLAW_SKILL_PER_LEVEL * progression.state.level;
+    player.softUntil = 0;
+    applyWornLook();
+  },
 };
+const EXPECTED_CLAW_SKILL_PER_LEVEL = 1.4;

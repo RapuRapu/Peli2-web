@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside } from './seaside.js';
 import { createNoise2D } from '../noise.js';
-import { SHELLS, CLAWS, canAfford, enchantBonus, enchantCost, ENCHANT_LEVELS, MAX_ENCHANT } from './gear.js';
+import { SHELLS, CLAWS, canAfford, QUALITIES, TOOL_TIERS, BINDINGS, REINFORCEMENTS, qualityForTools, refineCost } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
-import { tierClass, tierBadge } from './itemInfo.js';
+import { tierClass, tierBadge, itemName, itemStatsText, modificationOf } from './itemInfo.js';
 
 export const WORKSHOP_REACH = 2.9;
 export const WORKSHOP_BLOCK_RADIUS = 1.7;
@@ -140,12 +140,7 @@ function costRow(cost, inventory, parent) {
   }
 }
 
-function enchantedStatText(category, definition, level) {
-  if (category === 'shell') return `🛡 ${definition.defense + enchantBonus(definition.defense, level)}`;
-  return `🗡️ +${definition.attackBonus + enchantBonus(definition.attackBonus, level)}`;
-}
-
-export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant, onClose }) {
+export function createWorkbenchPanel(root, { gear, inventory, onCraft, onUpgradeTools, onRefine, onModify, onClose }) {
   const overlay = element('div', 'workbench workshop-panel', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -153,7 +148,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
   const closeButton = element('button', 'workbench-close', header, '✕');
   closeButton.setAttribute('aria-label', 'Close');
   const tabRow = element('div', 'workbench-tabs', card);
-  const tabNames = ['Craft', 'Enchant'];
+  const tabNames = ['Craft', 'Improve'];
   const tabButtons = tabNames.map((name) => {
     const button = element('button', '', tabRow, name);
     button.dataset.tab = name;
@@ -172,6 +167,8 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
       const text = element('div', 'item-text', row);
       element('div', 'item-name', text, `${category === 'shell' ? `${definition.label} · ${definition.role}` : definition.label} · ${tierBadge(definition)}`);
       element('div', 'item-stats', text, category === 'shell' ? shellStatsText(definition) : `🗡️ +${definition.attackBonus} attack`);
+      const quality = qualityForTools(definition, gear.state.toolTier);
+      element('div', `item-quality quality-${quality}`, text, `${quality === 'masterwork' ? '★ ' : ''}${QUALITIES[quality].label} with your ${TOOL_TIERS[gear.state.toolTier].label.toLowerCase()}`);
       if (definition.ability) element('div', 'item-ability', text, `${definition.ability.label} — ${definition.ability.description}`);
       if (definition.healOnHit) element('div', 'item-ability', text, `Mend — every hit heals ${definition.healOnHit} HP`);
       const owned = (category === 'shell' ? gear.state.shells : gear.state.claws).filter((item) => item.kind === kind).length;
@@ -184,58 +181,93 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
     }
   }
 
-  function renderEnchantResult() {
-    if (!enchantState.lastResult) return;
-    const { success, label, level } = enchantState.lastResult;
-    element('div', success ? 'enchant-result success' : 'enchant-result broke', body, success ? `✨ ${label} is now +${level}!` : `💥 ${label} broke.`);
+  function renderResult() {
+    if (improveState.lastResult) element('div', 'improve-result', body, improveState.lastResult);
   }
 
-  function renderEnchant() {
-    renderEnchantResult();
-    const pearls = inventory().pearls || 0;
-    element('div', 'summary', body, `You have 🦪 ${pearls} · +1 to +3 never fail. Higher levels can break the item.`);
-    if (!pearls) element('div', 'enchant-hint', body, 'Pearls lie in the deep parts of tide pools. Shore crabs sometimes drop one.');
-    const entries = gear.enchantableItems().sort((first, second) => isWorn(second.item) - isWorn(first.item));
-    if (!entries.length) element('div', 'placeholder', body, 'Craft a shell or claws to enchant them.');
+  function renderTools() {
+    const tier = gear.state.toolTier;
+    const section = element('div', 'item tools-row', body);
+    const text = element('div', 'item-text', section);
+    element('div', 'item-name', text, `🔨 ${TOOL_TIERS[tier].label} · tools T${tier}`);
+    element('div', 'item-ability', text, `Crafting T${tier} gear → Fine. Lower tiers → ★ Masterwork (+25%). Higher tiers → Crude (−15%).`);
+    const next = TOOL_TIERS[tier + 1];
+    if (!next) {
+      element('div', 'item-stats', text, 'Your tools are the best there are.');
+      return;
+    }
+    element('div', 'item-stats', text, `Next: ${next.label} (T${tier + 1})`);
+    costRow(next.cost, inventory(), text);
+    const button = element('button', 'item-action', section, 'Upgrade');
+    button.dataset.upgradeTools = String(tier + 1);
+    button.disabled = !canAfford(next.cost, inventory());
+    button.addEventListener('click', () => {
+      if (onUpgradeTools()) improveState.lastResult = `🔨 New tools: ${next.label}!`;
+      render();
+    });
+  }
+
+  function renderOption(parent, { label, description, cost, dataKey, dataValue, current, onChoose }) {
+    const row = element('div', current ? 'item option-row current' : 'item option-row', parent);
+    const text = element('div', 'item-text', row);
+    element('div', 'item-name', text, current ? `${label} · ✓ on` : label);
+    element('div', 'item-ability', text, description);
+    if (!current) costRow(cost, inventory(), text);
+    const button = element('button', 'item-action', row, current ? 'On' : 'Apply');
+    button.dataset[dataKey] = dataValue;
+    button.disabled = current || !canAfford(cost, inventory());
+    button.addEventListener('click', onChoose);
+  }
+
+  function renderImprove() {
+    renderResult();
+    renderTools();
+    const entries = gear.improvableItems().sort((first, second) => isWorn(second.item) - isWorn(first.item));
+    if (!entries.length) element('div', 'placeholder', body, 'Craft a shell or claws to improve them.');
     for (const { category, item, definition } of entries) {
-      const level = item.enchant || 0;
-      const targetLevel = level + 1;
       const row = element('div', `${isWorn(item) ? 'item worn' : 'item'} ${tierClass(definition)}`, body);
-      row.dataset.enchantItem = String(item.id);
+      row.dataset.improveItem = String(item.id);
       const text = element('div', 'item-text', row);
-      const name = element('div', 'item-name', text, level ? `${definition.label} +${level}` : definition.label);
-      if (isWorn(item)) element('span', 'enchant-worn', name, '✓ Wearing');
-      if (targetLevel > MAX_ENCHANT) {
-        element('div', 'item-stats', text, `${enchantedStatText(category, definition, level)} · fully enchanted`);
-        const maxButton = element('button', 'item-action', row, 'Max');
-        maxButton.disabled = true;
-        continue;
-      }
-      element('div', 'item-stats', text, `${enchantedStatText(category, definition, level)} → ${enchantedStatText(category, definition, targetLevel).split(' ')[1]}`);
-      const chance = ENCHANT_LEVELS[targetLevel].chance;
-      const odds = element('div', 'enchant-odds', text, `+${targetLevel}: ${chance < 1 ? `${percent(chance)} success` : 'always succeeds'}`);
-      if (chance < 1) {
-        odds.classList.add('risky');
-        element('span', 'enchant-break', odds, ` · ⚠ ${percent(1 - chance)} break risk`);
-      }
-      odds.dataset.chance = String(chance);
-      const cost = enchantCost(targetLevel);
-      costRow(cost, inventory(), text);
-      const armed = enchantState.armedId === item.id;
-      const button = element('button', armed ? 'item-action armed' : chance < 1 ? 'item-action risky-action' : 'item-action', row, armed ? `Confirm · ${percent(1 - chance)} break` : 'Enchant');
-      button.dataset.enchant = String(item.id);
-      button.disabled = !canAfford(cost, inventory());
-      button.addEventListener('click', () => {
-        if (chance < 1 && enchantState.armedId !== item.id) {
-          Object.assign(enchantState, { armedId: item.id, lastResult: null });
-          render();
-          return;
-        }
-        enchantState.armedId = null;
-        const result = onEnchant(item.id);
-        if (result) enchantState.lastResult = { success: result.success, label: definition.label, level: result.level };
+      const name = element('div', 'item-name', text, itemName(category, item));
+      if (isWorn(item)) element('span', 'worn-mark', name, '✓ Wearing');
+      element('div', `item-quality quality-${item.quality}`, text, `${item.quality === 'masterwork' ? '★ ' : ''}${QUALITIES[item.quality].label} · T${definition.tier || 1}`);
+      element('div', 'item-stats', text, itemStatsText(category, item));
+      const modification = modificationOf(category, item);
+      element('div', 'item-ability', text, modification ? `${modification.label} — ${modification.description}` : category === 'shell' ? 'No reinforcement yet' : 'No binding yet');
+      const expanded = improveState.expandedId === item.id;
+      const toggle = element('button', expanded ? 'item-action secondary-action' : 'item-action', row, expanded ? '▲ Hide' : 'Improve');
+      toggle.dataset.expand = String(item.id);
+      toggle.addEventListener('click', () => {
+        improveState.expandedId = expanded ? null : item.id;
+        improveState.lastResult = null;
         render();
       });
+      if (!expanded) continue;
+      const options = element('div', 'improve-options', body);
+      const target = gear.refineTarget(item.id);
+      if (target) {
+        renderOption(options, {
+          label: `Refine → ${QUALITIES[target].label}`,
+          description: `Rework it with your ${TOOL_TIERS[gear.state.toolTier].label.toLowerCase()}.`,
+          cost: refineCost(definition), dataKey: 'refine', dataValue: String(item.id),
+          onChoose: () => {
+            if (onRefine(item.id)) improveState.lastResult = `★ ${definition.label} is now ${QUALITIES[target].label.toLowerCase()}!`;
+            render();
+          },
+        });
+      }
+      const choices = category === 'shell' ? REINFORCEMENTS : BINDINGS;
+      const field = category === 'shell' ? 'reinforcement' : 'binding';
+      for (const [key, choice] of Object.entries(choices)) {
+        renderOption(options, {
+          label: choice.label, description: item[field] && item[field] !== key ? `${choice.description} · replaces ${modification.label.toLowerCase()}` : choice.description,
+          cost: choice.cost, dataKey: 'modify', dataValue: `${item.id}:${key}`, current: item[field] === key,
+          onChoose: () => {
+            if (onModify(item.id, key)) improveState.lastResult = `🔧 ${definition.label}: ${choice.label.toLowerCase()} on`;
+            render();
+          },
+        });
+      }
     }
   }
 
@@ -243,19 +275,19 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
     return item.id === gear.state.wornShellId || item.id === gear.state.wornClawsId;
   }
 
-  const enchantState = { armedId: null, lastResult: null };
+  const improveState = { expandedId: null, lastResult: null };
 
   function render() {
     body.replaceChildren();
     for (const button of tabButtons) button.classList.toggle('active', button.dataset.tab === activeTab);
     if (activeTab === 'Craft') renderCraft();
-    else renderEnchant();
+    else renderImprove();
   }
 
   for (const button of tabButtons) {
     button.addEventListener('click', () => {
       activeTab = button.dataset.tab;
-      Object.assign(enchantState, { armedId: null, lastResult: null });
+      Object.assign(improveState, { expandedId: null, lastResult: null });
       render();
     });
   }
@@ -275,7 +307,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
       root.classList.add('panel-open');
     },
     close() {
-      Object.assign(enchantState, { armedId: null, lastResult: null });
+      Object.assign(improveState, { expandedId: null, lastResult: null });
       overlay.classList.remove('visible');
       root.classList.remove('panel-open');
     },

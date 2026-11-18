@@ -3,7 +3,7 @@ import { element, percent } from './workbench.js';
 import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures } from './inventoryView.js';
 import { itemName, itemStatsText, definitionOf, shellDefense, clawAttack } from './itemInfo.js';
 
-export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, thumbnails, onWear, onUnequip, onEat, onClose }) {
+export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, growthText, thumbnails, onWear, onUnequip, onEat, onClose }) {
   const overlay = element('div', 'workbench backpack', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -43,11 +43,11 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     const definition = definitionOf(entry.category, entry.item.kind);
     if (entry.category === 'shell') {
       const worn = gear.wornShell();
-      const wornDefense = worn ? shellDefense(definitionOf('shell', worn.kind), worn.enchant || 0) : 0;
-      return shellDefense(definition, entry.item.enchant || 0) - wornDefense || null;
+      const wornDefense = worn ? shellDefense(definitionOf('shell', worn.kind), worn) : 0;
+      return shellDefense(definition, entry.item) - wornDefense || null;
     }
     const worn = gear.wornClaws();
-    return clawAttack(definition, entry.item.enchant || 0) - clawAttack(definitionOf('claws', worn.kind), worn.enchant || 0) || null;
+    return clawAttack(definition, entry.item) - clawAttack(definitionOf('claws', worn.kind), worn) || null;
   }
 
   function actionsFor(entry) {
@@ -79,7 +79,7 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     const dollFrame = element('div', 'doll-frame', dollColumn);
     const wornShell = gear.wornShell();
     const wornClaws = gear.wornClaws();
-    const dollImage = thumbnails.dollImage(wornShell ? wornShell.kind : null, wornClaws.kind, wornShell ? wornShell.enchant || 0 : 0, wornClaws.enchant || 0);
+    const dollImage = thumbnails.dollImage(wornShell, wornClaws);
     if (dollImage) element('img', 'doll-image', dollFrame).src = dollImage;
     else element('div', 'doll-fallback', dollFrame, '🦀');
     const equipRow = element('div', 'equip-row', dollColumn);
@@ -87,6 +87,7 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     renderEquipSlot(equipRow, 'claws');
     const stats = combatStats();
     element('div', 'summary doll-summary', dollColumn, `❤ ${maxHealth()} · 🛡 ${stats.defense} · 🏃 ${percent(stats.speedFactor)} · 🗡️ ${stats.attack}`);
+    element('div', 'summary doll-summary growth-summary', dollColumn, growthText());
     const gridColumn = element('div', 'grid-column', layout);
     const entries = allEntries();
     element('div', 'section-title grid-title', gridColumn, `🎒 ${entries.length} · double-tap to wear`);

@@ -69,6 +69,7 @@ async () => {
   out.goalAfterReef = goalText();
   out.coralInBag = d.save.inventory.coral || 0;
   const glass = d.resources.nodes.find((n) => n.type === 'seaGlass' && !n.gathered);
+  d.enemies.calmAll(1e6, d.simulationTime());
   d.setDestination(glass.x, glass.z, glass);
   out.glassSeconds = +step(240, () => glass.gathered).toFixed(1);
   out.glassInBag = d.save.inventory.seaGlass || 0;

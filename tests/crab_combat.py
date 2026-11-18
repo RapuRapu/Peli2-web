@@ -9,13 +9,7 @@ window.__combat = (() => {
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
   const silenceOthers = (keep) => { for (const enemy of d.enemies.list) if (enemy !== keep) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 }); };
   const place = (x, z) => { if (d.isUnderground()) d.exitBurrow(); const spot = d.navigation.nearestWalkable(x, z, 20); Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null, gatherTarget: null, speed: 0 }); return spot; };
-  const equip = (shell, enchant, claws) => {
-    d.gear.state.shells = [{ id: 500, kind: shell, enchant }];
-    d.gear.state.claws = [{ id: 2, kind: 'bare', enchant: 0 }, { id: 501, kind: 'shellEdged', enchant }];
-    d.gear.state.wornShellId = 500;
-    d.gear.state.wornClawsId = claws ? 501 : 2;
-    d.hermit.setShell(d.gear.wornLook());
-  };
+  const equip = (shell, investment, claws) => d.equipBuild(shell, claws ? 'shellEdged' : 'bare', investment > 0);
   const spawnNear = (kind, spot, distance) => {
     const enemySpot = d.navigation.nearestWalkable(spot.x + distance, spot.z + 0.5, 10);
     const enemy = d.enemies.spawn(kind, enemySpot.x, enemySpot.z);
@@ -23,10 +17,10 @@ window.__combat = (() => {
     if (enemy.definition.flies) Object.assign(enemy, { altitude: 0, state: 'chase', anchor: { x: enemy.x, z: enemy.z }, attackTimer: enemy.definition.windup });
     return enemy;
   };
-  function fight(kind, shell, level, enchant, claws) {
+  function fight(kind, shell, level, investment, claws) {
     d.progression.setLevel(level);
     d.progression.state.experience = -1e9;
-    equip(shell, enchant, claws);
+    equip(shell, investment, claws);
     d.save.inventory = {};
     while (d.remains.list.length) d.remains.remove(d.remains.list[0]);
     const spot = place(kind === 'gull' ? 0 : 30, kind === 'gull' ? -106 : -40);
@@ -77,11 +71,11 @@ with sync_playwright() as playwright:
         balance[f'gull L1 {shell}'] = summarize(results)
     for shell in ('turban', 'cone'):
         results = [page.evaluate(f"() => __combat.fight('gull', '{shell}', 10, 6, true)") for _ in range(10)]
-        balance[f'gull L10 {shell}+6 claws+6'] = summarize(results)
+        balance[f'gull L10 {shell}★ claws★'] = summarize(results)
         results = [page.evaluate(f"() => __combat.fight('gull', '{shell}', 10, 0, true)") for _ in range(10)]
-        balance[f'gull L10 {shell}+0 claws+0'] = summarize(results)
+        balance[f'gull L10 {shell} claws'] = summarize(results)
     wins = lambda key: int(balance[key]['wins'].split('/')[0])
-    checks['balance'] = {**balance, 'pass': all(wins(f'gull L1 {s}') == 0 for s in ('snail', 'turban', 'cone')) and wins('gull L10 turban+6 claws+6') >= 7 and wins('gull L10 cone+6 claws+6') >= 7}
+    checks['balance'] = {**balance, 'pass': all(wins(f'gull L1 {s}') == 0 for s in ('snail', 'turban', 'cone')) and wins('gull L10 turban★ claws★') >= 7 and wins('gull L10 cone★ claws★') >= 7}
     turban_crab = balance['shoreCrab L1 turban']
     cone_crab = balance['shoreCrab L1 cone']
     checks['shellClassesDiffer'] = {'turbanHealthLeft': turban_crab['healthLeft'][0], 'coneHealthLeft': cone_crab['healthLeft'][0], 'turbanSeconds': turban_crab['seconds'][0], 'coneSeconds': cone_crab['seconds'][0],
@@ -174,7 +168,7 @@ with sync_playwright() as playwright:
       d.craftItem('claws', 'shellEdged');
       d.wearItem(d.gear.state.shells.find(s => s.kind === 'cone').id);
       d.wearItem(d.gear.state.claws.find(s => s.kind === 'shellEdged').id);
-      d.gear.state.shells.find(s => s.kind === 'cone').enchant = 2;
+      d.gear.state.shells.find(s => s.kind === 'cone').quality = 'masterwork';
       d.save.inventory.pearls = 1;
       d.progression.setLevel(3);
       d.progression.state.experience = 17;
@@ -186,7 +180,7 @@ with sync_playwright() as playwright:
       const remains = d.remains.list[0];
       const first = {
         remains: d.remains.list.length,
-        dropped: remains ? { inventory: remains.inventory, shells: remains.gear.shells.map(s => `${s.kind}+${s.enchant}`), claws: remains.gear.claws.map(s => s.kind) } : null,
+        dropped: remains ? { inventory: remains.inventory, shells: remains.gear.shells.map(s => `${s.kind}${s.quality === 'masterwork' ? '★' : ''}`), claws: remains.gear.claws.map(s => s.kind) } : null,
         carriedBefore: carried,
         backpackEmpty: Object.keys(d.save.inventory).length === 0,
         naked: !d.gear.wornShell(),
@@ -209,7 +203,7 @@ with sync_playwright() as playwright:
       return { first, second };
     }''')
     first = death['first']
-    checks['death'] = {**death, 'pass': first['remains'] == 1 and first['dropped']['inventory'] == {k: v for k, v in first['carriedBefore'].items() if v} and sorted(first['dropped']['shells']) == ['cone+2', 'snail+0'] and first['dropped']['claws'] == ['shellEdged'] and first['backpackEmpty'] and first['naked'] and first['claws'] == 'bare' and first['defense'] == 0 and first['level'] == 3 and first['experience'] == 17 and first['fullHealth'] and first['wokeInBurrow'] and 'remains' in first['goal'] and death['second']['remains'] == 2 and death['second']['firstKept']}
+    checks['death'] = {**death, 'pass': first['remains'] == 1 and first['dropped']['inventory'] == {k: v for k, v in first['carriedBefore'].items() if v} and sorted(first['dropped']['shells']) == ['cone★', 'snail'] and first['dropped']['claws'] == ['shellEdged'] and first['backpackEmpty'] and first['naked'] and first['claws'] == 'bare' and first['defense'] == 0 and first['level'] == 3 and first['experience'] == 17 and first['fullHealth'] and first['wokeInBurrow'] and 'remains' in first['goal'] and death['second']['remains'] == 2 and death['second']['firstKept']}
 
     page.reload()
     page.wait_for_function('!!window.__debug', timeout=180000)
@@ -224,9 +218,9 @@ with sync_playwright() as playwright:
       d.setPaused(true);
       const before = d.remains.list.length;
       __combat.step(15, () => d.remains.list.length < before);
-      return { remains: d.remains.list.length, worn: d.gear.wornShell() && `${d.gear.wornShell().kind}+${d.gear.wornShell().enchant}`, claws: d.gear.wornClaws().kind, inventory: { ...d.save.inventory }, defense: d.playerStats().defense };
+      return { remains: d.remains.list.length, worn: d.gear.wornShell() && `${d.gear.wornShell().kind}${d.gear.wornShell().quality === 'masterwork' ? '★' : ''}`, claws: d.gear.wornClaws().kind, inventory: { ...d.save.inventory }, defense: d.playerStats().defense };
     }''')
-    checks['saveAndRecoverByTap'] = {'reloaded': reloaded, 'tap': tap, 'recovered': recovered, 'pass': reloaded == {'version': 4, 'remains': 2, 'naked': True, 'level': 3} and recovered['remains'] == 1 and recovered['worn'] == 'cone+2' and recovered['claws'] == 'shellEdged' and recovered['inventory'].get('shellBits') == 4 and recovered['inventory'].get('pearls') == 1 and recovered['defense'] == 5}
+    checks['saveAndRecoverByTap'] = {'reloaded': reloaded, 'tap': tap, 'recovered': recovered, 'pass': reloaded == {'version': 5, 'remains': 2, 'naked': True, 'level': 3} and recovered['remains'] == 1 and recovered['worn'] == 'cone★' and recovered['claws'] == 'shellEdged' and recovered['inventory'].get('shellBits') == 4 and recovered['inventory'].get('pearls') == 1 and recovered['defense'] == 4}
 
     page.evaluate("() => { const d = __debug; const c = __combat; const spot = c.place(30, -40); const hopper = c.spawnNear('sandHopper', spot, 5); d.setPaused(false); d.updateCamera(0, true); d.renderScene(); window.__hopper = hopper; }")
     enemy_tap = page.evaluate("() => { const d = __debug; const e = window.__hopper; const p = new d.camera.position.constructor(e.x, e.y + e.definition.radius * 0.8, e.z).project(d.camera); return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight }; }")

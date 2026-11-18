@@ -12,23 +12,17 @@ window.__drops = (() => {
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
   const silenceOthers = (keep) => { for (const enemy of d.enemies.list) if (!keep.includes(enemy) && !enemy.definition.dailyBoss) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 }); for (const enemy of d.enemies.list) if (!keep.includes(enemy) && enemy.definition.dailyBoss && enemy.state !== 'dead') Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 }); };
   const place = (x, z) => { if (d.isUnderground()) d.exitBurrow(); const spot = d.navigation.nearestWalkable(x, z, 20); Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null, gatherTarget: null, speed: 0, inkedUntil: 0 }); return spot; };
-  const equip = (shell, shellEnchant, claws, clawEnchant) => {
-    d.gear.state.shells = [{ id: 500, kind: shell, enchant: shellEnchant }];
-    d.gear.state.claws = [{ id: 2, kind: 'bare', enchant: 0 }, { id: 501, kind: claws, enchant: clawEnchant }];
-    d.gear.state.wornShellId = 500;
-    d.gear.state.wornClawsId = claws === 'bare' ? 2 : 501;
-    d.hermit.setShell(d.gear.wornLook());
-  };
+  const equip = (shell, shellInvestment, claws, clawInvestment) => d.equipBuild(shell, claws, shellInvestment > 0 || clawInvestment > 0);
   const arenas = {
     giantLobster: { lair: { x: -62, z: 96 }, stand: { x: -62, z: 89 } },
     shipCat: { lair: { x: -97, z: -63 }, stand: { x: -97, z: -54 } },
     cook: { lair: { x: 106, z: -64 }, stand: { x: 100, z: -65 } },
   };
-  function fight(kind, level, shell, shellEnchant, claws, clawEnchant, fed) {
+  function fight(kind, level, shell, shellInvestment, claws, clawInvestment, fed) {
     d.progression.setLevel(level);
     d.progression.state.experience = -1e9;
     d.progression.state.health = d.progression.maxHealth();
-    equip(shell, shellEnchant, claws, clawEnchant);
+    equip(shell, shellInvestment, claws, clawInvestment);
     d.save.inventory = {};
     while (d.remains.list.length) d.remains.remove(d.remains.list[0]);
     const arena = arenas[kind];
@@ -152,28 +146,24 @@ with sync_playwright() as playwright:
     checks['trophyRecipes'] = all(crafting['crafted']) and crafting['leftover'] == 0
     checks['swift'] = crafting['swiftFactor'] == 0.8 and crafting['normalFactor'] == 1
 
-    enchant = page.evaluate(r"""() => {
-      const d = window.__debug; const levels = d.enchantLevels; const out = {};
-      out.cap = levels.length - 1;
-      out.chances = levels.slice(1).map((level) => level.chance);
-      out.glowRises = levels.slice(4).every((level, index, list) => index === 0 || level.glow > list[index - 1].glow);
-      const particleCount = (level) => { window.__drops.equip('snail', level, 'bare', 0); d.hermit.setEnchant(level, 0); d.simulate(1 / 60); const mesh = d.scene.getObjectsByProperty('isInstancedMesh', true).find((m) => m.count && m.geometry.type === 'IcosahedronGeometry' && m.material.blending === 2); return mesh && mesh.visible ? mesh.count : 0; };
-      out.particles = { 12: particleCount(12), 13: particleCount(13), 16: particleCount(16) };
-      out.rainbow = !!levels[16].rainbow && !levels[15].rainbow;
+    sheen = page.evaluate(r"""() => {
+      const d = window.__debug; const out = {};
+      const glowOf = (quality) => { d.gear.state.shells = [{ id: 500, kind: 'tinCan', quality }]; d.gear.state.wornShellId = 500; d.equipBuild && 0; d.wearItem(500); d.simulate(1 / 60); const mesh = d.scene.getObjectsByProperty('isInstancedMesh', true).find((m) => m.geometry.type === 'IcosahedronGeometry' && m.material.blending === 2); return { particles: mesh && mesh.visible ? mesh.count : 0 }; };
+      out.fine = glowOf('fine');
+      out.masterwork = glowOf('masterwork');
       return out;
     }""")
-    print('enchant', json.dumps(enchant), flush=True)
-    checks['enchantSixteen'] = enchant['cap'] == 16 and enchant['chances'][:3] == [1, 1, 1] and all(c == 0.7 for c in enchant['chances'][3:]) and enchant['glowRises'] and enchant['rainbow']
-    checks['enchantParticles'] = enchant['particles']['12'] == 0 and enchant['particles']['13'] == 12 and enchant['particles']['16'] == 48
+    print('sheen', json.dumps(sheen), flush=True)
+    checks['masterworkSheenWithoutParticles'] = sheen['fine']['particles'] == 0 and sheen['masterwork']['particles'] == 0
 
     page.evaluate(HELPERS)
     scenarios = {
-        'lobster L10 coral+4 coralTipped+4 fed': "'giantLobster', 10, 'coral', 4, 'coralTipped', 4, true",
-        'lobster L10 lobster+4 coralTipped+4 fed': "'giantLobster', 10, 'lobster', 4, 'coralTipped', 4, true",
-        'cat L10 tinCan+4 fishhook+4 fed': "'shipCat', 10, 'tinCan', 4, 'fishhook', 4, true",
-        'cat L10 tinCan+4 whisker+4 fed': "'shipCat', 10, 'tinCan', 4, 'whisker', 4, true",
-        'cook L10 skull+4 fork+4 fed': "'cook', 10, 'skull', 4, 'fork', 4, true",
-        'cook L10 skull+4 cleaver+4 fed': "'cook', 10, 'skull', 4, 'cleaver', 4, true",
+        'lobster L10 coral★ coralTipped★ fed': "'giantLobster', 10, 'coral', 4, 'coralTipped', 4, true",
+        'lobster L10 lobster★ coralTipped★ fed': "'giantLobster', 10, 'lobster', 4, 'coralTipped', 4, true",
+        'cat L10 tinCan★ fishhook★ fed': "'shipCat', 10, 'tinCan', 4, 'fishhook', 4, true",
+        'cat L10 tinCan★ whisker★ fed': "'shipCat', 10, 'tinCan', 4, 'whisker', 4, true",
+        'cook L10 skull★ fork★ fed': "'cook', 10, 'skull', 4, 'fork', 4, true",
+        'cook L10 skull★ cleaver★ fed': "'cook', 10, 'skull', 4, 'cleaver', 4, true",
     }
     balance = {}
     for name, arguments in scenarios.items():
@@ -182,7 +172,7 @@ with sync_playwright() as playwright:
         print(name, balance[name], flush=True)
     wins = lambda name: int(balance[name]['wins'].split('/')[0])
     better = lambda base, trophy: wins(trophy) > wins(base) or (wins(trophy) == wins(base) and balance[trophy]['healthLeft'] >= balance[base]['healthLeft'])
-    checks['trophiesHelp'] = better('lobster L10 coral+4 coralTipped+4 fed', 'lobster L10 lobster+4 coralTipped+4 fed') and better('cat L10 tinCan+4 fishhook+4 fed', 'cat L10 tinCan+4 whisker+4 fed') and better('cook L10 skull+4 fork+4 fed', 'cook L10 skull+4 cleaver+4 fed')
+    checks['trophiesHelp'] = better('lobster L10 coral★ coralTipped★ fed', 'lobster L10 lobster★ coralTipped★ fed') and better('cat L10 tinCan★ fishhook★ fed', 'cat L10 tinCan★ whisker★ fed') and better('cook L10 skull★ fork★ fed', 'cook L10 skull★ cleaver★ fed')
 
     checks['noConsoleErrors'] = not errors
     if errors: print(errors[:5])

@@ -1,7 +1,9 @@
 import { CLAWS } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { element } from './workbench.js';
-import { definitionOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, enchantGlowCss } from './itemInfo.js';
+import { definitionOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, qualityBadge, masterworkGlowCss } from './itemInfo.js';
+
+const QUALITY_RANK = ['crude', 'fine', 'masterwork'];
 
 const DOUBLE_TAP_MILLISECONDS = 360;
 const TAP_SLOP_PIXELS = 10;
@@ -15,7 +17,7 @@ export function gearEntries(shells, claws) {
     ...shells.map((item) => ({ key: `item:${item.id}`, kind: 'gear', category: 'shell', item })),
     ...claws.filter((item) => CLAWS[item.kind].cost).map((item) => ({ key: `item:${item.id}`, kind: 'gear', category: 'claws', item })),
   ];
-  return entries.sort((first, second) => itemTier(definitionOf(second.category, second.item.kind)) - itemTier(definitionOf(first.category, first.item.kind)) || (second.item.enchant || 0) - (first.item.enchant || 0));
+  return entries.sort((first, second) => itemTier(definitionOf(second.category, second.item.kind)) - itemTier(definitionOf(first.category, first.item.kind)) || QUALITY_RANK.indexOf(second.item.quality) - QUALITY_RANK.indexOf(first.item.quality));
 }
 
 export function entryTitle(entry) {
@@ -40,8 +42,9 @@ export function renderSlot(parent, entry, thumbnails, { selected = false, zone =
   if (image) element('img', 'slot-image', slot).src = image;
   else element('div', 'slot-emoji', slot, entry.category === 'shell' ? '🐚' : '🦀');
   element('div', 'slot-tier', slot, tierBadge(definition));
-  if (entry.item.enchant) element('div', 'slot-enchant', slot, `+${entry.item.enchant}`);
-  const glow = enchantGlowCss(entry.item.enchant);
+  const badge = qualityBadge(entry.item);
+  if (badge) element('div', `slot-quality quality-${entry.item.quality}`, slot, badge);
+  const glow = masterworkGlowCss(entry.item);
   if (glow) slot.style.boxShadow = `0 0 10px 2px ${glow}`;
   if (entry.item.isNew) element('div', 'new-badge slot-new', slot, 'NEW');
   slot.title = itemName(entry.category, entry.item);
@@ -66,7 +69,7 @@ export function renderDetails(parent, entry, actions, hint = 'Tap an item to see
     if (delta) element('span', delta > 0 ? 'stat-delta better' : 'stat-delta worse', stats, ` ${delta > 0 ? '▲' : '▼'}${Math.abs(delta)} vs worn`);
     const breakdown = itemStatsBreakdown(entry.category, entry.item);
     if (breakdown) element('div', 'item-owned', text, breakdown);
-    for (const line of itemAbilityText(definition)) element('div', 'item-ability', text, line);
+    for (const line of itemAbilityText(definition, entry.category, entry.item)) element('div', 'item-ability', text, line);
   }
   const buttons = element('div', 'details-actions', details);
   for (const action of actions) {

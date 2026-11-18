@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySeaside, createEnchantUniforms, updateEnchantUniforms } from './seaside.js';
+import { applySeaside, createGearGlowUniforms, updateGearGlowUniforms } from './seaside.js';
 import { buildShellGeometry } from './hermit.js';
-import { SHELLS, enchantLook } from './gear.js';
+import { SHELLS, gearGlowLook } from './gear.js';
 import { element } from './workbench.js';
 import { WORLD_LABEL_TOP_PIXELS } from './enemies.js';
 
@@ -46,21 +46,21 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     return record.gear.shells.find((item) => item.id === record.gear.wornShellId) || record.gear.shells[0] || null;
   }
 
-  function enchantedMaterial(enchantUniforms) {
-    return applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, side: THREE.DoubleSide }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.1, enchant: enchantUniforms });
+  function gearGlowedMaterial(gearGlowUniforms) {
+    return applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, side: THREE.DoubleSide }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.1, gearGlow: gearGlowUniforms });
   }
 
   function build(record) {
     const shellItem = shownShell(record);
     const kind = shellItem ? shellItem.kind : null;
-    const enchantLevel = shellItem ? shellItem.enchant || 0 : 0;
-    const enchantUniforms = enchantLook(enchantLevel).glow > 0 ? createEnchantUniforms() : null;
+    const gearGlowLookOfShell = gearGlowLook(shellItem);
+    const gearGlowUniforms = gearGlowLookOfShell.glow > 0 ? createGearGlowUniforms() : null;
     const group = new THREE.Group();
     const y = world.heightAt(record.x, record.z);
     let mesh;
     if (kind) {
       const built = buildShellGeometry(SHELLS[kind].look);
-      mesh = new THREE.Mesh(built.geometry, enchantUniforms ? enchantedMaterial(enchantUniforms) : material);
+      mesh = new THREE.Mesh(built.geometry, gearGlowUniforms ? gearGlowedMaterial(gearGlowUniforms) : material);
       mesh.rotation.set(0.25, record.id * 1.7, Math.PI * 0.46);
       mesh.position.y = SHELLS[kind].look.tubeRadius * 0.85;
     } else {
@@ -75,7 +75,7 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     group.position.set(record.x, y, record.z);
     scene.add(group);
     const label = element('div', 'world-label remains-label hidden', labelParent, '💀 Remains');
-    return { ...record, y, group, ring, label, enchantLevel, enchantUniforms };
+    return { ...record, y, group, ring, label, gearGlowLookOfShell, gearGlowUniforms };
   }
 
   function add(record) {
@@ -105,7 +105,7 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     for (const entry of list) {
       const pulse = 0.5 + 0.5 * Math.sin(time * 3 + entry.id);
       entry.ring.scale.setScalar(1 + 0.06 * pulse);
-      if (entry.enchantUniforms) updateEnchantUniforms(entry.enchantUniforms, enchantLook(entry.enchantLevel), time);
+      if (entry.gearGlowUniforms) updateGearGlowUniforms(entry.gearGlowUniforms, entry.gearGlowLookOfShell, time);
       const point = screenPoint(entry, camera);
       const onScreen = !point.behind && point.x > ARROW_MARGIN_PIXELS && point.x < innerWidth - ARROW_MARGIN_PIXELS && point.y > ARROW_MARGIN_PIXELS && point.y < innerHeight - ARROW_MARGIN_PIXELS;
       entry.label.classList.toggle('hidden', !onScreen);

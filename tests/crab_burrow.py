@@ -173,9 +173,9 @@ with sync_playwright() as playwright:
     old.on('pageerror', lambda error: errors.append(str(error)))
     old.goto(URL)
     old.wait_for_function('!!window.__debug', timeout=180000)
-    migrated = old.evaluate('''() => { const d = window.__debug; return { entrance: d.burrow.state.entrance, stations: d.burrow.state.stations.map((s) => s.kind), worn: d.gear.wornShell().kind, enchant: d.gear.wornShell().enchant, underground: d.isUnderground(), goal: document.querySelector('#hud .goal').textContent }; }''')
+    migrated = old.evaluate('''() => { const d = window.__debug; return { entrance: d.burrow.state.entrance, stations: d.burrow.state.stations.map((s) => s.kind), worn: d.gear.wornShell().kind, quality: d.gear.wornShell().quality, underground: d.isUnderground(), goal: document.querySelector('#hud .goal').textContent }; }''')
     print(json.dumps(migrated))
-    checks['migratesV3'] = migrated['entrance'] == {'x': 18, 'z': -17} and migrated['stations'] == ['workshop'] and migrated['worn'] == 'turban' and migrated['enchant'] == 2 and not migrated['underground']
+    checks['migratesV3'] = migrated['entrance'] == {'x': 18, 'z': -17} and migrated['stations'] == ['workshop'] and migrated['worn'] == 'turban' and migrated['quality'] == 'fine' and not migrated['underground']
     migration.close()
 
     mobile = browser.new_context(viewport={'width': 412, 'height': 915}, is_mobile=True, has_touch=True, device_scale_factor=2)

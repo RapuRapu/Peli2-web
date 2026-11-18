@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SHELLS, CLAWS, NAKED } from './gear.js';
+import { SHELLS, CLAWS, NAKED, gearGlowLook } from './gear.js';
 import { buildShellGeometry, buildClawPreview, createHermit } from './hermit.js';
 
 const ITEM_PIXELS = 128;
@@ -77,15 +77,17 @@ export function createThumbnails(quality) {
     return image;
   }
 
-  function dollImage(shellKind, clawKind, shellEnchant, clawEnchant) {
-    const key = `doll:${shellKind}:${clawKind}:${shellEnchant}:${clawEnchant}`;
+  function dollImage(shellItem, clawItem) {
+    const shellKind = shellItem ? shellItem.kind : null;
+    const clawKind = clawItem.kind;
+    const key = `doll:${shellKind}:${clawKind}:${shellItem ? shellItem.quality : ''}:${clawItem.quality}`;
     if (cache.has(key)) return cache.get(key);
     if (!ensureStage()) return null;
     if (!doll) doll = createHermit(scene, quality, NAKED.look);
     doll.setShell(shellKind ? SHELLS[shellKind].look : NAKED.look);
     doll.setClawTint(CLAWS[clawKind].tint || null);
     doll.setClawTines(Boolean(CLAWS[clawKind].tines));
-    doll.setEnchant(shellEnchant, clawEnchant);
+    doll.setGearGlow(gearGlowLook(shellItem), gearGlowLook(clawItem));
     doll.root.visible = true;
     for (let tick = 0; tick < 3; tick++) doll.update(1 / 60, { x: STAGE.x, y: STAGE.y, z: STAGE.z, heading: 0.5, speed: 0, working: false, groundNormal: new THREE.Vector3(0, 1, 0) });
     doll.root.updateMatrixWorld(true);

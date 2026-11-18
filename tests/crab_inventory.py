@@ -8,8 +8,8 @@ SETUP = r'''() => {
   const d = window.__debug;
   d.setPaused(true);
   d.save.inventory = { shellBits: 8, coral: 3, scrap: 5, driedKelp: 1 };
-  d.gear.state.shells = [{ id: 701, kind: 'tinCan', enchant: 6 }, { id: 702, kind: 'skull', enchant: 0 }, { id: 703, kind: 'lobster', enchant: 2 }];
-  d.gear.state.claws = [{ id: 2, kind: 'bare', enchant: 0 }, { id: 704, kind: 'fishhook', enchant: 3 }, { id: 705, kind: 'cleaver', enchant: 0 }];
+  d.gear.state.shells = [{ id: 701, kind: 'tinCan', quality: 'masterwork', reinforcement: 'metalPlate' }, { id: 702, kind: 'skull', quality: 'fine' }, { id: 703, kind: 'lobster', quality: 'masterwork' }];
+  d.gear.state.claws = [{ id: 2, kind: 'bare', quality: 'fine' }, { id: 704, kind: 'fishhook', quality: 'masterwork', binding: 'wire' }, { id: 705, kind: 'cleaver', quality: 'fine' }];
   d.gear.state.wornShellId = 701;
   d.gear.state.wornClawsId = 704;
   d.openBackpack();
@@ -45,21 +45,21 @@ with sync_playwright() as playwright:
       return {
         wornNames: [...document.querySelectorAll('#hud .backpack .equip-name')].map((e) => e.textContent),
         wornStats: [...document.querySelectorAll('#hud .backpack .equip-stats')].map((e) => e.textContent),
-        gridGear: [...document.querySelectorAll('#hud .backpack .slot-grid [data-slot-item]')].map((e) => ({ id: e.dataset.slotItem, tier: [...e.classList].filter((c) => c.startsWith('tier-')).join(' '), badge: e.querySelector('.slot-tier').textContent, enchant: e.querySelector('.slot-enchant')?.textContent || '', image: !!e.querySelector('img') })),
+        gridGear: [...document.querySelectorAll('#hud .backpack .slot-grid [data-slot-item]')].map((e) => ({ id: e.dataset.slotItem, tier: [...e.classList].filter((c) => c.startsWith('tier-')).join(' '), badge: e.querySelector('.slot-tier').textContent, quality: e.querySelector('.slot-quality')?.textContent || '', image: !!e.querySelector('img') })),
         materials: [...document.querySelectorAll('#hud .backpack .slot-grid [data-material]')].map((e) => e.dataset.material + e.querySelector('.slot-count').textContent),
         doll: !!q('.doll-image'),
       };
     }""")
     print('view', json.dumps(view), flush=True)
     grid = {g['id']: g for g in view['gridGear']}
-    checks['enchantInNames'] = view['wornNames'] == ['Tin can +6', 'Fishhook claws +3'] and view['wornStats'][0].startswith('🛡 32') and view['wornStats'][1] == '🗡️ +19'
-    checks['tiers'] = grid['702']['tier'] == 'tier-4' and grid['703']['tier'] == 'tier-2 tier-trophy' and grid['703']['badge'] == '👑 T2' and grid['705']['badge'] == '👑 T5' and grid['703']['enchant'] == '+2'
+    checks['qualityInNames'] = view['wornNames'] == ['Masterwork tin can', 'Masterwork fishhook claws'] and view['wornStats'][0].startswith('🛡 32') and view['wornStats'][1] == '🗡️ +19'
+    checks['tiers'] = grid['702']['tier'] == 'tier-4' and grid['703']['tier'] == 'tier-2 tier-trophy' and grid['703']['badge'] == '👑 T2' and grid['705']['badge'] == '👑 T5' and grid['703']['quality'] == '★' and grid['702']['quality'] == ''
     checks['slotsAndImages'] = len(view['gridGear']) == 3 and all(g['image'] for g in view['gridGear']) and view['materials'] == ['shellBits×8', 'coral×3', 'scrap×5', 'driedKelp×1'] and view['doll']
 
     page.click('#hud .backpack .slot-grid [data-slot-item="703"]')
     details = page.evaluate("() => ({ name: document.querySelector('#hud .backpack .item-details .item-name').textContent, tier: document.querySelector('#hud .backpack .item-details .item-tier').textContent, breakdown: document.querySelector('#hud .backpack .item-details .item-owned')?.textContent, delta: document.querySelector('#hud .backpack .item-details .stat-delta')?.textContent, wear: !!document.querySelector('#hud .backpack [data-wear=\"703\"]') })")
     print('details', json.dumps(details), flush=True)
-    checks['details'] = details['delta'] == ' ▼12 vs worn' and details['name'] == 'Lobster shell +2' and 'Tier 2' in details['tier'] and 'Boss trophy' in details['tier'] and details['breakdown'] == '🛡 16 + 4 from +2' and details['wear']
+    checks['details'] = details['delta'] == ' ▼12 vs worn' and details['name'] == 'Masterwork lobster shell' and 'Tier 2' in details['tier'] and 'Boss trophy' in details['tier'] and details['breakdown'] == '🛡 16 + 4 masterwork' and details['wear']
 
     page.dblclick('#hud .backpack .slot-grid [data-slot-item="702"]')
     after_double = page.evaluate("() => __debug.gear.wornShell().kind")
@@ -87,7 +87,7 @@ with sync_playwright() as playwright:
     page.evaluate(r"""() => {
       const d = window.__debug;
       d.storage.inventory = { coral: 2 };
-      d.storage.shells = [{ id: 801, kind: 'coral', enchant: 4 }];
+      d.storage.shells = [{ id: 801, kind: 'coral', quality: 'masterwork' }];
       d.storage.claws = [];
       d.save.inventory = { scrap: 5 };
       d.gear.state.wornShellId = 701;

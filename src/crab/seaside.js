@@ -243,39 +243,39 @@ export function createMotionDepthMaterial(vertexMotion) {
   return material;
 }
 
-const ENCHANT_PULSE_SPEED = 3.2;
-const ENCHANT_PULSE_DEPTH = 0.45;
+const GEAR_GLOW_PULSE_SPEED = 3.2;
+const GEAR_GLOW_PULSE_DEPTH = 0.45;
 
-export function createEnchantUniforms() {
-  return { uEnchantColor: { value: new THREE.Color(1, 1, 1) }, uEnchantGlow: { value: 0 }, uEnchantRainbow: { value: 0 }, uEnchantPhase: { value: 0 } };
+export function createGearGlowUniforms() {
+  return { uGearGlowColor: { value: new THREE.Color(1, 1, 1) }, uGearGlowGlow: { value: 0 }, uGearGlowRainbow: { value: 0 }, uGearGlowPhase: { value: 0 } };
 }
 
 const RAINBOW_CYCLE_SPEED = 0.18;
 
-export function enchantColorAt(look, time, target, offset = 0) {
+export function gearGlowColorAt(look, time, target, offset = 0) {
   if (look.rainbow) return target.setHSL((time * RAINBOW_CYCLE_SPEED + offset) % 1, 1, 0.5);
   return target.setRGB(look.color[0], look.color[1], look.color[2]);
 }
 
-export function updateEnchantUniforms(uniforms, look, time) {
-  const pulse = look.pulse ? 1 - ENCHANT_PULSE_DEPTH * (0.5 + 0.5 * Math.sin(time * ENCHANT_PULSE_SPEED)) : 1;
-  enchantColorAt(look, time, uniforms.uEnchantColor.value);
-  uniforms.uEnchantGlow.value = look.glow * pulse;
-  uniforms.uEnchantRainbow.value = look.rainbow ? 1 : 0;
-  uniforms.uEnchantPhase.value = (time * RAINBOW_CYCLE_SPEED) % 1;
+export function updateGearGlowUniforms(uniforms, look, time) {
+  const pulse = look.pulse ? 1 - GEAR_GLOW_PULSE_DEPTH * (0.5 + 0.5 * Math.sin(time * GEAR_GLOW_PULSE_SPEED)) : 1;
+  gearGlowColorAt(look, time, uniforms.uGearGlowColor.value);
+  uniforms.uGearGlowGlow.value = look.glow * pulse;
+  uniforms.uGearGlowRainbow.value = look.rainbow ? 1 : 0;
+  uniforms.uGearGlowPhase.value = (time * RAINBOW_CYCLE_SPEED) % 1;
 }
 
-const ENCHANT_RIM_GLSL = /* glsl */ `
+const GEAR_GLOW_RIM_GLSL = /* glsl */ `
 #include <emissivemap_fragment>
 {
-  vec3 enchantViewDirection = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
-  float enchantRim = smoothstep(0.58, 0.97, 1.0 - abs(dot(normal, enchantViewDirection)));
-  vec3 enchantColor = uEnchantColor;
-  if (uEnchantRainbow > 0.5) {
-    float enchantHue = fract(dot(vSeaWorld.xz, vec2(0.45, 0.3)) + vSeaWorld.y * 0.6 + uEnchantPhase);
-    enchantColor = clamp(abs(mod(enchantHue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+  vec3 gearGlowViewDirection = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
+  float gearGlowRim = smoothstep(0.58, 0.97, 1.0 - abs(dot(normal, gearGlowViewDirection)));
+  vec3 gearGlowColor = uGearGlowColor;
+  if (uGearGlowRainbow > 0.5) {
+    float gearGlowHue = fract(dot(vSeaWorld.xz, vec2(0.45, 0.3)) + vSeaWorld.y * 0.6 + uGearGlowPhase);
+    gearGlowColor = clamp(abs(mod(gearGlowHue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
   }
-  totalEmissiveRadiance += enchantColor * uEnchantGlow * (0.04 + 2.2 * enchantRim);
+  totalEmissiveRadiance += gearGlowColor * uGearGlowGlow * (0.04 + 2.2 * gearGlowRim);
 }
 `;
 
@@ -303,7 +303,7 @@ if (cutAlong < cutLength * 0.62 && vSeaWorld.y > uCutPlayer.y + 2.0) {
 }
 `;
 
-export function applySeaside(material, { cutaway = false, surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false, enchant = null } = {}) {
+export function applySeaside(material, { cutaway = false, surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false, gearGlow = null } = {}) {
   const surfaceCode = surface ? SURFACES[surface] : null;
   material.defines = { ...(material.defines || {}), WET_DARKENING: wetDarkening.toFixed(3), WET_ROUGHNESS: wetRoughness.toFixed(3), CAUSTIC_STRENGTH: causticStrength.toFixed(3), WET_GLOSS: wetGloss.toFixed(3) };
   if (surface === 'sand') material.defines.SEA_SAND = '';
@@ -313,7 +313,7 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
   if (bodyWetness) material.defines.SEA_BODY_WETNESS = '';
   if (cutaway === 'soft') material.defines.SEA_SOFT_CUTAWAY = '';
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {}, enchant || {});
+    Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {}, gearGlow || {});
     shader.vertexShader = injectVertexMotion(shader.vertexShader.replace('#include <project_vertex>', VERTEX_WORLD_GLSL), vertexMotion)
       .replace('#include <common>', '#include <common>\nvarying vec3 vSeaWorld;');
     shader.fragmentShader = shader.fragmentShader
@@ -322,10 +322,10 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
       .replace('#include <roughnessmap_fragment>', WET_ROUGHNESS_GLSL)
       .replace('#include <opaque_fragment>', CAUSTICS_GLSL);
     if (surfaceCode) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', surfaceCode.normal);
-    if (enchant) {
+    if (gearGlow) {
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uEnchantColor;\nuniform float uEnchantGlow;\nuniform float uEnchantRainbow;\nuniform float uEnchantPhase;')
-        .replace('#include <emissivemap_fragment>', ENCHANT_RIM_GLSL);
+        .replace('#include <common>', '#include <common>\nuniform vec3 uGearGlowColor;\nuniform float uGearGlowGlow;\nuniform float uGearGlowRainbow;\nuniform float uGearGlowPhase;')
+        .replace('#include <emissivemap_fragment>', GEAR_GLOW_RIM_GLSL);
     }
     if (cutaway) {
       Object.assign(shader.uniforms, cutawayUniforms);
@@ -342,6 +342,6 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.9, 0.82) * vFlash;');
     }
   };
-  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${enchant ? 'enchant' : ''}|${cutaway ? `cutaway-${cutaway}` : ''}`;
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${gearGlow ? 'gearGlow' : ''}|${cutaway ? `cutaway-${cutaway}` : ''}`;
   return material;
 }

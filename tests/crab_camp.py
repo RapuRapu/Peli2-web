@@ -11,18 +11,12 @@ window.__camp = (() => {
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
   const silenceOthers = (keep) => { for (const enemy of d.enemies.list) if (!keep.includes(enemy)) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 }); };
   const place = (x, z) => { if (d.isUnderground()) d.exitBurrow(); const spot = d.navigation.nearestWalkable(x, z, 20); Object.assign(d.player, { x: spot.x, z: spot.z, path: [], pathIndex: 0, combatTarget: null, gatherTarget: null, speed: 0, inkedUntil: 0 }); return spot; };
-  const equip = (shell, shellEnchant, claws, clawEnchant) => {
-    d.gear.state.shells = [{ id: 500, kind: shell, enchant: shellEnchant }];
-    d.gear.state.claws = [{ id: 2, kind: 'bare', enchant: 0 }, { id: 501, kind: claws, enchant: clawEnchant }];
-    d.gear.state.wornShellId = 500;
-    d.gear.state.wornClawsId = claws === 'bare' ? 2 : 501;
-    d.hermit.setShell(d.gear.wornLook());
-  };
-  function setup(kind, count, level, shell, shellEnchant, claws, clawEnchant, fed) {
+  const equip = (shell, shellInvestment, claws, clawInvestment) => d.equipBuild(shell, claws, shellInvestment > 0 || clawInvestment > 0);
+  function setup(kind, count, level, shell, shellInvestment, claws, clawInvestment, fed) {
     d.progression.setLevel(level);
     d.progression.state.experience = -1e9;
     d.progression.state.health = d.progression.maxHealth();
-    equip(shell, shellEnchant, claws, clawEnchant);
+    equip(shell, shellInvestment, claws, clawInvestment);
     d.save.inventory = {};
     while (d.remains.list.length) d.remains.remove(d.remains.list[0]);
     const enemies = [];
@@ -41,8 +35,8 @@ window.__camp = (() => {
     d.player.wellFedUntil = fed ? d.simulationTime() + 999 : 0;
     return enemies;
   }
-  function fight(kind, count, level, shell, shellEnchant, claws, clawEnchant, fed) {
-    const enemies = setup(kind, count, level, shell, shellEnchant, claws, clawEnchant, fed);
+  function fight(kind, count, level, shell, shellInvestment, claws, clawInvestment, fed) {
+    const enemies = setup(kind, count, level, shell, shellInvestment, claws, clawInvestment, fed);
     const living = () => enemies.filter((enemy) => enemy.state !== 'dying' && enemy.state !== 'dead');
     for (const enemy of enemies) d.enemies.startChase(enemy);
     const seconds = step(300, () => { const target = living()[0]; if (target && d.player.combatTarget !== target) d.engage(target); return !target || d.remains.list.length > 0; });
@@ -127,14 +121,14 @@ with sync_playwright() as playwright:
     page.evaluate("() => __debug.setPaused(true)")
     page.evaluate(HELPERS)
     scenarios = {
-        'rat L6 turban+4 edged+4': "'rat', 1, 6, 'turban', 4, 'shellEdged', 4, false",
-        'rat L10 coral+3 coralTipped+3': "'rat', 1, 10, 'coral', 3, 'coralTipped', 3, false",
-        'two rats L10 coral+3 coralTipped+3': "'rat', 2, 10, 'coral', 3, 'coralTipped', 3, false",
-        'two rats L10 turban+4 edged+4': "'rat', 2, 10, 'turban', 4, 'shellEdged', 4, false",
-        'cat L10 coral+6 coralTipped+6 fed': "'shipCat', 1, 10, 'coral', 6, 'coralTipped', 6, true",
-        'cat L10 tinCan+0 fishhook+0 fed': "'shipCat', 1, 10, 'tinCan', 0, 'fishhook', 0, true",
-        'cat L10 tinCan+6 fishhook+6 fed': "'shipCat', 1, 10, 'tinCan', 6, 'fishhook', 6, true",
-        'cat L10 bottle+6 fishhook+6 fed': "'shipCat', 1, 10, 'bottle', 6, 'fishhook', 6, true",
+        'rat L6 turban★ edged★': "'rat', 1, 6, 'turban', 4, 'shellEdged', 4, false",
+        'rat L10 coral★ coralTipped★': "'rat', 1, 10, 'coral', 3, 'coralTipped', 3, false",
+        'two rats L10 coral★ coralTipped★': "'rat', 2, 10, 'coral', 3, 'coralTipped', 3, false",
+        'two rats L10 turban★ edged★': "'rat', 2, 10, 'turban', 4, 'shellEdged', 4, false",
+        'cat L10 coral★ coralTipped★ fed': "'shipCat', 1, 10, 'coral', 6, 'coralTipped', 6, true",
+        'cat L10 tinCan fishhook fed': "'shipCat', 1, 10, 'tinCan', 0, 'fishhook', 0, true",
+        'cat L10 tinCan★ fishhook★ fed': "'shipCat', 1, 10, 'tinCan', 6, 'fishhook', 6, true",
+        'cat L10 bottle★ fishhook★ fed': "'shipCat', 1, 10, 'bottle', 6, 'fishhook', 6, true",
     }
     balance = {}
     for name, arguments in scenarios.items():
@@ -142,8 +136,8 @@ with sync_playwright() as playwright:
         balance[name] = summarize(results)
         print(name, balance[name], flush=True)
     wins = lambda name: int(balance[name]['wins'].split('/')[0])
-    checks['ratsGateTier1'] = wins('rat L10 coral+3 coralTipped+3') >= 8 and wins('two rats L10 coral+3 coralTipped+3') >= 6 and wins('two rats L10 turban+4 edged+4') <= 3
-    checks['catNeedsTier3Enchanted'] = wins('cat L10 coral+6 coralTipped+6 fed') <= 3 and wins('cat L10 tinCan+0 fishhook+0 fed') <= 3 and wins('cat L10 tinCan+6 fishhook+6 fed') >= 7
+    checks['ratsGateTier1'] = wins('rat L10 coral★ coralTipped★') >= 8 and wins('two rats L10 coral★ coralTipped★') >= 6 and wins('two rats L10 turban★ edged★') <= 3
+    checks['catNeedsTier3Enchanted'] = wins('cat L10 coral★ coralTipped★ fed') <= 3 and wins('cat L10 tinCan fishhook fed') <= 3 and wins('cat L10 tinCan★ fishhook★ fed') >= 7
 
     behaviour = page.evaluate(r'''() => {
       const d = window.__debug; const c = window.__camp; const out = {};

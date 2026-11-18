@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySeaside, createEnchantUniforms, updateEnchantUniforms, enchantColorAt } from './seaside.js';
-import { enchantLook } from './gear.js';
+import { applySeaside, createGearGlowUniforms, updateGearGlowUniforms, gearGlowColorAt } from './seaside.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const CARAPACE = linearColor(0.86, 0.3, 0.14);
@@ -305,7 +304,7 @@ function buildGroundGlow() {
   return { mesh, uniforms };
 }
 
-const ENCHANT_PARTICLE_LIMIT = 48;
+const GEAR_GLOW_PARTICLE_LIMIT = 48;
 const SPARK_RISE_SECONDS = 1.4;
 const SPARK_HEIGHT = 3.4;
 const ORB_RADIUS = 2.3;
@@ -314,10 +313,10 @@ const ORB_TRAIL = [{ lag: 0, scale: 0.075, intensity: 5 }, { lag: 0, scale: 0.2,
 const EMBER_YOUNG = new THREE.Color(1, 0.75, 0.2);
 const EMBER_OLD = new THREE.Color(1, 0.08, 0.01);
 
-function buildEnchantParticles() {
+function buildGearGlowParticles() {
   const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
-  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), material, ENCHANT_PARTICLE_LIMIT);
-  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(ENCHANT_PARTICLE_LIMIT * 3), 3);
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), material, GEAR_GLOW_PARTICLE_LIMIT);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GEAR_GLOW_PARTICLE_LIMIT * 3), 3);
   mesh.frustumCulled = false;
   mesh.renderOrder = 4;
   mesh.count = 0;
@@ -326,8 +325,8 @@ function buildEnchantParticles() {
   const color = new THREE.Color();
 
   function update(look, time) {
-    const sparkCount = Math.min(look.sparks || 0, ENCHANT_PARTICLE_LIMIT);
-    const orbCount = Math.min(look.orbs || 0, Math.floor((ENCHANT_PARTICLE_LIMIT - sparkCount) / ORB_TRAIL.length));
+    const sparkCount = Math.min(look.sparks || 0, GEAR_GLOW_PARTICLE_LIMIT);
+    const orbCount = Math.min(look.orbs || 0, Math.floor((GEAR_GLOW_PARTICLE_LIMIT - sparkCount) / ORB_TRAIL.length));
     mesh.visible = sparkCount + orbCount > 0;
     if (!mesh.visible) return;
     let index = 0;
@@ -342,7 +341,7 @@ function buildEnchantParticles() {
       transform.scale.set(0.045, 0.16 * (1 - age * 0.5), 0.045);
       transform.updateMatrix();
       mesh.setMatrixAt(index, transform.matrix);
-      if (look.rainbow) enchantColorAt(look, time, color, spark / sparkCount);
+      if (look.rainbow) gearGlowColorAt(look, time, color, spark / sparkCount);
       else color.copy(EMBER_YOUNG).lerp(EMBER_OLD, age);
       mesh.setColorAt(index, color.multiplyScalar(2.4 * flicker * (1 - age * 0.7)));
       index++;
@@ -354,7 +353,7 @@ function buildEnchantParticles() {
         transform.scale.setScalar(trail.scale);
         transform.updateMatrix();
         mesh.setMatrixAt(index, transform.matrix);
-        enchantColorAt(look, time, color, orb / orbCount).multiplyScalar(trail.intensity);
+        gearGlowColorAt(look, time, color, orb / orbCount).multiplyScalar(trail.intensity);
         mesh.setColorAt(index, color);
         index++;
       }
@@ -370,14 +369,15 @@ function buildEnchantParticles() {
 export function createHermit(scene, quality, shellLook) {
   const wetnessUniforms = { uBodyWetness: { value: 0 }, uBodyWetTop: { value: -1000 } };
   const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
-  const shellEnchantUniforms = createEnchantUniforms();
-  const clawEnchantUniforms = createEnchantUniforms();
+  const shellGearGlowUniforms = createGearGlowUniforms();
+  const clawGearGlowUniforms = createGearGlowUniforms();
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), wetSurface);
-  const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, enchant: clawEnchantUniforms });
-  const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, enchant: shellEnchantUniforms });
-  const enchant = { shell: 0, claws: 0 };
+  const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, gearGlow: clawGearGlowUniforms });
+  const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, gearGlow: shellGearGlowUniforms });
+  const NO_GLOW = { glow: 0, color: [1, 1, 1], pulse: false };
+  const gearGlow = { shell: NO_GLOW, claws: NO_GLOW };
   const groundGlow = buildGroundGlow();
-  const enchantParticles = buildEnchantParticles();
+  const gearGlowParticles = buildGearGlowParticles();
   const eyeMaterial = new THREE.MeshStandardMaterial({ color: EYE, roughness: 0.08 });
 
   const root = new THREE.Group();
@@ -455,12 +455,17 @@ export function createHermit(scene, quality, shellLook) {
     }
   }
 
-  root.add(groundGlow.mesh, enchantParticles.mesh);
+  root.add(groundGlow.mesh, gearGlowParticles.mesh);
   scene.add(root);
 
-  function setEnchant(shellLevel, clawLevel) {
-    enchant.shell = shellLevel;
-    enchant.claws = clawLevel;
+  function setGearGlow(shellLook, clawLook) {
+    gearGlow.shell = shellLook || NO_GLOW;
+    gearGlow.claws = clawLook || NO_GLOW;
+  }
+
+  function setClawGrowth(bigClawScale, smallClawScale) {
+    bigClaw.shoulder.scale.setScalar(bigClawScale);
+    smallClaw.shoulder.scale.setScalar(smallClawScale);
   }
 
   const pose = { stride: 0, snip: 0, idleTime: 0, tiltX: 0, tiltZ: 0 };
@@ -513,7 +518,7 @@ export function createHermit(scene, quality, shellLook) {
     return { big: { reach: 0.1, open: 0.2, spread: 0 }, small: { reach: 0.95 * reachDown - 0.45 * lifted, open: pinch, spread: -0.3 }, lunge: 0.08 * reachDown, pitch: 0.2 * reachDown, lifted };
   }
 
-  function update(deltaTime, { x, y, z, heading, speed, working, gatherType = null, gatherProgress = 0, groundNormal }) {
+  function update(deltaTime, { x, y, z, heading, speed, working, gatherType = null, gatherProgress = 0, groundNormal, withdrawn = false }) {
     root.position.set(x, y, z);
     root.rotation.y = heading;
     pose.idleTime += deltaTime;
@@ -570,7 +575,8 @@ export function createHermit(scene, quality, shellLook) {
 
     hurt.amount = Math.max(0, hurt.amount - deltaTime / HURT_SECONDS);
     const deathShare = death.time >= 0 ? Math.min(1, (death.time += deltaTime / DEATH_SECONDS)) : 0;
-    const retract = Math.max(Math.pow(hurt.amount, 0.5) * Math.min(1, 0.7 + 0.3 * hurt.strength), THREE.MathUtils.smoothstep(deathShare, 0, 0.35));
+    const moltWiggle = withdrawn ? 0.82 + 0.12 * Math.sin(pose.idleTime * 7) ** 2 : 0;
+    const retract = Math.max(Math.pow(hurt.amount, 0.5) * Math.min(1, 0.7 + 0.3 * hurt.strength), THREE.MathUtils.smoothstep(deathShare, 0, 0.35), moltWiggle);
     for (const claw of [bigClaw, smallClaw]) {
       claw.shoulder.rotation.x = THREE.MathUtils.lerp(claw.shoulder.rotation.x, -0.55, retract);
       claw.thumb.rotation.x *= 1 - retract;
@@ -581,24 +587,27 @@ export function createHermit(scene, quality, shellLook) {
     body.rotation.x = pitch - 0.25 * hurt.amount * hurt.strength;
     const fall = THREE.MathUtils.smoothstep(deathShare, 0.3, 0.8);
     tilt.rotation.z += fall * 1.35 + hurt.side * hurt.amount * 0.25 * hurt.strength;
-    for (const leg of legs) leg.knee.rotation.z += retract * 0.9;
+    for (const leg of legs) {
+      leg.knee.rotation.z += retract * 0.9;
+      leg.hip.visible = !withdrawn;
+    }
     const flash = hurt.amount * hurt.amount;
     flashColor.setRGB(0.75 * flash, 0.62 * flash, 0.55 * flash);
     material.emissive.copy(flashColor);
     clawMaterial.emissive.copy(flashColor);
-    const shellEnchantLook = enchantLook(enchant.shell);
-    updateEnchantUniforms(shellEnchantUniforms, shellEnchantLook, pose.idleTime);
-    updateEnchantUniforms(clawEnchantUniforms, enchantLook(enchant.claws), pose.idleTime);
-    const strongestLook = enchantLook(Math.max(enchant.shell, enchant.claws));
+    const shellGearGlowLook = gearGlow.shell;
+    updateGearGlowUniforms(shellGearGlowUniforms, shellGearGlowLook, pose.idleTime);
+    updateGearGlowUniforms(clawGearGlowUniforms, gearGlow.claws, pose.idleTime);
+    const strongestLook = gearGlow.shell.glow >= gearGlow.claws.glow ? gearGlow.shell : gearGlow.claws;
     groundGlow.mesh.visible = Boolean(strongestLook.groundGlow);
     if (strongestLook.groundGlow) {
-      enchantColorAt(strongestLook, pose.idleTime, groundGlow.uniforms.uColor.value).multiplyScalar(strongestLook.groundGlow * (0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2));
+      gearGlowColorAt(strongestLook, pose.idleTime, groundGlow.uniforms.uColor.value).multiplyScalar(strongestLook.groundGlow * (0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2));
       groundGlow.uniforms.uRainbow.value = strongestLook.rainbow ? 1 : 0;
       groundGlow.uniforms.uPhase.value = (pose.idleTime * 0.18) % 1;
       groundGlow.mesh.rotation.set(pose.tiltX, 0, pose.tiltZ);
       groundGlow.mesh.scale.setScalar(0.75 + 0.25 * strongestLook.groundGlow);
     }
-    enchantParticles.update(strongestLook, pose.idleTime);
+    gearGlowParticles.update(strongestLook, pose.idleTime);
     shellMaterial.emissive.copy(flashColor).multiplyScalar(0.3);
 
     eyes[0].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8) * 0.06;
@@ -617,5 +626,5 @@ export function createHermit(scene, quality, shellLook) {
     else clawMaterial.color.setRGB(1, 1, 1);
   }
 
-  return { root, update, wetnessUniforms, setShell, setEnchant, setClawTint, setClawTines, playAttack, playHurt, playDeath, resetPose, clawPosition };
+  return { root, update, wetnessUniforms, setShell, setGearGlow, setClawGrowth, setClawTint, setClawTines, playAttack, playHurt, playDeath, resetPose, clawPosition };
 }

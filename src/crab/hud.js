@@ -21,6 +21,7 @@ export function createHud(activeQualityName) {
   const bagDot = element('span', 'bag-dot hidden', bagButton);
   const goal = element('div', 'chip goal', topLeft);
   const burrowButtons = element('div', 'burrow-buttons hidden', root);
+  const moltButton = element('button', 'build-button molt-button hidden', burrowButtons, '🦀 Molt');
   const helpersButton = element('button', 'build-button helpers-button', burrowButtons, '🦀 Helpers');
   const buildButton = element('button', 'build-button build-open', burrowButtons, '🏗️ Build');
   const travelButton = element('button', 'travel-button hidden', root);
@@ -81,6 +82,7 @@ export function createHud(activeQualityName) {
   let volumeListener = () => {};
   let buildListener = () => {};
   let helpersListener = () => {};
+  let moltListener = () => {};
   let modeCancelListener = () => {};
   let travelListener = () => {};
   let travelShown = null;
@@ -91,6 +93,7 @@ export function createHud(activeQualityName) {
   bagButton.addEventListener('click', () => bagListener());
   buildButton.addEventListener('click', () => buildListener());
   helpersButton.addEventListener('click', () => helpersListener());
+  moltButton.addEventListener('click', () => moltListener());
   modeCancel.addEventListener('click', () => modeCancelListener());
   travelButton.addEventListener('click', () => travelListener());
   goal.addEventListener('click', () => {
@@ -120,6 +123,11 @@ export function createHud(activeQualityName) {
     onBag: (listener) => { bagListener = listener; },
     onBuild: (listener) => { buildListener = listener; },
     onHelpers: (listener) => { helpersListener = listener; },
+    onMolt: (listener) => { moltListener = listener; },
+    setMoltButton(text) {
+      moltButton.classList.toggle('hidden', !text);
+      if (text && moltButton.textContent !== text) moltButton.textContent = text;
+    },
     onTravel: (listener) => { travelListener = listener; },
     setTravel(option) {
       if (option === travelShown) return;
