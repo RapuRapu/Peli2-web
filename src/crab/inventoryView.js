@@ -4,7 +4,7 @@ import { element } from './workbench.js';
 import { definitionOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, enchantGlowCss } from './itemInfo.js';
 
 const DOUBLE_TAP_MILLISECONDS = 360;
-const DRAG_START_PIXELS = 8;
+const TAP_SLOP_PIXELS = 10;
 
 export function materialEntries(inventory) {
   return Object.keys(RESOURCE_TYPES).filter((type) => (inventory[type] || 0) > 0).map((type) => ({ key: `material:${type}`, kind: 'material', type, count: inventory[type] }));
@@ -48,7 +48,7 @@ export function renderSlot(parent, entry, thumbnails, { selected = false, zone =
   return slot;
 }
 
-export function renderDetails(parent, entry, actions, hint = 'Tap an item to see it. Double-tap or drag gear onto your crab to wear it.', compareWith = null) {
+export function renderDetails(parent, entry, actions, hint = 'Tap an item to see it. Double-tap gear to wear it.', compareWith = null) {
   const details = element('div', 'item-details', parent);
   if (!entry) {
     element('div', 'details-hint', details, hint);
@@ -77,43 +77,18 @@ export function renderDetails(parent, entry, actions, hint = 'Tap an item to see
   return details;
 }
 
-export function attachSlotGestures(container, { entryFor, onSelect, onActivate, onDrop }) {
+export function attachSlotGestures(container, { entryFor, onSelect, onActivate }) {
   let press = null;
   let lastTap = { key: null, time: 0 };
-  let ghost = null;
-
-  function endDrag() {
-    if (ghost) ghost.remove();
-    ghost = null;
-    for (const zone of container.querySelectorAll('.drop-hover')) zone.classList.remove('drop-hover');
-  }
 
   container.addEventListener('pointerdown', (event) => {
     const slot = event.target.closest('[data-slot-key]');
     if (!slot || !container.contains(slot)) return;
-    press = { slot, key: slot.dataset.slotKey, zone: slot.dataset.zone || '', x: event.clientX, y: event.clientY, dragging: false, pointerId: event.pointerId };
+    press = { key: slot.dataset.slotKey, zone: slot.dataset.zone || '', x: event.clientX, y: event.clientY, pointerId: event.pointerId };
   });
 
   container.addEventListener('pointermove', (event) => {
-    if (!press || event.pointerId !== press.pointerId) return;
-    if (!press.dragging && Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRAG_START_PIXELS) {
-      press.dragging = true;
-      ghost = press.slot.cloneNode(true);
-      ghost.classList.add('drag-ghost');
-      container.appendChild(ghost);
-      try {
-        press.slot.setPointerCapture(event.pointerId);
-      } catch {
-        /* capture is optional */
-      }
-    }
-    if (!press.dragging) return;
-    event.preventDefault();
-    ghost.style.transform = `translate(${event.clientX - 32}px, ${event.clientY - 32}px)`;
-    for (const zone of container.querySelectorAll('.drop-hover')) zone.classList.remove('drop-hover');
-    const target = document.elementFromPoint(event.clientX, event.clientY);
-    const zone = target && target.closest('[data-drop]');
-    if (zone) zone.classList.add('drop-hover');
+    if (press && event.pointerId === press.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > TAP_SLOP_PIXELS) press = null;
   });
 
   container.addEventListener('pointerup', (event) => {
@@ -121,27 +96,17 @@ export function attachSlotGestures(container, { entryFor, onSelect, onActivate, 
     const finished = press;
     press = null;
     const entry = entryFor(finished.key, finished.zone);
-    if (finished.dragging) {
-      if (ghost) ghost.style.display = 'none';
-      const target = document.elementFromPoint(event.clientX, event.clientY);
-      const zone = target && target.closest('[data-drop]');
-      endDrag();
-      if (entry && zone) onDrop(entry, finished.zone, zone.dataset.drop);
-      return;
-    }
     if (!entry) return;
-    const now = event.timeStamp;
-    if (lastTap.key === finished.key && now - lastTap.time < DOUBLE_TAP_MILLISECONDS) {
+    if (lastTap.key === finished.key && event.timeStamp - lastTap.time < DOUBLE_TAP_MILLISECONDS) {
       lastTap = { key: null, time: 0 };
       onActivate(entry, finished.zone);
       return;
     }
-    lastTap = { key: finished.key, time: now };
+    lastTap = { key: finished.key, time: event.timeStamp };
     onSelect(entry, finished.zone);
   });
 
   container.addEventListener('pointercancel', () => {
     press = null;
-    endDrag();
   });
 }

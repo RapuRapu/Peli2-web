@@ -63,20 +63,21 @@ with sync_playwright() as playwright:
 
     page.dblclick('#hud .backpack .slot-grid [data-slot-item="702"]')
     after_double = page.evaluate("() => __debug.gear.wornShell().kind")
-    drag(page, '#hud .backpack .slot-grid [data-slot-item="705"]', '#hud .backpack .doll-frame')
+    page.dblclick('#hud .backpack .slot-grid [data-slot-item="705"]')
     after_drag_doll = page.evaluate("() => __debug.gear.wornClaws().kind")
-    drag(page, '#hud .backpack .slot-grid [data-slot-item="701"]', '#hud .backpack .equip-slot[data-drop="equip-shell"]')
+    page.dblclick('#hud .backpack .slot-grid [data-slot-item="701"]')
     after_drag_slot = page.evaluate("() => __debug.gear.wornShell().kind")
-    drag(page, '#hud .backpack .equip-slot [data-slot-item="705"]', '#hud .backpack .slot-grid')
+    page.dblclick('#hud .backpack .equip-slot [data-slot-item="705"]')
     after_unequip_drag = page.evaluate("() => __debug.gear.wornClaws().kind")
     page.dblclick('#hud .backpack .equip-slot [data-slot-item="701"]')
     after_unequip_double = page.evaluate("() => ({ shell: __debug.gear.wornShell() ? __debug.gear.wornShell().kind : null, label: document.querySelector('#hud .backpack .equip-name').textContent, look: __debug.playerStats().defense })")
-    drag(page, '#hud .backpack .slot-grid [data-material="coral"]', '#hud .backpack .doll-frame')
-    coral_untouched = page.evaluate("() => __debug.save.inventory.coral === 3 && !__debug.gear.wornShell()")
-    wear = {'double': after_double, 'dragDoll': after_drag_doll, 'dragSlot': after_drag_slot, 'unequipDrag': after_unequip_drag, 'unequipDouble': after_unequip_double, 'materialIgnored': coral_untouched}
+    drag(page, '#hud .backpack .slot-grid [data-slot-item="702"]', '#hud .backpack .slot-grid [data-material="coral"]')
+    drag(page, '#hud .backpack .slot-grid [data-slot-item="702"]', '#hud .backpack .slot-grid [data-material="coral"]')
+    coral_untouched = page.evaluate("() => !__debug.gear.wornShell() && !document.querySelector('#hud .backpack .slot-grid [data-slot-item=\"702\"]').classList.contains('selected')")
+    wear = {'double': after_double, 'dragDoll': after_drag_doll, 'dragSlot': after_drag_slot, 'unequipDrag': after_unequip_drag, 'unequipDouble': after_unequip_double, 'swipeIgnored': coral_untouched}
     print('wear', json.dumps(wear), flush=True)
     checks['doubleTapWear'] = after_double == 'skull' and after_unequip_double['shell'] is None and after_unequip_double['label'] == 'No shell' and after_unequip_double['look'] == 0
-    checks['dragWear'] = after_drag_doll == 'cleaver' and after_drag_slot == 'tinCan' and after_unequip_drag == 'bare' and coral_untouched
+    checks['doubleTapSwapAndSwipe'] = after_drag_doll == 'cleaver' and after_drag_slot == 'tinCan' and after_unequip_drag == 'bare' and coral_untouched
 
     page.click('#hud .backpack .slot-grid [data-material="driedKelp"]')
     page.click('#hud .backpack [data-eat]')
@@ -94,13 +95,13 @@ with sync_playwright() as playwright:
     }""")
     page.dblclick('#hud .storage-panel [data-zone="storage"][data-slot-item="801"]')
     took = page.evaluate("() => __debug.gear.state.shells.some((s) => s.id === 801) && !__debug.storage.shells.length")
-    drag(page, '#hud .storage-panel [data-zone="backpack"][data-material="scrap"]', '#hud .storage-panel .slot-grid[data-drop="storage"]')
+    page.dblclick('#hud .storage-panel [data-zone="backpack"][data-material="scrap"]')
     stored = page.evaluate("() => __debug.storage.inventory.scrap === 5 && !__debug.save.inventory.scrap")
     page.click('#hud .storage-panel [data-zone="storage"][data-material="coral"]')
     page.click('#hud .storage-panel [data-take="coral"]')
     taken = page.evaluate("() => __debug.save.inventory.coral === 2 && !__debug.storage.inventory.coral")
     worn_hidden = page.evaluate("() => !document.querySelector('#hud .storage-panel [data-zone=\"backpack\"][data-slot-item=\"701\"]')")
-    storage_result = {'doubleTapTake': took, 'dragStore': stored, 'buttonTake': taken, 'wornNotListed': worn_hidden}
+    storage_result = {'doubleTapTake': took, 'doubleTapStore': stored, 'buttonTake': taken, 'wornNotListed': worn_hidden}
     print('storage', json.dumps(storage_result), flush=True)
     checks['storageSlots'] = all(storage_result.values())
     page.evaluate("() => __debug.storagePanel.close()")

@@ -60,7 +60,6 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
   function renderEquipSlot(parent, category) {
     const entry = wornEntry(category);
     const holder = element('div', 'equip-slot', parent);
-    holder.dataset.drop = `equip-${category}`;
     element('div', 'equip-label', holder, category === 'shell' ? 'Shell' : 'Claws');
     if (entry) {
       renderSlot(holder, entry, thumbnails, { selected: entry.key === selectedKey, zone: 'worn' });
@@ -78,7 +77,6 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     const layout = element('div', 'inventory-layout', body);
     const dollColumn = element('div', 'doll-column', layout);
     const dollFrame = element('div', 'doll-frame', dollColumn);
-    dollFrame.dataset.drop = 'doll';
     const wornShell = gear.wornShell();
     const wornClaws = gear.wornClaws();
     const dollImage = thumbnails.dollImage(wornShell ? wornShell.kind : null, wornClaws.kind, wornShell ? wornShell.enchant || 0 : 0, wornClaws.enchant || 0);
@@ -91,9 +89,8 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     element('div', 'summary doll-summary', dollColumn, `❤ ${maxHealth()} · 🛡 ${stats.defense} · 🏃 ${percent(stats.speedFactor)} · 🗡️ ${stats.attack}`);
     const gridColumn = element('div', 'grid-column', layout);
     const entries = allEntries();
-    element('div', 'section-title grid-title', gridColumn, `🎒 ${entries.length} · double-tap or drag to wear`);
+    element('div', 'section-title grid-title', gridColumn, `🎒 ${entries.length} · double-tap to wear`);
     const grid = element('div', 'slot-grid', gridColumn);
-    grid.dataset.drop = 'grid';
     for (const entry of entries) renderSlot(grid, entry, thumbnails, { selected: entry.key === selectedKey, zone: 'grid' });
     if (!entries.length) element('div', 'details-hint', grid, 'Empty — gather on the beach!');
     const selected = selectedKey ? entryFor(selectedKey) : null;
@@ -116,11 +113,6 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
       }
       if (zone === 'worn') unequipEntry(entry);
       else wearEntry(entry);
-    },
-    onDrop: (entry, fromZone, toZone) => {
-      if (entry.kind !== 'gear') return;
-      if (fromZone === 'grid' && (toZone === 'doll' || toZone === `equip-${entry.category}`)) wearEntry(entry);
-      else if (fromZone === 'worn' && toZone === 'grid') unequipEntry(entry);
     },
   });
 

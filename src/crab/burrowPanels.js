@@ -141,7 +141,6 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
     const side = element('div', 'storage-side', parent);
     element('div', 'section-title', side, `${title} · ${entries.length}`);
     const grid = element('div', 'slot-grid', side);
-    grid.dataset.drop = zone;
     for (const entry of entries) renderSlot(grid, entry, thumbnails, { selected: Boolean(selected) && selected.key === entry.key && selected.zone === zone, zone });
     if (!entries.length) element('div', 'details-hint', grid, zone === 'storage' ? 'Empty.' : 'Nothing to store. Worn gear stays on you.');
   }
@@ -162,7 +161,7 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
       const data = entry.kind === 'material' ? { [toStorage ? 'store' : 'take']: entry.type } : { [toStorage ? 'storeItem' : 'takeItem']: String(entry.item.id) };
       actions.push({ label: toStorage ? '⬇ Store' : '⬆ Take', secondary: !toStorage, data, run: () => move(entry, selected.zone) });
     }
-    renderDetails(shell.body, entry, actions, 'Tap an item to see it. Double-tap or drag it to the other side to move it.');
+    renderDetails(shell.body, entry, actions, 'Tap an item to see it. Double-tap to move it to the other side.');
   }
 
   attachSlotGestures(shell.overlay, {
@@ -172,9 +171,6 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
       render();
     },
     onActivate: (entry, zone) => move(entry, zone),
-    onDrop: (entry, fromZone, toZone) => {
-      if ((fromZone === 'backpack' && toZone === 'storage') || (fromZone === 'storage' && toZone === 'backpack')) move(entry, fromZone);
-    },
   });
 
   return {
