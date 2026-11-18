@@ -21,7 +21,16 @@ const POOLS = [
   { x: 18, z: 8, radiusX: 34, radiusZ: 26, floor: -3.5, crest: 0.2, seed: 3.1 },
   { x: -56, z: 34, radiusX: 14, radiusZ: 11, floor: -4.1, crest: -0.85, seed: 8.4 },
   { x: 78, z: 44, radiusX: 11, radiusZ: 9, floor: -4.4, crest: -1.3, seed: 12.7 },
+  { x: -50, z: 80, radiusX: 12, radiusZ: 9, floor: -5.4, crest: -1.5, seed: 17.2, onReef: true },
+  { x: 20, z: 97, radiusX: 10, radiusZ: 7.5, floor: -5.8, crest: -1.4, seed: 21.9, onReef: true },
+  { x: 70, z: 68, radiusX: 9, radiusZ: 8, floor: -5.2, crest: -1.6, seed: 26.3, onReef: true },
 ];
+
+const REEF_INNER_EDGE_Z = 54;
+const REEF_OUTER_EDGE_Z = 106;
+const REEF_DROP_LENGTH = 3;
+const REEF_FLAT_HEIGHT = -2.8;
+const REEF_HIGHEST = -1.2;
 
 const BOULDERS = [
   { x: -34, z: -52, radius: 10.5, squash: 0.74, seed: 1 },
@@ -53,6 +62,27 @@ const DRIFT_LOGS = [
 
 const sandNoise = createNoise2D(7);
 const poolNoise = createNoise2D(23);
+const reefNoise = createNoise2D(131);
+
+const reefInnerEdgeAt = (x) => REEF_INNER_EDGE_Z + 6 * reefNoise(x * 0.035, 1.7);
+const reefOuterEdgeAt = (x) => REEF_OUTER_EDGE_Z + 4 * reefNoise(x * 0.05, 9.3) + 1.6 * reefNoise(x * 0.17, 4.1);
+
+export function reefShareAt(x, z) {
+  return smoothstep(reefInnerEdgeAt(x) - 8, reefInnerEdgeAt(x) + 4, z) * (1 - smoothstep(reefOuterEdgeAt(x), reefOuterEdgeAt(x) + 1.5, z));
+}
+
+export function isOnReef(x, z) {
+  return reefShareAt(x, z) > 0.5;
+}
+
+function reefHeight(x, z, beach) {
+  const outerEdge = reefOuterEdgeAt(x);
+  let flat = REEF_FLAT_HEIGHT + 1.3 * fractalNoise(reefNoise, x * 0.035, z * 0.035, 3) + 0.4 * fractalNoise(reefNoise, x * 0.11 + 30, z * 0.11, 2);
+  flat += 0.55 * smoothstep(outerEdge - 12, outerEdge - 3, z) * (0.6 + 0.4 * reefNoise(x * 0.09, 5.5));
+  flat = Math.min(flat, REEF_HIGHEST - 0.1 * reefNoise(x * 0.3, z * 0.3));
+  const dropShare = smoothstep(outerEdge, outerEdge + REEF_DROP_LENGTH, z);
+  return lerp(flat, Math.min(beach, DEEP_WATER_HEIGHT - 5), dropShare);
+}
 
 function beachHeight(x, z) {
   const broad = fractalNoise(sandNoise, x * 0.011, z * 0.011, 3) * 1.5;
@@ -60,7 +90,8 @@ function beachHeight(x, z) {
   let height = -z * BEACH_SLOPE + broad + hummocks;
   height += smoothstep(-74, -128, z) * (6.5 + 3.5 * fractalNoise(sandNoise, x * 0.02, 9.5, 2));
   height -= smoothstep(82, 126, z) * 7.5;
-  return height;
+  const reefBlend = smoothstep(reefInnerEdgeAt(x) - 8, reefInnerEdgeAt(x) + 4, z);
+  return reefBlend > 0 ? lerp(height, reefHeight(x, z, height), reefBlend) : height;
 }
 
 function poolShape(pool, x, z) {
@@ -133,7 +164,9 @@ function buildRetainedWater() {
     while (pending.length) {
       const cell = pending.pop();
       if (levels[cell] > NO_RETAINED_WATER || !insideMargin(cell)) continue;
-      if (cellHeight(cell) > retainedLevel + 0.05) {
+      const column = cell % RETAINED_CELLS;
+      const outsideReefRim = pool.onReef && poolShape(pool, cellCenter(column), cellCenter((cell - column) / RETAINED_CELLS)) > 1;
+      if (outsideReefRim || cellHeight(cell) > retainedLevel + 0.05) {
         shoreline.push(cell);
         continue;
       }
@@ -201,6 +234,12 @@ const POOL_SAND = linearColor(0.82, 0.76, 0.56);
 const POOL_ALGAE = linearColor(0.36, 0.44, 0.2);
 const POOL_CORALLINE = linearColor(0.8, 0.5, 0.52);
 const DEEP_SILT = linearColor(0.5, 0.52, 0.42);
+const REEF_LIMESTONE = linearColor(0.6, 0.57, 0.5);
+const REEF_CORALLINE = linearColor(0.8, 0.46, 0.5);
+const REEF_TURF = linearColor(0.36, 0.4, 0.22);
+const REEF_SAND = linearColor(0.88, 0.82, 0.66);
+const REEF_LIP = linearColor(0.86, 0.8, 0.7);
+const reefColor = new THREE.Color();
 
 function buildTerrainMesh(ground, boulders, logs, quality) {
   const cellsPerSide = Math.round((VISUAL_HALF_SIZE * 2) / quality.terrainCellSize);
@@ -225,6 +264,18 @@ function buildTerrainMesh(ground, boulders, logs, quality) {
       const patch = fractalNoise(tintNoise, x * 0.05, z * 0.05, 3);
       color.copy(DRY_SAND).lerp(BLEACHED_SAND, smoothstep(2.5, 7, height) * 0.8 + patch * 0.15);
       color.lerp(TIDAL_SAND, smoothstep(1.2, -1.2, height) * 0.75);
+      const reefShare = reefShareAt(x, z) * (1 - smoothstep(-4, -7, height));
+      if (reefShare > 0) {
+        const reefPatch = fractalNoise(tintNoise, x * 0.21 + 70, z * 0.21, 3);
+        reefColor.copy(REEF_LIMESTONE).lerp(REEF_CORALLINE, smoothstep(0.12, 0.42, reefPatch) * 0.5);
+        reefColor.lerp(REEF_TURF, smoothstep(-0.05, 0.35, -reefPatch) * 0.75);
+        reefColor.lerp(REEF_SAND, smoothstep(-3.1, -3.5, height) * 0.7);
+        color.lerp(reefColor, reefShare * 0.9);
+      }
+      const outerEdge = reefOuterEdgeAt(x);
+      const lipShare = smoothstep(outerEdge - 3, outerEdge - 0.5, z) * (1 - smoothstep(outerEdge - 0.5, outerEdge + 0.5, z));
+      color.lerp(REEF_LIP, lipShare * 0.7 * smoothstep(40, 60, z));
+      color.multiplyScalar(1 - 0.55 * smoothstep(outerEdge, outerEdge + 2.5, z) * smoothstep(40, 60, z));
       const submergedInPool = ground.retained.levelAt(x, z) - height;
       if (submergedInPool > 0) {
         const poolDepth = smoothstep(0, 2.2, submergedInPool);
@@ -289,7 +340,40 @@ function buildTerrainMesh(ground, boulders, logs, quality) {
   return mesh;
 }
 
-function buildWalkability(ground, boulders, logs) {
+const REEF_PROP_KINDS = [
+  { kind: 'brainCoral', count: 30, radius: [1.0, 2.3], blockShare: 0.95 },
+  { kind: 'barnacleRock', count: 26, radius: [0.9, 2.0], blockShare: 0.95 },
+  { kind: 'branchCoral', count: 72, radius: [0.8, 2.0], blockShare: 0.7 },
+  { kind: 'urchin', count: 40, radius: [0.5, 0.75], blockShare: 1.6 },
+];
+const REEF_PROP_CLEARANCE = 2.2;
+const REEF_PROP_KEEP_CLEAR = [{ x: 14, z: 57, radius: 5 }];
+
+function placeReefProps(sampleHeight, boulders) {
+  const random = createRandom(5150);
+  const placed = [];
+  const props = {};
+  for (const definition of REEF_PROP_KINDS) {
+    props[definition.kind] = [];
+    for (let attempt = 0; attempt < definition.count * 60 && props[definition.kind].length < definition.count; attempt++) {
+      const x = (random() * 2 - 1) * (PLAY_HALF_SIZE - 6);
+      const z = REEF_INNER_EDGE_Z - 4 + random() * (REEF_OUTER_EDGE_Z - REEF_INNER_EDGE_Z + 4);
+      const radius = lerp(definition.radius[0], definition.radius[1], random());
+      if (!isOnReef(x, z) || z > reefOuterEdgeAt(x) - 2) continue;
+      const height = sampleHeight(x, z);
+      if (height < -3.4 || height > REEF_HIGHEST + 0.2) continue;
+      if (boulders.some((boulder) => Math.hypot(x - boulder.x, z - boulder.z) < boulder.radius + radius + 2)) continue;
+      if (REEF_PROP_KEEP_CLEAR.some((spot) => Math.hypot(x - spot.x, z - spot.z) < spot.radius + radius)) continue;
+      if (placed.some((other) => Math.hypot(x - other.x, z - other.z) < other.radius + radius + REEF_PROP_CLEARANCE)) continue;
+      const prop = { kind: definition.kind, x, z, y: height, radius, blockRadius: radius * definition.blockShare, heading: random() * Math.PI * 2, seed: random() * 1000, tone: random() };
+      placed.push(prop);
+      props[definition.kind].push(prop);
+    }
+  }
+  return props;
+}
+
+function buildWalkability(ground, boulders, logs, reefProps) {
   const cellsPerSide = WORLD_SIZE;
   const walkable = new Uint8Array(cellsPerSide * cellsPerSide);
   for (let row = 0; row < cellsPerSide; row++) {
@@ -316,6 +400,7 @@ function buildWalkability(ground, boulders, logs) {
   for (const log of logs) {
     for (let along = -log.length / 2; along <= log.length / 2; along += 1) blockDisc(log.x + Math.cos(log.heading) * along, log.z + Math.sin(log.heading) * along, log.radius + 0.5);
   }
+  for (const prop of Object.values(reefProps).flat()) blockDisc(prop.x, prop.z, prop.blockRadius);
   return walkable;
 }
 
@@ -325,8 +410,9 @@ export function createWorld(quality) {
   const ground = { heightAt: collisionField.sample, retained };
   const boulders = BOULDERS.map((boulder) => ({ ...boulder, y: collisionField.sample(boulder.x, boulder.z) - boulder.radius * boulder.squash * 0.22 }));
   const logs = DRIFT_LOGS.map((log) => ({ ...log, y: collisionField.sample(log.x, log.z) }));
+  const reefProps = placeReefProps(collisionField.sample, boulders);
   const terrainMesh = buildTerrainMesh(ground, boulders, logs, quality);
-  const walkable = buildWalkability(ground, boulders, logs);
+  const walkable = buildWalkability(ground, boulders, logs, reefProps);
 
   function isWalkable(x, z) {
     const column = Math.floor(x + WORLD_SIZE / 2);
@@ -359,7 +445,7 @@ export function createWorld(quality) {
     return null;
   }
 
-  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, terrainMesh, walkable, isWalkable, waterLevelAt, randomSpot, createRandom, blockCircle };
+  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
 }
 
 const GULL_TERRITORY_EDGE_Z = -92;
@@ -367,6 +453,6 @@ const HIGH_TIDE_MARK = TIDE_MIDDLE + TIDE_AMPLITUDE;
 
 export const HOME_BEACH_ENEMIES = [
   { kind: 'sandHopper', count: 10, packSize: [3, 4], accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && world.retained.levelAt(x, z) < height },
-  { kind: 'shoreCrab', count: 4, accept: (world, x, z, height) => { const depth = world.retained.levelAt(x, z) - height; return depth > 0.3 && depth < 1.6; } },
+  { kind: 'shoreCrab', count: 4, accept: (world, x, z, height) => { if (isOnReef(x, z)) return false; const depth = world.retained.levelAt(x, z) - height; return depth > 0.3 && depth < 1.6; } },
   { kind: 'gull', count: 1, accept: (world, x, z) => z < -97 && z > -103 && Math.abs(x) < 40, territory: (x, z) => z < GULL_TERRITORY_EDGE_Z },
 ];

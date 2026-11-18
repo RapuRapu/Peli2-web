@@ -26,6 +26,7 @@ uniform vec2 uInverseResolution;
 uniform mat4 uInverseViewProjection;
 uniform vec3 uAbsorption;
 uniform vec3 uScatterColor;
+const vec3 DEEP_SCATTER_COLOR = vec3(0.012, 0.11, 0.2);
 uniform vec3 uHazeColor;
 uniform float uHazeDensity;
 uniform vec4 uRipples[RIPPLE_COUNT];
@@ -99,7 +100,8 @@ void main() {
   vec3 transmitted = floorColor * exp(-uAbsorption * pathLength);
   float nearWader = uWader.w * (1.0 - smoothstep(uWader.z, uWader.z * 2.2, distance(vWorld.xz, uWader.xy)));
   float turbidity = 1.0 - exp(-pathLength * (mix(0.05, 0.022, inPool) + 0.18 * nearWader));
-  vec3 underwater = transmitted + uScatterColor * turbidity;
+  float openWaterDepth = smoothstep(5.0, 20.0, pathLength) * (1.0 - inPool);
+  vec3 underwater = transmitted + mix(uScatterColor, DEEP_SCATTER_COLOR, openWaterDepth) * turbidity;
 
   vec4 sparkleA = texture2D(uWaveGradient, point * 0.071 + vec2(uTime * 0.021, -uTime * 0.014));
   vec4 sparkleB = texture2D(uWaveGradient, point * 0.113 + vec2(-uTime * 0.017, uTime * 0.023) + 0.27);

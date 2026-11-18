@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createRandom } from '../noise.js';
 import { applySeaside } from './seaside.js';
-import { TIDE_MIDDLE, TIDE_AMPLITUDE } from './world.js';
+import { TIDE_MIDDLE, TIDE_AMPLITUDE, isOnReef } from './world.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 
@@ -11,10 +11,13 @@ export const RESOURCE_TYPES = {
   driftwood: { label: 'Driftwood', icon: '🪵', count: 12, gatherSeconds: 1.3, standOff: 1.5 },
   seaLettuce: { label: 'Sea lettuce', icon: '🥬', count: 12, gatherSeconds: 0.9, standOff: 2.1 },
   pearls: { label: 'Pearls', icon: '🦪', count: 3, gatherSeconds: 1.6, standOff: 1.3 },
+  coral: { label: 'Coral', icon: '🪸', count: 12, gatherSeconds: 1.4, standOff: 1.5 },
+  seaGlass: { label: 'Sea glass', icon: '🔷', count: 8, gatherSeconds: 1.1, standOff: 1.3 },
   driedKelp: { label: 'Dried kelp', icon: '🍂', count: 0 },
 };
 
 const PEARL_MINIMUM_POOL_DEPTH = 1.4;
+const REEF_TYPES = new Set(['coral', 'seaGlass']);
 
 function paint(geometry, colorAt) {
   const positions = geometry.attributes.position;
@@ -104,6 +107,35 @@ function buildPearlGeometry() {
   return mergeGeometries([shellHalf, pearl]);
 }
 
+function buildCoralGeometry() {
+  const deep = linearColor(0.84, 0.26, 0.28);
+  const pale = linearColor(1, 0.72, 0.66);
+  const up = new THREE.Vector3(0, 1, 0);
+  const twigs = [
+    { from: [0, 0.1, 0], toward: [0.9, 0.35, 0.1], length: 1.4, radius: 0.16 },
+    { from: [0.5, 0.28, 0.05], toward: [0.3, 1, -0.4], length: 0.75, radius: 0.1 },
+    { from: [0.85, 0.4, 0.1], toward: [0.6, 0.9, 0.5], length: 0.6, radius: 0.08 },
+    { from: [0.2, 0.18, 0.02], toward: [-0.5, 0.9, 0.5], length: 0.7, radius: 0.1 },
+    { from: [-0.1, 0.1, 0], toward: [-1, 0.4, -0.3], length: 0.7, radius: 0.12 },
+  ].map(({ from, toward, length, radius }) => {
+    const direction = new THREE.Vector3(...toward).normalize();
+    const twig = new THREE.CylinderGeometry(radius * 0.7, radius, length, 7, 2, false).translate(0, length / 2, 0);
+    twig.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, direction));
+    return twig.translate(...from);
+  });
+  return paint(mergeGeometries(twigs).translate(-0.3, 0, 0), (color, x, y) => color.copy(deep).lerp(pale, THREE.MathUtils.smoothstep(y, 0.25, 1.0) * 0.8 + 0.1 * Math.sin(x * 19)));
+}
+
+function buildSeaGlassGeometry() {
+  const tints = [linearColor(0.42, 0.78, 0.74), linearColor(0.46, 0.66, 0.9), linearColor(0.6, 0.82, 0.5)];
+  const chips = [
+    { scale: [0.62, 0.2, 0.44], at: [0, 0.12, 0], turn: 0.3, tint: 0 },
+    { scale: [0.38, 0.16, 0.3], at: [0.62, 0.09, 0.32], turn: 1.4, tint: 1 },
+    { scale: [0.3, 0.14, 0.22], at: [-0.5, 0.08, 0.42], turn: 2.2, tint: 2 },
+  ].map(({ scale, at, turn, tint }) => paint(new THREE.IcosahedronGeometry(1, 1).scale(...scale).rotateY(turn).translate(...at), (color, x, y) => color.copy(tints[tint]).multiplyScalar(0.8 + 0.5 * THREE.MathUtils.smoothstep(y, 0.05, 0.3))));
+  return mergeGeometries(chips);
+}
+
 const SPARKLE_VERTEX_GLSL = /* glsl */ `
 attribute float aPhase;
 uniform float uTime;
@@ -134,13 +166,15 @@ void main() {
 
 export function createResources(scene, overlay, world, quality, savedNodes, starterSpots) {
   const random = createRandom(2024);
-  const geometries = { shellBits: buildShellBitGeometry(), driftwood: buildDriftwoodGeometry(), seaLettuce: buildSeaLettuceGeometry(), pearls: buildPearlGeometry() };
+  const geometries = { shellBits: buildShellBitGeometry(), driftwood: buildDriftwoodGeometry(), seaLettuce: buildSeaLettuceGeometry(), pearls: buildPearlGeometry(), coral: buildCoralGeometry(), seaGlass: buildSeaGlassGeometry() };
   const highTideMark = TIDE_MIDDLE + TIDE_AMPLITUDE;
   const accepts = {
-    shellBits: (x, z, height) => height > TIDE_MIDDLE - 1.4 && height < highTideMark + 1.6 && world.retained.levelAt(x, z) - height < 0.2,
+    shellBits: (x, z, height) => !isOnReef(x, z) && height > TIDE_MIDDLE - 1.4 && height < highTideMark + 1.6 && world.retained.levelAt(x, z) - height < 0.2,
     driftwood: (x, z, height) => height > highTideMark + 0.4 && height < highTideMark + 3.6,
-    seaLettuce: (x, z, height) => world.retained.levelAt(x, z) - height > 0.2 || (height > TIDE_MIDDLE - 1.6 && height < TIDE_MIDDLE + 0.6),
-    pearls: (x, z, height) => world.retained.levelAt(x, z) - height > PEARL_MINIMUM_POOL_DEPTH,
+    seaLettuce: (x, z, height) => !isOnReef(x, z) && (world.retained.levelAt(x, z) - height > 0.2 || (height > TIDE_MIDDLE - 1.6 && height < TIDE_MIDDLE + 0.6)),
+    pearls: (x, z, height) => !isOnReef(x, z) && world.retained.levelAt(x, z) - height > PEARL_MINIMUM_POOL_DEPTH,
+    coral: (x, z, height) => isOnReef(x, z) && height < -1.6 && height > -3.6,
+    seaGlass: (x, z, height) => isOnReef(x, z) && height > -3.0,
   };
   const transform = new THREE.Object3D();
   const nodes = [];
@@ -151,9 +185,9 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
 
   for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
     if (!definition.count) continue;
-    const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: type === 'shellBits' || type === 'pearls' ? 0.3 : 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: type === 'shellBits' || type === 'pearls' ? 0.15 : 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
+    const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: { shellBits: 0.3, pearls: 0.3, seaGlass: 0.18, coral: 0.65 }[type] ?? 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: { shellBits: 0.15, pearls: 0.15, seaGlass: 0.08, coral: 0.4 }[type] ?? 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
     const mesh = new THREE.InstancedMesh(geometries[type], material, definition.count);
-    mesh.castShadow = true;
+    mesh.castShadow = !REEF_TYPES.has(type);
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     meshes[type] = mesh;
@@ -245,5 +279,9 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
     return saved;
   }
 
-  return { nodes, gather, hold, release, washAshore, update, serialize };
+  function setReefVisible(visible) {
+    for (const type of REEF_TYPES) meshes[type].visible = visible;
+  }
+
+  return { nodes, gather, hold, release, washAshore, update, serialize, setReefVisible };
 }

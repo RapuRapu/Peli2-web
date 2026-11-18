@@ -84,7 +84,7 @@ function seaweedPlacements(world, quality) {
   const placements = [];
   const clusterCount = Math.round(70 * quality.density);
   for (let cluster = 0; cluster < clusterCount; cluster++) {
-    const spot = world.randomSpot(random, (x, z, height) => world.retained.levelAt(x, z) - height > 1.0 || (height < -3.0 && height > -6.0));
+    const spot = world.randomSpot(random, (x, z, height) => world.retained.levelAt(x, z) - height > 1.0 || (height < -3.0 && height > -6.0 && !world.isOnReef(x, z)));
     if (!spot) continue;
     const bladeCount = 5 + Math.floor(random() * 9);
     const colorIndex = Math.floor(random() * SEAWEED_COLORS.length);

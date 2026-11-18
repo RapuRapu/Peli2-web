@@ -111,13 +111,16 @@ float sandShellFleck = smoothstep(0.86, 0.9, texture2D(uNoise, sandPoint * 0.47 
 diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.9, 0.86, 0.8), sandShellFleck * 0.7);
 diffuseColor.rgb *= 1.0 - 0.2 * smoothstep(0.72, 0.8, sandFleck);
 diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.16, 1.1, 1.0), (1.0 - smoothstep(0.2, 0.24, sandFleck)) * 0.5);
+float reefSurface = smoothstep(48.0, 60.0, sandPoint.y) * (1.0 - smoothstep(107.0, 113.0, sandPoint.y));
+float reefPits = texture2D(uNoise, sandPoint * 0.29 + 0.7).r * 0.6 + texture2D(uNoise, sandPoint * 0.9 + 0.2).a * 0.4;
+diffuseColor.rgb *= mix(1.0, 0.62 + 0.62 * reefPits, reefSurface);
 `;
 
 const SAND_NORMAL_GLSL = /* glsl */ `
 #include <normal_fragment_maps>
 {
   vec3 sandWorldNormal = inverseTransformDirection(normal, viewMatrix);
-  vec2 rippleSlope = sandRippleSlope(vSeaWorld.xz, vSeaWorld.y);
+  vec2 rippleSlope = sandRippleSlope(vSeaWorld.xz, vSeaWorld.y) * (1.0 - 0.9 * reefSurface);
   sandWorldNormal = normalize(sandWorldNormal - vec3(rippleSlope.x, 0.0, rippleSlope.y));
   normal = normalize((viewMatrix * vec4(sandWorldNormal, 0.0)).xyz);
 }

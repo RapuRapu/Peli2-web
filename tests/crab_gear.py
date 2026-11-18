@@ -103,7 +103,7 @@ with sync_playwright() as playwright:
     page.evaluate("() => __debug.workbenchPanel.close()")
     page.click('#hud .bag-button')
     backpack_view = page.evaluate("() => ({ open: __debug.backpack.isOpen, newBadges: document.querySelectorAll('#hud .backpack .new-badge').length, materials: [...document.querySelectorAll('#hud .backpack [data-material]')].map(m => m.textContent), wearButtons: document.querySelectorAll('#hud .backpack [data-wear]').length, wornBadge: document.querySelector('#hud .backpack .item.worn .item-badge')?.textContent, hudCountersGone: !document.querySelector('#hud .slot') })")
-    checks['backpack'] = {'dotAfterCraft': bag_dot_after_craft, **backpack_view, 'pass': bag_dot_after_craft and backpack_view['open'] and backpack_view['newBadges'] == 3 and len(backpack_view['materials']) == 5 and backpack_view['wearButtons'] == 3 and backpack_view['wornBadge'] == '✓ Wearing' and backpack_view['hudCountersGone']}
+    checks['backpack'] = {'dotAfterCraft': bag_dot_after_craft, **backpack_view, 'pass': bag_dot_after_craft and backpack_view['open'] and backpack_view['newBadges'] == 3 and len(backpack_view['materials']) == 7 and backpack_view['wearButtons'] == 3 and backpack_view['wornBadge'] == '✓ Wearing' and backpack_view['hudCountersGone']}
     page.click('#hud .backpack .workbench-close')
     after_close = page.evaluate("() => ({ dotHidden: document.querySelector('#hud .bag-dot').classList.contains('hidden'), anyNew: __debug.gear.hasNewItems() })")
     checks['backpack']['afterClose'] = after_close

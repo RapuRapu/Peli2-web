@@ -7,6 +7,7 @@ import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEA
 import { createPipeline } from './pipeline.js';
 import { createWater } from './water.js';
 import { createProps } from './props.js';
+import { createReefProps } from './reef.js';
 import { createLife } from './life.js';
 import { createHermit } from './hermit.js';
 import { createNavigation } from './navigation.js';
@@ -58,7 +59,10 @@ const WET_SAND_DRYING_RATE = 0.006;
 const HOME_SPOT = { x: 13, z: -21 };
 const WORKSHOP_SPOT = { x: 18, z: -17 };
 const FIRST_GOAL = { shellBits: 5, driftwood: 3, seaLettuce: 3 };
-const STARTER_SPOTS = { shellBits: { x: 11, z: -26.5 }, driftwood: { x: 17.5, z: -23 }, seaLettuce: { x: 12, z: -14 } };
+const REEF_FALLBACK_SPOT = { x: 14, z: 62 };
+const REEF_VIEW_THRESHOLD_Z = 42;
+const REEF_VIEW_REACH_PER_DISTANCE = 1.6;
+const STARTER_SPOTS = { shellBits: { x: 11, z: -26.5 }, driftwood: { x: 17.5, z: -23 }, seaLettuce: { x: 12, z: -14 }, coral: { x: 14, z: 57 } };
 const FAR_ZOOM_RING_DISTANCES = [46, 66];
 const STARTING_HEADING = 2.3;
 const BODY_WET_MINIMUM_DEPTH = 0.04;
@@ -153,6 +157,14 @@ const POSES = {
   55: { x: 22, z: -24, distance: 24, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], rack: { slots: [0.25, 0.75, null], ready: 2 }, inventory: { seaLettuce: 4 }, rackPanel: true },
   56: { x: 22, z: -24, distance: 24, tideShare: 0.56, heading: 0.9, inventory: { driedKelp: 3, seaLettuce: 2 }, wellFed: true, backpack: true },
   57: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 10, driedKelp: 4, driftwood: 4 }, scrollPanel: true },
+  58: { x: 14, z: 44, distance: 75, tideShare: 0.75, heading: 0 },
+  59: { x: 8, z: 72, distance: 28, tideShare: 0.75, heading: 0.5 },
+  60: { x: 8, z: 72, distance: 28, tideShare: 0.56, heading: 0.5 },
+  61: { x: 12, z: 90, distance: 26, tideShare: 0.75, heading: 1 },
+  62: { x: 10, z: 53, distance: 18, tideShare: 0.75, heading: 0.6 },
+  63: { x: HOME_SPOT.x, z: HOME_SPOT.z, distance: 32, tideShare: 0.75, workshop: true, crafted: ['snail'] },
+  64: { x: -30, z: 98, distance: 30, tideShare: 0.75, heading: 0.3 },
+  65: { x: 8, z: 72, distance: 30, tideShare: 0.75, heading: 0.5 },
   30: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, naked: true, backpack: true, remainsAt: { x: -20, z: -40 } },
   24: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, enemy: { kind: 'shoreCrab', offsetX: -2.8, offsetZ: 0.6 }, fightSeconds: 3.2 },
   25: { x: 30, z: -40, distance: 13, tideShare: 0.56, heading: 0.5, enemy: { kind: 'sandHopper', offsetX: 1.4, offsetZ: 2.6 }, fightSeconds: 0 },
@@ -162,7 +174,7 @@ const POSES = {
 };
 
 function createEmptySave() {
-  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [], rack: null, wellFedSeconds: 0 };
+  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [], rack: null, wellFedSeconds: 0, reefFound: false };
 }
 
 function migrateSave(stored) {
@@ -264,6 +276,7 @@ scene.add(sun, sun.target);
 
 scene.add(world.terrainMesh);
 createProps(scene, world, quality);
+const reefProps = createReefProps(scene, world, quality);
 const life = createLife(scene, world, quality);
 
 const pipeline = createPipeline(renderer, quality);
@@ -560,6 +573,8 @@ function refreshHud(bumpedType) {
     else hud.setGoal(goalText());
   } else if (!hasCraftedGear()) {
     hud.setGoal('🔨 Tap the workshop to craft', { done: true, action: !underground });
+  } else if (!save.reefFound) {
+    hud.setGoal('🪸 Explore the reef', { action: !underground });
   } else {
     hud.setGoal(null);
   }
@@ -749,6 +764,10 @@ function goalTapped() {
     startEntrancePlacement();
     return;
   }
+  if (!underground && burrow.hasStation('workshop') && hasCraftedGear() && !save.reefFound) {
+    walkTowardReef();
+    return;
+  }
   if (!underground) {
     walkToEntrance({ enter: true });
     return;
@@ -756,6 +775,21 @@ function goalTapped() {
   if (!burrow.hasStation('workshop') && goalReached()) {
     buildPanel.open();
   }
+}
+
+function walkTowardReef() {
+  const corals = resources.nodes.filter((node) => node.type === 'coral' && !node.gathered);
+  const nearest = corals.sort((first, second) => Math.hypot(first.x - player.x, first.z - player.z) - Math.hypot(second.x - player.x, second.z - player.z))[0];
+  if (nearest) return setDestination(nearest.x, nearest.z, nearest);
+  return setDestination(REEF_FALLBACK_SPOT.x, REEF_FALLBACK_SPOT.z);
+}
+
+function noticeReef() {
+  if (save.reefFound || underground || !world.isOnReef(player.x, player.z)) return;
+  save.reefFound = true;
+  hud.toast('🪸 You found the reef — coral and sea glass wash up here');
+  refreshHud(null);
+  persist();
 }
 
 function workshopSpot() {
@@ -1368,6 +1402,7 @@ function simulate(deltaTime) {
   helpers.update(deltaTime, simulationTime, burrow.state.entrance);
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
+  noticeReef();
   seaUniforms.uCrabPosition.value.set(player.x, player.y, player.z);
   updateAudio(deltaTime);
   if (!underground) {
@@ -1392,6 +1427,9 @@ function updateCamera(deltaTime, snap) {
   if (camera.position.y < minimumHeight) camera.position.y = minimumHeight;
   camera.lookAt(cameraFocus);
   camera.updateMatrixWorld();
+  const reefInView = !underground && cameraFocus.z + cameraDistance * REEF_VIEW_REACH_PER_DISTANCE > REEF_VIEW_THRESHOLD_Z;
+  reefProps.setVisible(reefInView);
+  resources.setReefVisible(reefInView);
 
   const shadowReach = THREE.MathUtils.clamp(cameraDistance * 1.7, 42, 120);
   const shadowTexel = (shadowReach * 2) / quality.shadowMapSize;
