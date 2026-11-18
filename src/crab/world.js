@@ -50,7 +50,6 @@ const BOULDERS = [
   { x: 40, z: 78, radius: 8.8, squash: 0.85, seed: 15 },
   { x: -20, z: 88, radius: 11.5, squash: 0.9, seed: 16 },
   { x: -92, z: 74, radius: 9.2, squash: 0.85, seed: 17 },
-  { x: 70, z: -70, radius: 5.6, squash: 0.7, seed: 18 },
   { x: -84, z: -62, radius: 6.6, squash: 0.76, seed: 19 },
   { x: 104, z: 84, radius: 12.5, squash: 0.95, seed: 20 },
 ];
@@ -429,6 +428,52 @@ const CAMP_BLOCKERS = {
   rope: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.5 }],
 };
 
+export const HOLD = { x: 88, z: -68, halfLength: 28, halfWidth: 19, entranceAngle: Math.PI * 0.6, entranceHalfAngle: 0.22 };
+export const COOK_SPOT = { x: 106, z: -64, territoryRadius: 20 };
+
+export const HOLD_PROPS = [
+  { kind: 'crate', x: 70, z: -76, size: 9, heading: 0.4 },
+  { kind: 'crate', x: 79, z: -81, size: 7, heading: -0.2 },
+  { kind: 'sack', x: 68, z: -62, radius: 3.6, heading: 0.3 },
+  { kind: 'sack', x: 74, z: -56, radius: 3.2, heading: 1.2 },
+  { kind: 'sack', x: 92, z: -80, radius: 3.4, heading: 2.0 },
+  { kind: 'barrel', x: 100, z: -81, radius: 4.2, height: 12 },
+  { kind: 'lantern', x: 86, z: -68, height: 16 },
+  { kind: 'hearth', x: 110, z: -74, radius: 5 },
+  { kind: 'choppingBlock', x: 98, z: -55, radius: 3.4 },
+  { kind: 'fishBones', x: 78, z: -66, length: 8, heading: 0.8 },
+  { kind: 'onions', x: 96, z: -72, radius: 2.2 },
+];
+
+const HOLD_WALL_STEP = 0.07;
+
+export function holdWallDiscs() {
+  const discs = [];
+  for (let angle = 0; angle < Math.PI * 2; angle += HOLD_WALL_STEP) {
+    const fromEntrance = Math.abs(Math.atan2(Math.sin(angle - HOLD.entranceAngle), Math.cos(angle - HOLD.entranceAngle)));
+    if (fromEntrance < HOLD.entranceHalfAngle) continue;
+    discs.push({ x: HOLD.x + Math.cos(angle) * HOLD.halfLength, z: HOLD.z + Math.sin(angle) * HOLD.halfWidth, radius: 1.8, angle });
+  }
+  return discs;
+}
+
+const HOLD_BLOCKERS = {
+  crate: (prop) => [{ x: prop.x, z: prop.z, radius: prop.size * 0.72 }],
+  sack: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.4 }],
+  barrel: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.6 }],
+  lantern: (prop) => [{ x: prop.x, z: prop.z, radius: 1.6 }],
+  hearth: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 1 }],
+  choppingBlock: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.5 }],
+  fishBones: (prop) => [-0.4, 0, 0.4].map((share) => ({ x: prop.x + Math.cos(prop.heading) * prop.length * share, z: prop.z - Math.sin(prop.heading) * prop.length * share, radius: 1.3 })),
+  onions: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.6 }],
+};
+
+export function isInHold(x, z) {
+  const dx = (x - HOLD.x) / HOLD.halfLength;
+  const dz = (z - HOLD.z) / HOLD.halfWidth;
+  return dx * dx + dz * dz < 0.92;
+}
+
 export function isInCamp(x, z) {
   return Math.hypot(x - CAMP.x, z - CAMP.z) < CAMP.radius && z > -91;
 }
@@ -462,6 +507,9 @@ function buildWalkability(ground, boulders, logs, reefProps) {
   }
   for (const prop of Object.values(reefProps).flat()) blockDisc(prop.x, prop.z, prop.blockRadius);
   for (const prop of CAMP_PROPS) for (const disc of CAMP_BLOCKERS[prop.kind](prop)) blockDisc(disc.x, disc.z, disc.radius);
+  for (const prop of HOLD_PROPS) for (const disc of HOLD_BLOCKERS[prop.kind](prop)) blockDisc(disc.x, disc.z, disc.radius);
+  for (const disc of holdWallDiscs()) blockDisc(disc.x, disc.z, disc.radius);
+  blockDisc(COOK_SPOT.x + 2, COOK_SPOT.z - 1, 3.2);
   return walkable;
 }
 
@@ -507,14 +555,14 @@ export function createWorld(quality) {
     return null;
   }
 
-  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, campProps: CAMP_PROPS, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
+  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, campProps: CAMP_PROPS, holdProps: HOLD_PROPS, isInHold, isInCamp, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
 }
 
 const GULL_TERRITORY_EDGE_Z = -92;
 const HIGH_TIDE_MARK = TIDE_MIDDLE + TIDE_AMPLITUDE;
 
 export const HOME_BEACH_ENEMIES = [
-  { kind: 'sandHopper', count: 10, packSize: [3, 4], accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && !isInCamp(x, z) && Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.radius + 8 && world.retained.levelAt(x, z) < height },
+  { kind: 'sandHopper', count: 10, packSize: [3, 4], accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && !isInCamp(x, z) && Math.hypot(x - HOLD.x, z - HOLD.z) > HOLD.halfLength + 6 && Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.radius + 8 && world.retained.levelAt(x, z) < height },
   { kind: 'shoreCrab', count: 4, accept: (world, x, z, height) => { if (isOnReef(x, z)) return false; const depth = world.retained.levelAt(x, z) - height; return depth > 0.3 && depth < 1.6; } },
   { kind: 'gull', count: 1, accept: (world, x, z) => z < -97 && z > -103 && Math.abs(x) < 40, territory: (x, z) => z < GULL_TERRITORY_EDGE_Z },
 ];
@@ -533,4 +581,12 @@ const awayFromCatLair = (x, z, margin) => Math.hypot(x - CAT_LAIR.x, z - CAT_LAI
 export const CAMP_ENEMIES = [
   { kind: 'rat', count: 4, packSize: [2, 2], accept: (world, x, z) => isInCamp(x, z) && awayFromCatLair(x, z, 2) },
   { kind: 'shipCat', count: 1, spotsFrom: () => [CAT_LAIR], accept: (world, x, z) => !awayFromCatLair(x, z, -CAT_LAIR.territoryRadius + 5), territory: (x, z) => !awayFromCatLair(x, z, 0) },
+];
+
+const awayFromCook = (x, z, margin) => Math.hypot(x - COOK_SPOT.x, z - COOK_SPOT.z) > COOK_SPOT.territoryRadius + margin;
+
+export const HOLD_ENEMIES = [
+  { kind: 'cockroach', count: 6, packSize: [3, 3], accept: (world, x, z) => isInHold(x, z) && awayFromCook(x, z, -8) },
+  { kind: 'rat', count: 2, packSize: [2, 2], accept: (world, x, z) => isInHold(x, z) && awayFromCook(x, z, -6) },
+  { kind: 'cook', count: 1, spotsFrom: () => [COOK_SPOT], accept: (world, x, z) => Math.hypot(x - COOK_SPOT.x, z - COOK_SPOT.z) < 1, territory: (x, z) => !awayFromCook(x, z, 0) && isInHold(x, z) },
 ];

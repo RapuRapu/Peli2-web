@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createRandom } from '../noise.js';
 import { applySeaside } from './seaside.js';
-import { TIDE_MIDDLE, TIDE_AMPLITUDE, isOnReef, isInCamp } from './world.js';
+import { TIDE_MIDDLE, TIDE_AMPLITUDE, isOnReef, isInCamp, isInHold } from './world.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 
@@ -15,12 +15,15 @@ export const RESOURCE_TYPES = {
   seaGlass: { label: 'Sea glass', icon: '🔷', count: 8, gatherSeconds: 1.1, standOff: 1.3 },
   scrap: { label: 'Scrap metal', icon: '🔩', count: 10, gatherSeconds: 1.2, standOff: 1.3 },
   cloth: { label: 'Cloth', icon: '🧵', count: 8, gatherSeconds: 1.3, standOff: 1.4 },
+  fishBone: { label: 'Fish bone', icon: '🦴', count: 10, gatherSeconds: 1.2, standOff: 1.4 },
+  wax: { label: 'Candle wax', icon: '🕯️', count: 8, gatherSeconds: 1.3, standOff: 1.3 },
   driedKelp: { label: 'Dried kelp', icon: '🍂', count: 0 },
 };
 
 const PEARL_MINIMUM_POOL_DEPTH = 1.4;
 const REEF_TYPES = new Set(['coral', 'seaGlass']);
 const CAMP_TYPES = new Set(['scrap', 'cloth']);
+const HOLD_TYPES = new Set(['fishBone', 'wax']);
 
 function paint(geometry, colorAt) {
   const positions = geometry.attributes.position;
@@ -161,6 +164,22 @@ function buildClothGeometry() {
   return paint(rag, (color, x, y, z) => color.copy(Math.sin(z * 9) > 0 ? red : white).multiplyScalar(0.75 + 0.5 * y));
 }
 
+function buildFishBoneGeometry() {
+  const bone = linearColor(0.94, 0.92, 0.84);
+  const parts = [paint(new THREE.CylinderGeometry(0.06, 0.04, 1.6, 6).rotateZ(Math.PI / 2).translate(0, 0.1, 0), (color) => color.copy(bone))];
+  for (let rib = 0; rib < 6; rib++) for (const side of [-1, 1]) parts.push(paint(new THREE.CylinderGeometry(0.025, 0.02, 0.5, 4).rotateX(side * 1.1).translate(-0.5 + rib * 0.18, 0.12, side * 0.22), (color) => color.copy(bone)));
+  parts.push(paint(new THREE.ConeGeometry(0.22, 0.45, 6).rotateZ(Math.PI / 2).translate(0.95, 0.14, 0), (color) => color.copy(bone)));
+  return mergeGeometries(parts.map((part) => (part.index ? part.toNonIndexed() : part)));
+}
+
+function buildWaxGeometry() {
+  const wax = linearColor(0.96, 0.9, 0.72);
+  const stub = paint(new THREE.CylinderGeometry(0.32, 0.36, 0.7, 12).translate(0, 0.35, 0), (color, x, y) => color.copy(wax).multiplyScalar(0.85 + 0.2 * y));
+  const drip = paint(new THREE.SphereGeometry(0.42, 10, 6).scale(1.3, 0.25, 1.1).translate(0.15, 0.05, 0.1), (color) => color.copy(wax));
+  const wick = paint(new THREE.CylinderGeometry(0.03, 0.03, 0.2, 4).translate(0, 0.8, 0), (color) => color.setRGB(0.05, 0.04, 0.03));
+  return mergeGeometries([stub, drip, wick].map((part) => (part.index ? part.toNonIndexed() : part)));
+}
+
 function buildSeaGlassGeometry() {
   const tints = [linearColor(0.42, 0.78, 0.74), linearColor(0.46, 0.66, 0.9), linearColor(0.6, 0.82, 0.5)];
   const chips = [
@@ -201,7 +220,7 @@ void main() {
 
 export function createResources(scene, overlay, world, quality, savedNodes, starterSpots) {
   const random = createRandom(2024);
-  const geometries = { shellBits: buildShellBitGeometry(), driftwood: buildDriftwoodGeometry(), seaLettuce: buildSeaLettuceGeometry(), pearls: buildPearlGeometry(), coral: buildCoralGeometry(), seaGlass: buildSeaGlassGeometry(), scrap: buildScrapGeometry(), cloth: buildClothGeometry() };
+  const geometries = { shellBits: buildShellBitGeometry(), driftwood: buildDriftwoodGeometry(), seaLettuce: buildSeaLettuceGeometry(), pearls: buildPearlGeometry(), coral: buildCoralGeometry(), seaGlass: buildSeaGlassGeometry(), scrap: buildScrapGeometry(), cloth: buildClothGeometry(), fishBone: buildFishBoneGeometry(), wax: buildWaxGeometry() };
   const highTideMark = TIDE_MIDDLE + TIDE_AMPLITUDE;
   const accepts = {
     shellBits: (x, z, height) => !isOnReef(x, z) && !isInCamp(x, z) && height > TIDE_MIDDLE - 1.4 && height < highTideMark + 1.6 && world.retained.levelAt(x, z) - height < 0.2,
@@ -212,6 +231,8 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
     seaGlass: (x, z, height) => isOnReef(x, z) && height > -3.0,
     scrap: (x, z) => isInCamp(x, z),
     cloth: (x, z) => isInCamp(x, z),
+    fishBone: (x, z) => isInHold(x, z),
+    wax: (x, z) => isInHold(x, z),
   };
   const transform = new THREE.Object3D();
   const nodes = [];
@@ -222,9 +243,9 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
 
   for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
     if (!definition.count) continue;
-    const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: { shellBits: 0.3, pearls: 0.3, seaGlass: 0.18, coral: 0.65, scrap: 0.4 }[type] ?? 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: { shellBits: 0.15, pearls: 0.15, seaGlass: 0.08, coral: 0.4 }[type] ?? 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
+    const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: { shellBits: 0.3, pearls: 0.3, seaGlass: 0.18, coral: 0.65, scrap: 0.4, wax: 0.5 }[type] ?? 0.9, side: THREE.DoubleSide }), { wetDarkening: 0.9, wetRoughness: { shellBits: 0.15, pearls: 0.15, seaGlass: 0.08, coral: 0.4 }[type] ?? 0.8, causticStrength: 1.2, chromaticCaustics: quality.chromaticCaustics, glow: type === 'seaLettuce' ? 0.14 : 0.22, glowPulse: true });
     const mesh = new THREE.InstancedMesh(geometries[type], material, definition.count);
-    mesh.castShadow = !REEF_TYPES.has(type) && !CAMP_TYPES.has(type);
+    mesh.castShadow = !REEF_TYPES.has(type) && !CAMP_TYPES.has(type) && !HOLD_TYPES.has(type);
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     meshes[type] = mesh;
@@ -259,7 +280,7 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
   }
 
   function relocate(node, avoid) {
-    const spot = world.randomSpot(random, (x, z, height) => accepts[node.type](x, z, height) && !nodes.some((other) => other !== node && !other.gathered && Math.hypot(other.x - x, other.z - z) < 5) && (!avoid || Math.hypot(avoid.x - x, avoid.z - z) > 14));
+    const spot = world.randomSpot(random, (x, z, height) => accepts[node.type](x, z, height) && (HOLD_TYPES.has(node.type) || !isInHold(x, z)) && !nodes.some((other) => other !== node && !other.gathered && Math.hypot(other.x - x, other.z - z) < 5) && (!avoid || Math.hypot(avoid.x - x, avoid.z - z) > 14));
     if (!spot) return false;
     Object.assign(node, { x: spot.x, y: spot.y, z: spot.z, heading: random() * Math.PI * 2, size: (node.type === 'shellBits' ? 0.6 : 0.85) + random() * 0.35, gathered: false });
     return true;
@@ -324,5 +345,9 @@ export function createResources(scene, overlay, world, quality, savedNodes, star
     for (const type of CAMP_TYPES) meshes[type].visible = visible;
   }
 
-  return { nodes, gather, hold, release, washAshore, update, serialize, setReefVisible, setCampVisible };
+  function setHoldVisible(visible) {
+    for (const type of HOLD_TYPES) meshes[type].visible = visible;
+  }
+
+  return { nodes, gather, hold, release, washAshore, update, serialize, setReefVisible, setCampVisible, setHoldVisible };
 }

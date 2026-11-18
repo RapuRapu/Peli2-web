@@ -19,7 +19,7 @@ const ASH = linearColor(0.36, 0.34, 0.32);
 const GLASS = linearColor(0.16, 0.38, 0.2);
 const HAT = linearColor(0.07, 0.06, 0.07);
 
-function paint(geometry, colorAt) {
+export function paint(geometry, colorAt) {
   const positions = geometry.attributes.position;
   const colors = new Float32Array(positions.count * 3);
   const color = new THREE.Color();
@@ -32,13 +32,13 @@ function paint(geometry, colorAt) {
   return geometry.index ? geometry : mergeVertices(geometry, 1e-5);
 }
 
-const solid = (geometry, color) => paint(geometry, (target) => target.copy(color));
+export const solid = (geometry, color) => paint(geometry, (target) => target.copy(color));
 
 function lathe(profile, segments) {
   return new THREE.LatheGeometry(profile.map(([radius, height]) => new THREE.Vector2(radius, height)), segments);
 }
 
-function buildBarrel(radius, height) {
+export function buildBarrel(radius, height) {
   const profile = [];
   for (let step = 0; step <= 10; step++) {
     const share = step / 10;
@@ -52,7 +52,7 @@ function buildBarrel(radius, height) {
   return body;
 }
 
-function buildCrate(size) {
+export function buildCrate(size) {
   const box = new THREE.BoxGeometry(size, size, size, 6, 6, 6).translate(0, size / 2, 0);
   return paint(box, (color, x, y, z) => {
     const edge = Math.max(Math.abs(x), Math.abs(z)) > size * 0.44 && (Math.abs(x) > size * 0.44) + (Math.abs(z) > size * 0.44) + (y < size * 0.07 || y > size * 0.93) >= 2;
@@ -177,7 +177,7 @@ const BUILDERS = {
   rope: (prop) => buildRope(prop.radius),
 };
 
-function normalize(geometry) {
+export function normalize(geometry) {
   const indexed = geometry.index ? geometry : mergeVertices(geometry, 1e-5);
   for (const name of Object.keys(indexed.attributes)) if (!['position', 'normal', 'color'].includes(name)) indexed.deleteAttribute(name);
   if (!indexed.attributes.normal) indexed.computeVertexNormals();

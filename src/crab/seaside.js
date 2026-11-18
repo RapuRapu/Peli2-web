@@ -275,9 +275,13 @@ vec3 cutDirection = cutRay / max(cutLength, 0.001);
 float cutAlong = dot(vSeaWorld - uCutCamera, cutDirection);
 float cutAway = length(vSeaWorld - uCutCamera - cutDirection * cutAlong);
 float cutRadius = 3.4 + 0.1 * max(0.0, cutLength - cutAlong);
-if (cutAlong < cutLength - 1.2 && cutAway < cutRadius) {
+if (cutAlong < cutLength - 1.2 && cutAway < cutRadius && vSeaWorld.y > uCutPlayer.y - 0.6) {
   float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
   if (checker < 0.5 || cutAway < cutRadius * 0.7) discard;
+}
+if (cutAlong < cutLength * 0.55 && vSeaWorld.y > uCutPlayer.y + 2.0) {
+  float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
+  if (checker < 0.5) discard;
 }
 `;
 

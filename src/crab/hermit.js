@@ -13,6 +13,7 @@ const SHELL_RINGS = 96;
 const SHELL_SIDES = 20;
 const KNOB_TIP_COLOR = linearColor(1, 0.86, 0.8);
 const LYING_FORM_TILT = 0.5;
+const BEAK_COLOR = linearColor(0.58, 0.47, 0.3);
 const LYING_FORM_LIFT = 0.15;
 const SHELL_LEAN_BACK = -0.5;
 const ANTENNA_FORWARD_TILT = 1.32;
@@ -123,11 +124,59 @@ function buildBottleGeometry(look) {
   return mergeGeometries([painted, lining].map((geometry) => geometry.index ? geometry.toNonIndexed() : geometry));
 }
 
+function buildSkullGeometry(look) {
+  const bone = linearColor(...look.light);
+  const shadow = linearColor(...look.band);
+  const inside = linearColor(...look.inside);
+  const { radius, length } = look;
+  const cranium = new THREE.SphereGeometry(1, 28, 20).scale(radius, radius * 0.9, length * 0.5).translate(0, radius * 0.15, length * 0.55);
+  const positions = cranium.attributes.position;
+  for (let index = 0; index < positions.count; index++) {
+    const z = positions.getZ(index);
+    const flatten = z < length * 0.25 ? 0.85 : 1;
+    positions.setY(index, positions.getY(index) * flatten);
+  }
+  cranium.computeVertexNormals();
+  const parts = [colorize(cranium, (color, x, y, z) => {
+    color.copy(bone).lerp(shadow, THREE.MathUtils.smoothstep(Math.abs(Math.sin(x * 9 + z * 3)), 0.97, 1) * 0.6);
+    const socket = [-1, 1].some((side) => Math.hypot(x - side * radius * 0.42, y - radius * 0.35, (z - length * 0.95) * 0.7) < radius * 0.32);
+    if (socket) color.copy(shadow).multiplyScalar(0.25);
+  })];
+  const jaw = new THREE.SphereGeometry(1, 18, 10).scale(radius * 0.62, radius * 0.4, length * 0.32).translate(0, -radius * 0.55, length * 0.82);
+  parts.push(colorize(jaw, (color, x, y, z) => color.copy(bone).multiplyScalar(0.92).lerp(shadow, Math.abs(Math.sin(x * 22)) > 0.9 && y > -radius * 0.4 ? 0.7 : 0)));
+  for (const side of [-1, 1]) {
+    parts.push(colorize(new THREE.SphereGeometry(radius * 0.3, 14, 10).scale(1, 0.3, 1).translate(side * radius * 0.4, radius * 0.74, length * 0.86), (color) => color.copy(shadow).multiplyScalar(0.45)));
+    parts.push(colorize(new THREE.TorusGeometry(radius * 0.32, radius * 0.07, 6, 16).rotateX(Math.PI / 2 - 0.3).translate(side * radius * 0.4, radius * 0.8, length * 0.86), (color) => color.copy(bone).lerp(shadow, 0.35)));
+  }
+  parts.push(colorize(new THREE.ConeGeometry(radius * 0.5, length * 0.8, 14).rotateX(Math.PI / 2 + 0.25).scale(1, 0.55, 1).translate(0, radius * 0.1, length * 1.38), (color, x, y, z) => color.copy(BEAK_COLOR).lerp(bone, THREE.MathUtils.smoothstep(z, length * 1.4, length * 1.05))));
+  parts.push(colorize(new THREE.CircleGeometry(radius * 0.55, 22).translate(0, 0, 0.3), (color) => color.copy(inside)));
+  return mergeGeometries(parts.map((geometry) => (geometry.index ? geometry.toNonIndexed() : geometry)));
+}
+
+function buildThimbleGeometry(look) {
+  const metal = linearColor(...look.light);
+  const dimple = linearColor(...look.band);
+  const inside = linearColor(...look.inside);
+  const { radius, length } = look;
+  const wall = new THREE.CylinderGeometry(radius * 0.82, radius, length, 30, 12, true).rotateX(Math.PI / 2).translate(0, 0, length / 2);
+  const painted = colorize(wall, (color, x, y, z) => {
+    const angle = Math.atan2(y, x);
+    const dimpled = z > length * 0.18 && Math.sin(angle * 18) * Math.sin(z * 13) > 0.55;
+    color.copy(dimpled ? dimple : metal).multiplyScalar(z < length * 0.12 ? 1.15 : 1);
+  });
+  const cap = colorize(new THREE.SphereGeometry(radius * 0.82, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1, 0.45).rotateX(Math.PI / 2).translate(0, 0, length), (color, x, y) => color.copy(Math.sin(x * 16) * Math.sin(y * 16) > 0.4 ? dimple : metal));
+  const rim = colorize(new THREE.TorusGeometry(radius, 0.07, 6, 30).translate(0, 0, 0.03), (color) => color.copy(metal).multiplyScalar(1.15));
+  const lining = colorize(new THREE.CircleGeometry(radius * 0.9, 24).translate(0, 0, length * 0.55), (color) => color.copy(inside));
+  return mergeGeometries([painted, cap, rim, lining].map((geometry) => (geometry.index ? geometry.toNonIndexed() : geometry)));
+}
+
+const LYING_FORM_BUILDERS = { can: buildCanGeometry, bottle: buildBottleGeometry, skull: buildSkullGeometry, thimble: buildThimbleGeometry };
+
 export function buildShellGeometry(look) {
   if (look.soft) return buildSoftAbdomenGeometry(look);
-  if (look.form === 'can' || look.form === 'bottle') {
+  if (LYING_FORM_BUILDERS[look.form]) {
     const mouthOffset = look.whorlRadius + 0.02;
-    const geometry = (look.form === 'can' ? buildCanGeometry(look) : buildBottleGeometry(look)).rotateX(-LYING_FORM_TILT).translate(mouthOffset, LYING_FORM_LIFT, 0);
+    const geometry = LYING_FORM_BUILDERS[look.form](look).rotateX(-LYING_FORM_TILT).translate(mouthOffset, LYING_FORM_LIFT, 0);
     return { geometry, mouthOffset };
   }
   const light = linearColor(...look.light);

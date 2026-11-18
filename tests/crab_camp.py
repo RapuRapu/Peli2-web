@@ -93,7 +93,7 @@ with sync_playwright() as playwright:
       return out;
     }''')
     print('area', json.dumps(area), flush=True)
-    checks['campArea'] = area['counts'] == {'scrap': 10, 'cloth': 8} and area['reachable'] == 18 and area['lairReachable'] and area['beachItemsInCamp'] == 0 and area['hoppersInCamp'] == 0 and area['campEnemies'] == {'rats': 4, 'cats': 1} and area['propsBlock']
+    checks['campArea'] = area['counts'] == {'scrap': 10, 'cloth': 8} and area['reachable'] == 18 and area['lairReachable'] and area['beachItemsInCamp'] == 0 and area['hoppersInCamp'] == 0 and area['campEnemies'] == {'rats': 6, 'cats': 1} and area['propsBlock']
 
     goal = page.evaluate(r'''async () => {
       const d = window.__debug; const out = {};

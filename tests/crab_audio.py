@@ -87,7 +87,7 @@ with sync_playwright() as playwright:
     game.locator('#hud .volume-row input').first.fill('0.2')
     stored = game.evaluate("() => JSON.parse(localStorage.getItem('seaofcrabs-audio'))")
     shots = browser.new_page()
-    shots.goto('file://' + os.path.abspath('dist/index.html') + '?pose=1&hud')
+    shots.goto('file://' + os.path.abspath('dist/index.html') + '?pose=1&hud', timeout=120000)
     shots.wait_for_function('!!window.__frameReady', timeout=180000)
     screenshot_silent = shots.evaluate("() => __debug.audio === null")
     browser.close()

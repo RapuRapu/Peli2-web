@@ -301,3 +301,75 @@ export function buildCatGeometry() {
   parts.push(painted(tail, (color, x, y, z) => { tabby(color, x, y + 2, x * 1.4); }));
   return mergeGeometries(parts);
 }
+
+export function buildCockroachGeometry() {
+  const shell = linearColor(0.36, 0.17, 0.07);
+  const edge = linearColor(0.62, 0.36, 0.16);
+  const dark = linearColor(0.08, 0.05, 0.03);
+  const body = new THREE.SphereGeometry(1, 20, 12).scale(1.0, 0.42, 1.65).translate(0, 0.62, -0.3);
+  const parts = [painted(body, (color, x, y, z) => color.copy(shell).lerp(edge, THREE.MathUtils.smoothstep(Math.abs(x), 0.65, 0.95) * 0.7).lerp(dark, Math.abs(x) < 0.05 ? 0.7 : 0).multiplyScalar(0.8 + 0.4 * THREE.MathUtils.smoothstep(y, 0.6, 1.0)))];
+  parts.push(painted(new THREE.SphereGeometry(0.62, 14, 10).scale(1.1, 0.45, 0.8).translate(0, 0.62, 1.45), (color, x, y, z) => color.copy(edge).lerp(dark, THREE.MathUtils.smoothstep(z, 1.6, 1.9))));
+  for (const side of [-1, 1]) {
+    parts.push(painted(tubeAlong([new THREE.Vector3(side * 0.2, 0.6, 1.9), new THREE.Vector3(side * 0.9, 1.1, 3.0), new THREE.Vector3(side * 1.9, 0.9, 4.0), new THREE.Vector3(side * 2.8, 0.6, 4.4)], (along) => 0.04 * (1 - along) + 0.012, 4, 14).geometry, (color) => color.copy(edge)));
+    for (let pair = 0; pair < 3; pair++) {
+      const z = 0.9 - pair * 0.8;
+      parts.push(painted(tubeAlong([new THREE.Vector3(side * 0.7, 0.5, z), new THREE.Vector3(side * 1.5, 0.8, z + (1 - pair) * 0.4), new THREE.Vector3(side * 2.1, 0.0, z + (1 - pair) * 0.8)], (along) => 0.09 * (1 - along * 0.6), 5, 8).geometry, (color) => color.copy(dark)));
+    }
+  }
+  return mergeGeometries(parts);
+}
+
+export function buildCookLegGeometry() {
+  const boot = linearColor(0.12, 0.09, 0.08);
+  const trousers = linearColor(0.42, 0.46, 0.6);
+  const stripe = linearColor(0.84, 0.82, 0.74);
+  const apron = linearColor(0.94, 0.92, 0.86);
+  const stain = linearColor(0.62, 0.4, 0.26);
+  const parts = [];
+  const sole = linearColor(0.06, 0.04, 0.03);
+  const lace = linearColor(0.82, 0.76, 0.6);
+  parts.push(painted(new THREE.SphereGeometry(1, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2).scale(3.1, 3.0, 4.2).translate(0, 1.0, 3.0), (color, x, y, z) => color.copy(boot).multiplyScalar(0.7 + 0.5 * THREE.MathUtils.smoothstep(y, 1.5, 3.6) + 0.25 * THREE.MathUtils.smoothstep(z, 5, 7))));
+  parts.push(painted(new THREE.BoxGeometry(6.6, 1.0, 12.6, 4, 1, 8).translate(0, 0.5, 1.6), (color) => color.copy(sole)));
+  parts.push(painted(new THREE.BoxGeometry(5.6, 2.2, 3.2).translate(0, 1.1, -3.6), (color) => color.copy(sole).multiplyScalar(1.6)));
+  parts.push(painted(new THREE.CylinderGeometry(3.1, 3.2, 11, 22).translate(0, 6.5, 0), (color, x, y, z) => color.copy(boot).multiplyScalar(0.75 + 0.3 * THREE.MathUtils.smoothstep(z, -1, 3))));
+  for (let row = 0; row < 5; row++) for (const tilt of [-0.45, 0.45]) parts.push(painted(new THREE.BoxGeometry(2.2, 0.16, 0.12).rotateZ(tilt).translate(0, 3.6 + row * 1.5, 3.12), (color) => color.copy(lace)));
+  parts.push(painted(new THREE.TorusGeometry(3.4, 0.55, 8, 24).rotateX(Math.PI / 2).translate(0, 12.4, 0), (color) => color.copy(trousers).multiplyScalar(0.7)));
+  parts.push(painted(new THREE.CylinderGeometry(3.6, 3.4, 34, 28, 6).translate(0, 29, 0), (color, x, y, z) => color.copy(Math.sin(Math.atan2(z, x) * 8) > 0.35 ? stripe : trousers)));
+  const apronPanel = new THREE.CylinderGeometry(5.2, 6.4, 26, 24, 6, true, -Math.PI * 0.55, Math.PI * 1.1).translate(0, 32, 0);
+  parts.push(painted(apronPanel, (color, x, y, z) => color.copy(apron).lerp(stain, THREE.MathUtils.smoothstep(Math.sin(x * 0.7 + y * 0.4) * Math.sin(y * 0.9 - x * 0.3), 0.6, 0.9) * 0.7).multiplyScalar(0.82 + 0.18 * THREE.MathUtils.smoothstep(z, -2, 5))));
+  return mergeGeometries(parts);
+}
+
+export function buildCleaverGeometry() {
+  const steel = linearColor(0.78, 0.8, 0.84);
+  const dark = linearColor(0.3, 0.31, 0.33);
+  const wood = linearColor(0.32, 0.18, 0.08);
+  const blade = new THREE.BoxGeometry(0.5, 7, 13, 1, 4, 8).translate(0, 3.5, 0);
+  const parts = [painted(blade, (color, x, y) => color.copy(steel).lerp(dark, THREE.MathUtils.smoothstep(y, 5.5, 7) * 0.8).multiplyScalar(y < 0.6 ? 1.25 : 1))];
+  parts.push(painted(new THREE.CylinderGeometry(0.9, 1.0, 9, 10).rotateX(Math.PI / 2).translate(0, 6.2, -11), (color) => color.copy(wood)));
+  return mergeGeometries(parts);
+}
+
+export const LINE_TELEGRAPH_FRAGMENT_GLSL = `
+uniform float uProgress;
+uniform float uOpacity;
+varying vec2 vLocal;
+void main() {
+  vec2 local = abs(vLocal);
+  float inside = 1.0 - smoothstep(0.985, 1.0, max(local.x, local.y));
+  float outline = smoothstep(0.92, 0.95, max(local.x, local.y)) * inside;
+  float edge = smoothstep(0.84, 0.87, max(local.x, local.y)) * (1.0 - smoothstep(0.92, 0.95, max(local.x, local.y)));
+  float urgent = smoothstep(0.75, 1.0, uProgress);
+  float sweep = uProgress * 2.0 - 1.0;
+  float fill = (1.0 - smoothstep(sweep - 0.04, sweep, vLocal.y)) * inside;
+  vec3 color = vec3(0.62, 0.02, 0.02);
+  float alpha = (0.18 + 0.5 * fill) * inside;
+  color = mix(color, vec3(1.0, 0.95, 0.9), edge * (0.85 + 0.15 * urgent));
+  alpha = max(alpha, edge);
+  color = mix(color, vec3(0.08, 0.0, 0.0), outline);
+  alpha = max(alpha, outline * 0.9);
+  alpha *= uOpacity;
+  if (alpha < 0.01) discard;
+  gl_FragColor = vec4(color, alpha);
+}
+`;

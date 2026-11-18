@@ -80,6 +80,31 @@ export const SHELLS = {
     breakable: true,
     look: { form: 'bottle', radius: 0.7, length: 2.2, neckRadius: 0.44, whorlRadius: 0.7, light: [0.2, 0.5, 0.28], band: [0.9, 0.84, 0.64], inside: [0.1, 0.22, 0.12] },
   },
+  skull: {
+    label: 'Bird skull',
+    tier: 4,
+    role: 'Hold tank',
+    defense: 28,
+    speedFactor: 0.75,
+    attackFactor: 1,
+    ability: { id: 'brace', label: 'Brace+ · Dread', description: '−40% damage taken while standing still; enemies hit 20% softer', damageFactor: 0.6, dreadFactor: 0.8 },
+    cost: { fishBone: 8, wax: 4, scrap: 6 },
+    breakable: true,
+    look: { form: 'skull', radius: 0.82, length: 2.0, whorlRadius: 0.82, light: [0.93, 0.9, 0.8], band: [0.45, 0.38, 0.3], inside: [0.2, 0.17, 0.14] },
+  },
+  thimble: {
+    label: 'Silver thimble',
+    tier: 4,
+    role: 'Hold striker',
+    defense: 12,
+    speedFactor: 1.1,
+    attackFactor: 1.6,
+    ability: { id: 'sting', label: 'Sting++', description: 'every 2nd hit deals double damage', everyHits: 2 },
+    cost: { scrap: 6, wax: 4, seaGlass: 3 },
+    breakable: true,
+    look: { form: 'thimble', radius: 0.74, length: 1.7, whorlRadius: 0.74, light: [0.86, 0.87, 0.9], band: [0.5, 0.52, 0.56], inside: [0.3, 0.3, 0.33] },
+  },
+
 };
 
 export const NAKED = {
@@ -97,6 +122,7 @@ export const CLAWS = {
   kelpWrapped: { label: 'Kelp-wrapped claws', attackBonus: 2, cost: { driedKelp: 4, shellBits: 4 }, breakable: true, healOnHit: 1 },
   coralTipped: { label: 'Coral-tipped claws', tier: 2, attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, breakable: true, tint: [1.7, 1.25, 1.6] },
   fishhook: { label: 'Fishhook claws', tier: 3, attackBonus: 13, cost: { scrap: 5, cloth: 2, coral: 2 }, breakable: true, tint: [0.85, 2.3, 4.2] },
+  fork: { label: 'Fork-tine claws', tier: 4, attackBonus: 19, cost: { scrap: 6, fishBone: 4, cloth: 2 }, breakable: true, tint: [1.1, 3.0, 5.2] },
 };
 
 export const BASE_ATTACK = 4;

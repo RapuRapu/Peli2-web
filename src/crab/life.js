@@ -114,6 +114,7 @@ function grassPlacements(world, quality) {
     const duneCover = THREE.MathUtils.smoothstep(centerHeight, 3.4, 6.5) * (0.3 + 0.7 * THREE.MathUtils.smoothstep(clumpNoise(centerX * 0.06, centerZ * 0.06), -0.25, 0.3));
     if (random() > duneCover) continue;
     if (world.boulders.some((boulder) => Math.hypot(centerX - boulder.x, centerZ - boulder.z) < boulder.radius * 1.05)) continue;
+    if (world.isInHold(centerX, centerZ) || world.isInCamp(centerX, centerZ)) continue;
     tufts++;
     const tuftHeight = 3 + random() * random() * 8;
     const colorIndex = Math.floor(random() * 3);

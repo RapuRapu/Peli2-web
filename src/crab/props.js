@@ -136,6 +136,7 @@ function buildPebbles(world, quality) {
       x = (random() * 2 - 1) * 150;
       z = (random() * 2 - 1) * 150;
     }
+    if (world.isInHold(x, z)) continue;
     const height = world.heightAt(x, z);
     const inPool = world.retained.levelAt(x, z) - height > 0.3;
     const onStrandLine = Math.abs(height - (TIDE_MIDDLE + TIDE_AMPLITUDE + 0.5)) < 0.5 || Math.abs(height - TIDE_MIDDLE) < 0.35;
