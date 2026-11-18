@@ -265,7 +265,23 @@ const ENCHANT_RIM_GLSL = /* glsl */ `
 }
 `;
 
-export function applySeaside(material, { surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false, enchant = null } = {}) {
+export const cutawayUniforms = { uCutPlayer: { value: new THREE.Vector3(0, -1000, 0) }, uCutCamera: { value: new THREE.Vector3(0, 0, 0) } };
+
+const CUTAWAY_GLSL = /* glsl */ `
+#include <clipping_planes_fragment>
+vec3 cutRay = uCutPlayer - uCutCamera;
+float cutLength = length(cutRay);
+vec3 cutDirection = cutRay / max(cutLength, 0.001);
+float cutAlong = dot(vSeaWorld - uCutCamera, cutDirection);
+float cutAway = length(vSeaWorld - uCutCamera - cutDirection * cutAlong);
+float cutRadius = 3.4 + 0.1 * max(0.0, cutLength - cutAlong);
+if (cutAlong < cutLength - 1.2 && cutAway < cutRadius) {
+  float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
+  if (checker < 0.5 || cutAway < cutRadius * 0.7) discard;
+}
+`;
+
+export function applySeaside(material, { cutaway = false, surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false, enchant = null } = {}) {
   const surfaceCode = surface ? SURFACES[surface] : null;
   material.defines = { ...(material.defines || {}), WET_DARKENING: wetDarkening.toFixed(3), WET_ROUGHNESS: wetRoughness.toFixed(3), CAUSTIC_STRENGTH: causticStrength.toFixed(3), WET_GLOSS: wetGloss.toFixed(3) };
   if (surface === 'sand') material.defines.SEA_SAND = '';
@@ -288,6 +304,12 @@ export function applySeaside(material, { surface = null, wetDarkening = 0.62, we
         .replace('#include <common>', '#include <common>\nuniform vec3 uEnchantColor;\nuniform float uEnchantGlow;')
         .replace('#include <emissivemap_fragment>', ENCHANT_RIM_GLSL);
     }
+    if (cutaway) {
+      Object.assign(shader.uniforms, cutawayUniforms);
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uCutPlayer;\nuniform vec3 uCutCamera;')
+        .replace('#include <clipping_planes_fragment>', CUTAWAY_GLSL);
+    }
     if (instanceFlash) {
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float aFlash;\nvarying float vFlash;')
@@ -297,6 +319,6 @@ export function applySeaside(material, { surface = null, wetDarkening = 0.62, we
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.9, 0.82) * vFlash;');
     }
   };
-  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${enchant ? 'enchant' : ''}`;
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${enchant ? 'enchant' : ''}|${cutaway ? 'cutaway' : ''}`;
   return material;
 }

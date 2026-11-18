@@ -397,6 +397,42 @@ function placeMorayDens(props) {
   return dens;
 }
 
+export const CAMP = { x: -88, z: -62, radius: 36 };
+export const CAT_LAIR = { x: -97, z: -63, territoryRadius: 17 };
+
+export const CAMP_PROPS = [
+  { kind: 'campfire', x: -101, z: -46, radius: 8 },
+  { kind: 'barrel', x: -68, z: -76, radius: 6, height: 18 },
+  { kind: 'barrelLying', x: -60, z: -52, radius: 5.5, length: 17, heading: 0.5 },
+  { kind: 'crate', x: -112, z: -72, size: 13, heading: 0.25 },
+  { kind: 'bottle', x: -79, z: -40, length: 7, radius: 1.6, heading: 1.1 },
+  { kind: 'bottle', x: -66, z: -86, length: 7, radius: 1.6, heading: -0.4 },
+  { kind: 'cutlass', x: -67, z: -37, height: 17, heading: 0.3 },
+  { kind: 'boot', x: -113, z: -45, length: 14, heading: 0.9 },
+  { kind: 'hat', x: -90, z: -35, radius: 7.5, heading: 0.6 },
+  { kind: 'tent', x: -99, z: -93, width: 42, height: 22, heading: 0 },
+  { kind: 'chest', x: -103, z: -70, width: 12, depth: 8, height: 7, heading: -0.35 },
+  { kind: 'rope', x: -55, z: -66, radius: 5 },
+];
+
+const CAMP_BLOCKERS = {
+  campfire: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 1.2 }],
+  barrel: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.6 }],
+  barrelLying: (prop) => [-0.5, -0.25, 0, 0.25, 0.5].map((share) => ({ x: prop.x + Math.sin(prop.heading) * prop.length * share, z: prop.z + Math.cos(prop.heading) * prop.length * share, radius: prop.radius + 0.4 })),
+  crate: (prop) => [{ x: prop.x, z: prop.z, radius: prop.size * 0.72 }],
+  bottle: (prop) => [-0.35, 0, 0.35].map((share) => ({ x: prop.x + Math.sin(prop.heading) * prop.length * share, z: prop.z + Math.cos(prop.heading) * prop.length * share, radius: prop.radius + 0.5 })),
+  cutlass: (prop) => [{ x: prop.x, z: prop.z, radius: 1.6 }],
+  boot: (prop) => [-0.35, 0, 0.3].map((share) => ({ x: prop.x + Math.sin(prop.heading) * prop.length * share, z: prop.z + Math.cos(prop.heading) * prop.length * share, radius: 4 })),
+  hat: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius }],
+  tent: (prop) => Array.from({ length: 23 }, (_, index) => ({ x: prop.x - prop.width / 2 + (index / 22) * prop.width, z: prop.z, radius: 2.2 })),
+  chest: (prop) => [-0.3, 0.3].map((share) => ({ x: prop.x + Math.cos(prop.heading) * prop.width * share, z: prop.z - Math.sin(prop.heading) * prop.width * share, radius: 5 })),
+  rope: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.5 }],
+};
+
+export function isInCamp(x, z) {
+  return Math.hypot(x - CAMP.x, z - CAMP.z) < CAMP.radius && z > -91;
+}
+
 function buildWalkability(ground, boulders, logs, reefProps) {
   const cellsPerSide = WORLD_SIZE;
   const walkable = new Uint8Array(cellsPerSide * cellsPerSide);
@@ -425,6 +461,7 @@ function buildWalkability(ground, boulders, logs, reefProps) {
     for (let along = -log.length / 2; along <= log.length / 2; along += 1) blockDisc(log.x + Math.cos(log.heading) * along, log.z + Math.sin(log.heading) * along, log.radius + 0.5);
   }
   for (const prop of Object.values(reefProps).flat()) blockDisc(prop.x, prop.z, prop.blockRadius);
+  for (const prop of CAMP_PROPS) for (const disc of CAMP_BLOCKERS[prop.kind](prop)) blockDisc(disc.x, disc.z, disc.radius);
   return walkable;
 }
 
@@ -470,14 +507,14 @@ export function createWorld(quality) {
     return null;
   }
 
-  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
+  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, campProps: CAMP_PROPS, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
 }
 
 const GULL_TERRITORY_EDGE_Z = -92;
 const HIGH_TIDE_MARK = TIDE_MIDDLE + TIDE_AMPLITUDE;
 
 export const HOME_BEACH_ENEMIES = [
-  { kind: 'sandHopper', count: 10, packSize: [3, 4], accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && world.retained.levelAt(x, z) < height },
+  { kind: 'sandHopper', count: 10, packSize: [3, 4], accept: (world, x, z, height) => height > HIGH_TIDE_MARK + 0.6 && z > -74 && !isInCamp(x, z) && Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.radius + 8 && world.retained.levelAt(x, z) < height },
   { kind: 'shoreCrab', count: 4, accept: (world, x, z, height) => { if (isOnReef(x, z)) return false; const depth = world.retained.levelAt(x, z) - height; return depth > 0.3 && depth < 1.6; } },
   { kind: 'gull', count: 1, accept: (world, x, z) => z < -97 && z > -103 && Math.abs(x) < 40, territory: (x, z) => z < GULL_TERRITORY_EDGE_Z },
 ];
@@ -489,4 +526,11 @@ export const REEF_ENEMIES = [
   { kind: 'octopus', count: 2, accept: (world, x, z, height) => isOnReef(x, z) && z > 68 && height < -2.5 && awayFromLair(x, z, 4) },
   { kind: 'mantisShrimp', count: 4, accept: (world, x, z, height) => isOnReef(x, z) && z > 64 && height > -3.2 && awayFromLair(x, z, 4) },
   { kind: 'giantLobster', count: 1, spotsFrom: () => [LOBSTER_LAIR], accept: (world, x, z) => !awayFromLair(x, z, -LOBSTER_LAIR.territoryRadius + 4), territory: (x, z) => !awayFromLair(x, z, 0) },
+];
+
+const awayFromCatLair = (x, z, margin) => Math.hypot(x - CAT_LAIR.x, z - CAT_LAIR.z) > CAT_LAIR.territoryRadius + margin;
+
+export const CAMP_ENEMIES = [
+  { kind: 'rat', count: 4, packSize: [2, 2], accept: (world, x, z) => isInCamp(x, z) && awayFromCatLair(x, z, 2) },
+  { kind: 'shipCat', count: 1, spotsFrom: () => [CAT_LAIR], accept: (world, x, z) => !awayFromCatLair(x, z, -CAT_LAIR.territoryRadius + 5), territory: (x, z) => !awayFromCatLair(x, z, 0) },
 ];

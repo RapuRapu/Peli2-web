@@ -34,6 +34,7 @@ export const SHELLS = {
   },
   coral: {
     label: 'Coral shell',
+    tier: 2,
     role: 'Reef tank',
     defense: 12,
     speedFactor: 0.85,
@@ -45,6 +46,7 @@ export const SHELLS = {
   },
   whelk: {
     label: 'Spiral whelk',
+    tier: 2,
     role: 'Reef striker',
     defense: 5,
     speedFactor: 1.1,
@@ -53,6 +55,30 @@ export const SHELLS = {
     cost: { seaGlass: 4, coral: 3, shellBits: 6 },
     breakable: true,
     look: { turns: 4.2, spireShare: 0.94, whorlRadius: 0.32, tubeRadius: 0.56, height: 1.75, bandFrequency: 52, light: [0.86, 0.9, 0.94], band: [0.2, 0.42, 0.62], inside: [0.96, 0.82, 0.72] },
+  },
+  tinCan: {
+    label: 'Tin can',
+    tier: 3,
+    role: 'Camp tank',
+    defense: 20,
+    speedFactor: 0.8,
+    attackFactor: 1,
+    ability: { id: 'brace', label: 'Brace+ · Clang', description: '−40% damage taken while standing still; attackers take 5 damage', damageFactor: 0.6, thorns: 5 },
+    cost: { scrap: 6, cloth: 3, coral: 4 },
+    breakable: true,
+    look: { form: 'can', radius: 0.78, length: 1.8, whorlRadius: 0.78, light: [0.78, 0.79, 0.82], band: [0.78, 0.14, 0.1], inside: [0.5, 0.5, 0.52] },
+  },
+  bottle: {
+    label: 'Glass bottle',
+    tier: 3,
+    role: 'Camp striker',
+    defense: 9,
+    speedFactor: 1.05,
+    attackFactor: 1.4,
+    ability: { id: 'pierce', label: 'Pierce', description: 'hits ignore enemy armour', pierce: true },
+    cost: { seaGlass: 6, scrap: 3, cloth: 3 },
+    breakable: true,
+    look: { form: 'bottle', radius: 0.7, length: 2.2, neckRadius: 0.44, whorlRadius: 0.7, light: [0.2, 0.5, 0.28], band: [0.9, 0.84, 0.64], inside: [0.1, 0.22, 0.12] },
   },
 };
 
@@ -69,7 +95,8 @@ export const CLAWS = {
   bare: { label: 'Bare claws', attackBonus: 0, cost: null, breakable: false, enchantable: false },
   shellEdged: { label: 'Shell-edged claws', attackBonus: 4, cost: { shellBits: 6, driftwood: 4 }, breakable: true },
   kelpWrapped: { label: 'Kelp-wrapped claws', attackBonus: 2, cost: { driedKelp: 4, shellBits: 4 }, breakable: true, healOnHit: 1 },
-  coralTipped: { label: 'Coral-tipped claws', attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, breakable: true, tint: [1.7, 1.25, 1.6] },
+  coralTipped: { label: 'Coral-tipped claws', tier: 2, attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, breakable: true, tint: [1.7, 1.25, 1.6] },
+  fishhook: { label: 'Fishhook claws', tier: 3, attackBonus: 13, cost: { scrap: 5, cloth: 2, coral: 2 }, breakable: true, tint: [0.85, 2.3, 4.2] },
 };
 
 export const BASE_ATTACK = 4;

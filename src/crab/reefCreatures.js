@@ -217,13 +217,20 @@ uniform float uOpacity;
 varying vec2 vLocal;
 void main() {
   float radius = length(vLocal);
-  float edge = smoothstep(0.88, 0.93, radius) * (1.0 - smoothstep(0.97, 1.0, radius));
-  float fill = (1.0 - smoothstep(uProgress - 0.04, uProgress, radius)) * 0.5;
+  float inside = 1.0 - smoothstep(0.985, 1.0, radius);
+  float outline = smoothstep(0.9, 0.93, radius) * inside;
+  float edge = smoothstep(0.8, 0.84, radius) * (1.0 - smoothstep(0.9, 0.93, radius));
   float urgent = smoothstep(0.75, 1.0, uProgress);
-  edge *= 0.8 + 0.2 * urgent;
-  float alpha = max(edge, (fill + 0.12) * (1.0 - smoothstep(0.97, 1.0, radius))) * uOpacity;
+  float fill = (1.0 - smoothstep(uProgress - 0.04, uProgress, radius)) * inside;
+  vec3 color = vec3(0.62, 0.02, 0.02);
+  float alpha = (0.18 + 0.5 * fill) * inside;
+  color = mix(color, vec3(1.0, 0.95, 0.9), edge * (0.85 + 0.15 * urgent));
+  alpha = max(alpha, edge);
+  color = mix(color, vec3(0.08, 0.0, 0.0), outline);
+  alpha = max(alpha, outline * 0.9);
+  alpha *= uOpacity;
   if (alpha < 0.01) discard;
-  gl_FragColor = vec4(vec3(1.0, 0.22 + 0.2 * urgent, 0.06) * (0.9 + 0.7 * edge), alpha);
+  gl_FragColor = vec4(color, alpha);
 }
 `;
 
@@ -241,3 +248,56 @@ void main() {
 }
 `;
 
+
+export function buildRatGeometry() {
+  const fur = linearColor(0.36, 0.31, 0.27);
+  const belly = linearColor(0.62, 0.56, 0.5);
+  const pink = linearColor(0.9, 0.6, 0.6);
+  const dark = linearColor(0.03, 0.03, 0.03);
+  const shadeFur = (color, x, y, z) => color.copy(fur).lerp(belly, THREE.MathUtils.smoothstep(1.0 - y, 0, 0.45) * 0.7).multiplyScalar(0.9 + 0.12 * Math.sin(x * 23 + z * 17));
+  const body = new THREE.SphereGeometry(1, 20, 14).scale(1.05, 0.95, 2.0).translate(0, 1.05, -0.2);
+  const head = new THREE.SphereGeometry(0.75, 16, 12).scale(0.9, 0.85, 1.35).translate(0, 1.2, 1.9);
+  const snout = new THREE.ConeGeometry(0.42, 0.9, 12).rotateX(Math.PI / 2).translate(0, 1.08, 2.85);
+  const parts = [painted(body, shadeFur), painted(head, shadeFur), painted(snout, shadeFur), solid(new THREE.SphereGeometry(0.12, 8, 6).translate(0, 1.1, 3.3), pink)];
+  for (const side of [-1, 1]) {
+    parts.push(painted(new THREE.SphereGeometry(0.42, 12, 8).scale(1, 1, 0.3).rotateY(side * 0.5).translate(side * 0.5, 1.85, 1.55), (color, x, y, z) => color.copy(pink).lerp(fur, 0.35)));
+    parts.push(solid(new THREE.SphereGeometry(0.12, 8, 6).translate(side * 0.38, 1.42, 2.35), dark));
+    for (const along of [-1.2, 0.9]) parts.push(solid(new THREE.CylinderGeometry(0.16, 0.12, 0.9, 6).translate(side * 0.7, 0.35, along), fur));
+    for (let whisker = 0; whisker < 3; whisker++) parts.push(solid(new THREE.CylinderGeometry(0.01, 0.01, 1.1, 3).rotateZ(Math.PI / 2 + side * (0.2 - whisker * 0.2)).translate(side * 0.55, 1.12, 3.05), linearColor(0.85, 0.85, 0.82)));
+  }
+  const tail = tubeAlong([new THREE.Vector3(0, 0.9, -2.0), new THREE.Vector3(0.4, 0.4, -3.2), new THREE.Vector3(-0.5, 0.2, -4.6), new THREE.Vector3(0.6, 0.18, -5.8)], (along) => 0.18 * (1 - along) + 0.03, 6, 20).geometry;
+  parts.push(painted(tail, (color) => color.copy(pink).lerp(fur, 0.3)));
+  return mergeGeometries(parts);
+}
+
+export function buildCatGeometry() {
+  const orange = linearColor(0.92, 0.5, 0.18);
+  const stripe = linearColor(0.55, 0.24, 0.07);
+  const white = linearColor(0.96, 0.93, 0.86);
+  const pink = linearColor(0.95, 0.6, 0.6);
+  const eye = linearColor(0.45, 0.85, 0.2);
+  const dark = linearColor(0.03, 0.03, 0.02);
+  const tabby = (color, x, y, z) => {
+    color.copy(orange).lerp(stripe, THREE.MathUtils.smoothstep(Math.sin(z * 1.6 + Math.sin(x * 0.8) * 1.5), 0.45, 0.75) * 0.8);
+    color.lerp(white, THREE.MathUtils.smoothstep(2.4 - y, 0, 1.2) * 0.85);
+  };
+  const body = new THREE.SphereGeometry(1, 28, 18).scale(3.4, 2.6, 6.2).translate(0, 3.0, -1.2);
+  const chest = new THREE.SphereGeometry(1, 20, 14).scale(2.8, 3.0, 2.8).translate(0, 4.0, 3.2);
+  const head = new THREE.SphereGeometry(2.4, 24, 18).scale(1.05, 0.9, 0.95).translate(0, 6.6, 5.6);
+  const muzzle = new THREE.SphereGeometry(1.1, 16, 10).scale(1.2, 0.75, 0.9).translate(0, 5.8, 7.6);
+  const parts = [painted(body, tabby), painted(chest, (color, x, y, z) => color.copy(white).lerp(orange, THREE.MathUtils.smoothstep(Math.abs(x), 1.6, 2.6))), painted(head, tabby), solid(muzzle, white)];
+  parts.push(solid(new THREE.SphereGeometry(0.3, 10, 8).scale(1.2, 0.8, 1).translate(0, 6.2, 8.5), pink));
+  for (const side of [-1, 1]) {
+    parts.push(painted(new THREE.ConeGeometry(0.95, 1.9, 4).rotateY(Math.PI / 4).translate(side * 1.5, 8.6, 5.2), (color, x, y) => color.copy(orange).lerp(pink, THREE.MathUtils.smoothstep(y, 8, 8.8) * 0.4)));
+    parts.push(solid(new THREE.SphereGeometry(0.48, 12, 10).scale(1, 0.75, 0.6).translate(side * 0.95, 7.0, 7.65), eye));
+    parts.push(solid(new THREE.SphereGeometry(0.22, 8, 8).scale(0.45, 1, 0.5).translate(side * 0.95, 7.0, 7.95), dark));
+    for (let whisker = 0; whisker < 3; whisker++) parts.push(solid(new THREE.CylinderGeometry(0.03, 0.03, 3.2, 3).rotateZ(Math.PI / 2 + side * (0.15 - whisker * 0.15)).translate(side * 2.2, 5.9, 8.2), white));
+    parts.push(painted(new THREE.CylinderGeometry(0.75, 0.85, 3.4, 10).translate(side * 1.6, 1.7, 4.0), tabby));
+    parts.push(solid(new THREE.SphereGeometry(0.95, 12, 8).scale(1, 0.55, 1.3).translate(side * 1.6, 0.4, 4.6), white));
+    parts.push(painted(new THREE.SphereGeometry(1.4, 14, 10).scale(1, 1.1, 1.6).translate(side * 2.3, 1.6, -3.4), tabby));
+    parts.push(solid(new THREE.SphereGeometry(0.9, 12, 8).scale(1, 0.5, 1.5).translate(side * 2.1, 0.35, -2.0), white));
+  }
+  const tail = tubeAlong([new THREE.Vector3(0, 2.6, -7.0), new THREE.Vector3(2.4, 0.8, -8.6), new THREE.Vector3(5.2, 0.7, -7.6), new THREE.Vector3(6.4, 1.0, -4.8)], (along) => 0.85 - along * 0.35, 10, 24).geometry;
+  parts.push(painted(tail, (color, x, y, z) => { tabby(color, x, y + 2, x * 1.4); }));
+  return mergeGeometries(parts);
+}

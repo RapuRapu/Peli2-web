@@ -12,6 +12,8 @@ const EYE = linearColor(0.03, 0.03, 0.04);
 const SHELL_RINGS = 96;
 const SHELL_SIDES = 20;
 const KNOB_TIP_COLOR = linearColor(1, 0.86, 0.8);
+const LYING_FORM_TILT = 0.5;
+const LYING_FORM_LIFT = 0.15;
 const SHELL_LEAN_BACK = -0.5;
 const ANTENNA_FORWARD_TILT = 1.32;
 const LEG_RISE = 0.28;
@@ -65,8 +67,69 @@ function buildSoftAbdomenGeometry(look) {
   return { geometry, mouthOffset: 0 };
 }
 
+function colorize(geometry, colorAt) {
+  const positions = geometry.attributes.position;
+  const colors = new Float32Array(positions.count * 3);
+  const color = new THREE.Color();
+  for (let index = 0; index < positions.count; index++) {
+    colorAt(color, positions.getX(index), positions.getY(index), positions.getZ(index));
+    colors.set([color.r, color.g, color.b], index * 3);
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  if (geometry.attributes.uv) geometry.deleteAttribute('uv');
+  return geometry;
+}
+
+function buildCanGeometry(look) {
+  const metal = linearColor(...look.light);
+  const label = linearColor(...look.band);
+  const inside = linearColor(...look.inside);
+  const rust = linearColor(0.5, 0.26, 0.12);
+  const { radius, length } = look;
+  const wall = new THREE.CylinderGeometry(radius, radius, length, 28, 10, true).rotateX(Math.PI / 2).translate(0, 0, length / 2);
+  const positions = wall.attributes.position;
+  for (let index = 0; index < positions.count; index++) {
+    const z = positions.getZ(index);
+    const ridge = 1 + 0.03 * Math.sin(z * 26) * (z > length * 0.15 && z < length * 0.85 ? 0 : 1);
+    positions.setX(index, positions.getX(index) * ridge);
+    positions.setY(index, positions.getY(index) * ridge);
+  }
+  wall.computeVertexNormals();
+  const painted = colorize(wall, (color, x, y, z) => {
+    const onLabel = z > length * 0.2 && z < length * 0.8;
+    const stripe = onLabel && Math.abs(z - length * 0.5) < length * 0.07;
+    color.copy(onLabel ? (stripe ? linearColor(0.96, 0.92, 0.82) : label) : metal);
+    const spot = Math.sin(x * 13 + z * 7) * Math.sin(y * 11 - z * 5);
+    color.lerp(rust, THREE.MathUtils.smoothstep(spot, 0.55, 0.9) * 0.7);
+  });
+  const bottom = colorize(new THREE.CircleGeometry(radius, 28).translate(0, 0, length), (color) => color.copy(metal).multiplyScalar(0.8));
+  const rim = colorize(new THREE.TorusGeometry(radius, 0.05, 6, 28).translate(0, 0, 0.02), (color) => color.copy(metal));
+  const lining = colorize(new THREE.CircleGeometry(radius * 0.93, 28).translate(0, 0, length * 0.6), (color) => color.copy(inside));
+  return mergeGeometries([painted, bottom, rim, lining].map((geometry) => geometry.index ? geometry.toNonIndexed() : geometry));
+}
+
+function buildBottleGeometry(look) {
+  const glass = linearColor(...look.light);
+  const label = linearColor(...look.band);
+  const inside = linearColor(...look.inside);
+  const { radius, length, neckRadius } = look;
+  const profile = [[neckRadius * 1.15, 0], [neckRadius, 0.05], [neckRadius, length * 0.18], [radius * 0.92, length * 0.36], [radius, length * 0.48], [radius, length * 0.97], [radius * 0.9, length], [0, length]].map(([r, h]) => new THREE.Vector2(r, h));
+  const body = new THREE.LatheGeometry(profile, 26).rotateX(Math.PI / 2);
+  const painted = colorize(body, (color, x, y, z) => {
+    const onLabel = z > length * 0.55 && z < length * 0.85;
+    color.copy(onLabel ? label : glass).multiplyScalar(onLabel ? 1 : 0.85 + 0.5 * THREE.MathUtils.smoothstep(y, radius * 0.3, radius));
+  });
+  const lining = colorize(new THREE.CircleGeometry(neckRadius * 0.9, 20).translate(0, 0, 0.08), (color) => color.copy(inside));
+  return mergeGeometries([painted, lining].map((geometry) => geometry.index ? geometry.toNonIndexed() : geometry));
+}
+
 export function buildShellGeometry(look) {
   if (look.soft) return buildSoftAbdomenGeometry(look);
+  if (look.form === 'can' || look.form === 'bottle') {
+    const mouthOffset = look.whorlRadius + 0.02;
+    const geometry = (look.form === 'can' ? buildCanGeometry(look) : buildBottleGeometry(look)).rotateX(-LYING_FORM_TILT).translate(mouthOffset, LYING_FORM_LIFT, 0);
+    return { geometry, mouthOffset };
+  }
   const light = linearColor(...look.light);
   const bandColor = linearColor(...look.band);
   const positions = [];

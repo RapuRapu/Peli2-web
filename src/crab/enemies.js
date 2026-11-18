@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside } from './seaside.js';
 import { random } from './random.js';
-import { buildMorayGeometry, buildOctopusGeometry, buildMantisGeometry, buildLobsterBodyGeometry, buildLobsterClawGeometry, TELEGRAPH_VERTEX_GLSL, TELEGRAPH_FRAGMENT_GLSL, INK_FRAGMENT_GLSL } from './reefCreatures.js';
+import { buildRatGeometry, buildCatGeometry, buildMorayGeometry, buildOctopusGeometry, buildMantisGeometry, buildLobsterBodyGeometry, buildLobsterClawGeometry, TELEGRAPH_VERTEX_GLSL, TELEGRAPH_FRAGMENT_GLSL, INK_FRAGMENT_GLSL } from './reefCreatures.js';
 
 export const PLAYER_BODY_RADIUS = 0.9;
 export const LEASH_DISTANCE = 20;
@@ -15,6 +15,8 @@ export const ENEMY_KINDS = {
   moray: { label: 'Moray eel', health: 90, attack: 19, defense: 3, attackInterval: 1.6, windup: 0.3, speed: 0, radius: 0.9, temperament: 'lurker', sightRange: 0, strikeReach: 2.4, retreatSeconds: 0.8, experience: 70, pearlChance: 0.25, respawnSeconds: 120, barHeight: 3.8, reef: true },
   octopus: { label: 'Octopus', health: 180, attack: 14, defense: 4, attackInterval: 2.0, windup: 0.7, speed: 3.0, radius: 1.5, temperament: 'aggressive', sightRange: 8, inkEvery: 3, inkSlowSeconds: 3, inkSlowFactor: 0.5, experience: 110, pearlChance: 0.2, respawnSeconds: 150, barHeight: 3.0, reef: true },
   mantisShrimp: { label: 'Mantis shrimp', health: 55, attack: 13, defense: 1, attackInterval: 1.8, windup: 0.35, speed: 6.5, radius: 0.75, temperament: 'aggressive', sightRange: 9, followUpSeconds: 0.25, experience: 60, pearlChance: 0.1, respawnSeconds: 90, barHeight: 1.7, reef: true },
+  rat: { label: 'Rat', health: 100, attack: 22, defense: 6, attackInterval: 1.4, windup: 0.4, speed: 6.2, radius: 1.3, temperament: 'aggressive', sightRange: 10, experience: 140, pearlChance: 0.15, respawnSeconds: 120, barHeight: 3.2, camp: true },
+  shipCat: { label: "Ship's cat", health: 1000, attack: 36, defense: 12, attackInterval: 2.4, windup: 1.0, speed: 4.2, radius: 2.9, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 3.8, radius: 3.0, pounceEvery: 3, pounceRange: 16, pounceRadius: 3.4, pounceWindup: 1.5 }, experience: 1500, pearlChance: 1, pearlCount: 3, respawnSeconds: 420, barHeight: 7.5, boss: true, camp: true },
   giantLobster: { label: 'Giant lobster', health: 800, attack: 30, defense: 8, attackInterval: 2.6, windup: 1.2, speed: 3.2, radius: 3.0, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 4.4, radius: 3.0 }, experience: 800, pearlChance: 1, pearlCount: 2, respawnSeconds: 300, barHeight: 7.5, boss: true, reef: true },
 };
 
@@ -23,17 +25,20 @@ const WANDER_RADIUS = 6;
 const REPATH_SECONDS = 0.5;
 const DEATH_SINK_SECONDS = 1.7;
 const PACK_ALERT_RANGE = 12;
-const STRIKE_SOUNDS = { sandHopper: 'hopperJump', shoreCrab: 'crabClatter', gull: 'wingFlap', moray: 'crabClatter', octopus: 'fishPlop', mantisShrimp: 'clawSnap', giantLobster: 'crabClatter' };
+const STRIKE_SOUNDS = { rat: 'crabClatter', shipCat: 'hitThud', sandHopper: 'hopperJump', shoreCrab: 'crabClatter', gull: 'wingFlap', moray: 'crabClatter', octopus: 'fishPlop', mantisShrimp: 'clawSnap', giantLobster: 'crabClatter' };
 const IDLE_SOUNDS = { sandHopper: { name: 'hopperChirp', perSecond: 0.12 }, gull: { name: 'gullCall', perSecond: 0.06 } };
 const ENEMY_STRIKE_REACH = 1.9;
 const OUT_OF_REACH_RESET_SECONDS = 1;
 const PACK_SPREAD = 3.5;
 const HURT_SECONDS = 0.45;
-const KNOCKBACK_BY_KIND = { sandHopper: 0.6, shoreCrab: 0.25, gull: 0.1, moray: 0, octopus: 0.15, mantisShrimp: 0.4, giantLobster: 0 };
-const PICK_RADIUS_BY_KIND = { gull: 110, giantLobster: 120, octopus: 75, shoreCrab: 60, moray: 60 };
+const KNOCKBACK_BY_KIND = { rat: 0.2, shipCat: 0, sandHopper: 0.6, shoreCrab: 0.25, gull: 0.1, moray: 0, octopus: 0.15, mantisShrimp: 0.4, giantLobster: 0 };
+const PICK_RADIUS_BY_KIND = { rat: 70, shipCat: 120, gull: 110, giantLobster: 120, octopus: 75, shoreCrab: 60, moray: 60 };
 const INK_CLOUD_RADIUS = 3.2;
 const MORAY_SCALE = 1.45;
 const RETREAT_COOLDOWN_SECONDS = 5;
+const LEAP_SECONDS = 0.35;
+const TELEGRAPH_LIFT = 0.3;
+const CAT_SCALE = 0.62;
 const LOBSTER_SCALE = 1.35;
 const LOBSTER_CLAW_SCALE = 1.4;
 const FLASH_STRENGTH = 0.3;
@@ -261,11 +266,15 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   const mantisMesh = new THREE.InstancedMesh(buildMantisGeometry(), reefMaterial, Math.max(1, counts.mantisShrimp));
   const lobsterBodyMesh = new THREE.InstancedMesh(buildLobsterBodyGeometry(), reefMaterial, Math.max(1, counts.giantLobster));
   const lobsterClawMesh = new THREE.InstancedMesh(buildLobsterClawGeometry(), reefMaterial, Math.max(1, counts.giantLobster * 2));
+  const ratMesh = new THREE.InstancedMesh(buildRatGeometry(), reefMaterial, Math.max(1, counts.rat));
+  const catMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), { cutaway: true, chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.2, instanceFlash: true });
+  const catMesh = new THREE.InstancedMesh(buildCatGeometry().scale(CAT_SCALE, CAT_SCALE, CAT_SCALE), catMaterial, Math.max(1, counts.shipCat));
+  const campMeshes = [ratMesh, catMesh];
   const reefMeshes = [morayMesh, octopusMesh, mantisMesh, lobsterBodyMesh, lobsterClawMesh];
   const shadowless = new Set([morayMesh, mantisMesh, lobsterClawMesh]);
-  const allMeshes = [hopperMesh, crabBodyMesh, crabLegMesh, crabClawMesh, ...reefMeshes];
+  const allMeshes = [hopperMesh, crabBodyMesh, crabLegMesh, crabClawMesh, ...reefMeshes, ...campMeshes];
   const flatDisc = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
-  const telegraphMaterial = new THREE.ShaderMaterial({ uniforms: { uProgress: { value: 0 }, uOpacity: { value: 0 } }, vertexShader: TELEGRAPH_VERTEX_GLSL.replace('position.xy', 'position.xz'), fragmentShader: TELEGRAPH_FRAGMENT_GLSL, transparent: true, depthWrite: false, depthTest: false });
+  const telegraphMaterial = new THREE.ShaderMaterial({ uniforms: { uProgress: { value: 0 }, uOpacity: { value: 0 } }, vertexShader: TELEGRAPH_VERTEX_GLSL.replace('position.xy', 'position.xz'), fragmentShader: TELEGRAPH_FRAGMENT_GLSL, transparent: true, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   const telegraphMesh = new THREE.Mesh(flatDisc, telegraphMaterial);
   telegraphMesh.renderOrder = 4;
   telegraphMesh.visible = false;
@@ -334,7 +343,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       health: definition.health, state: definition.flies ? 'circling' : 'idle', altitude: definition.flies ? GULL_CIRCLE_ALTITUDE : 0,
       path: [], pathIndex: 0, repathTimer: 0, outOfReachSeconds: 0, wanderTimer: 1 + random() * 4, attackTimer: 0, anchor: null, sink: 0, provoked: false,
       lastHurtTime: -100, motion: 0, strike: 0, hurt: 0, circleAngle: random() * Math.PI * 2,
-      retreat: 0, retreatReadyAt: 0, emerge: 0, followUp: 0, strikesMade: 0, inkWindup: false, zone: null, cooldown: 0,
+      retreat: 0, retreatReadyAt: 0, emerge: 0, leap: null, followUp: 0, strikesMade: 0, inkWindup: false, zone: null, cooldown: 0,
     });
   }
 
@@ -505,16 +514,29 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     const telegraph = enemy.definition.telegraph;
     enemy.cooldown = Math.max(0, enemy.cooldown - deltaTime);
     if (!enemy.zone) {
-      if (toPlayer > reach) return false;
+      const pounceDue = telegraph.pounceEvery && (enemy.strikesMade + 1) % telegraph.pounceEvery === 0;
+      const canPounce = telegraph.pounceEvery && toPlayer < telegraph.pounceRange && (pounceDue || toPlayer > reach + 2);
+      if (toPlayer > reach && !canPounce) return false;
       turnToward(enemy, Math.atan2(player.x - enemy.x, player.z - enemy.z), deltaTime);
-      if (enemy.cooldown > 0) return true;
-      enemy.zone = { x: enemy.x + Math.sin(enemy.heading) * telegraph.reach, z: enemy.z + Math.cos(enemy.heading) * telegraph.reach, radius: telegraph.radius, timer: enemy.definition.windup };
+      if (enemy.cooldown > 0) return toPlayer <= reach;
+      if (canPounce) {
+        enemy.heading = Math.atan2(player.x - enemy.x, player.z - enemy.z);
+        enemy.zone = { x: player.x, z: player.z, radius: telegraph.pounceRadius, timer: telegraph.pounceWindup, duration: telegraph.pounceWindup, pounce: true };
+        onWarn(enemy, '⚠ Pounce!');
+        return true;
+      }
+      enemy.zone = { x: enemy.x + Math.sin(enemy.heading) * telegraph.reach, z: enemy.z + Math.cos(enemy.heading) * telegraph.reach, radius: telegraph.radius, timer: enemy.definition.windup, duration: enemy.definition.windup };
       onWarn(enemy, null);
       return true;
     }
     enemy.zone.timer -= deltaTime;
     if (enemy.zone.timer > 0) return true;
     const caught = Math.hypot(player.x - enemy.zone.x, player.z - enemy.zone.z) < enemy.zone.radius + PLAYER_BODY_RADIUS * 0.6;
+    if (enemy.zone.pounce) {
+      const landingDistance = enemy.definition.radius + 1.4;
+      const landing = navigation.nearestWalkable(enemy.zone.x - Math.sin(enemy.heading) * landingDistance, enemy.zone.z - Math.cos(enemy.heading) * landingDistance, 6);
+      if (landing) enemy.leap = { fromX: enemy.x, fromZ: enemy.z, toX: landing.x, toZ: landing.z, time: 0 };
+    }
     enemy.zone = null;
     enemy.cooldown = enemy.definition.attackInterval - enemy.definition.windup;
     enemy.strike = 1;
@@ -532,6 +554,14 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     const lurker = definition.temperament === 'lurker';
     let moving = false;
     enemy.retreat = Math.max(0, enemy.retreat - deltaTime);
+    if (enemy.leap) {
+      enemy.leap.time = Math.min(1, enemy.leap.time + deltaTime / LEAP_SECONDS);
+      enemy.x = THREE.MathUtils.lerp(enemy.leap.fromX, enemy.leap.toX, enemy.leap.time);
+      enemy.z = THREE.MathUtils.lerp(enemy.leap.fromZ, enemy.leap.toZ, enemy.leap.time);
+      enemy.y = world.heightAt(enemy.x, enemy.z);
+      if (enemy.leap.time >= 1) enemy.leap = null;
+      return;
+    }
     if (enemy.followUp > 0) {
       enemy.followUp -= deltaTime;
       if (enemy.followUp <= 0 && enemy.state === 'chase' && player.alive && toPlayer < reach + 0.6) landStrike(enemy);
@@ -787,7 +817,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
 
   function renderLobster(enemy, time) {
     const lunge = Math.sin(enemy.strike * Math.PI);
-    const windup = enemy.zone ? 1 - enemy.zone.timer / enemy.definition.windup : 0;
+    const windup = enemy.zone ? 1 - enemy.zone.timer / enemy.zone.duration : 0;
     const stride = time * 6 + enemy.id;
     transform.position.set(enemy.x + Math.sin(enemy.heading) * (lunge * 0.8 - windup * 0.3), enemy.y + Math.abs(Math.sin(stride)) * 0.06 * enemy.motion - deathSink(enemy) * 1.2, enemy.z + Math.cos(enemy.heading) * (lunge * 0.8 - windup * 0.3));
     transform.rotation.set(-windup * 0.12 + lunge * 0.1, enemy.heading, deathFall(enemy) * 0.5);
@@ -811,9 +841,9 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     telegraphMesh.visible = Boolean(telegraphing);
     if (telegraphing) {
       const zone = telegraphing.zone;
-      telegraphMesh.position.set(zone.x, world.heightAt(zone.x, zone.z) + 0.12, zone.z);
+      telegraphMesh.position.set(zone.x, world.heightAt(zone.x, zone.z) + TELEGRAPH_LIFT, zone.z);
       telegraphMesh.scale.setScalar(zone.radius);
-      telegraphMaterial.uniforms.uProgress.value = THREE.MathUtils.clamp(1 - zone.timer / telegraphing.definition.windup, 0, 1);
+      telegraphMaterial.uniforms.uProgress.value = THREE.MathUtils.clamp(1 - zone.timer / zone.duration, 0, 1);
       telegraphMaterial.uniforms.uOpacity.value = 1;
     }
     const inkLeft = ink.until - time;
@@ -828,6 +858,35 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
 
   function setReefVisible(visible) {
     for (const mesh of reefMeshes) mesh.visible = visible;
+  }
+
+  function setCampVisible(visible) {
+    for (const mesh of campMeshes) mesh.visible = visible;
+  }
+
+  function renderRat(enemy, time) {
+    const scurry = Math.abs(Math.sin(time * 16 + enemy.id)) * 0.18 * enemy.motion;
+    const lunge = Math.sin(enemy.strike * Math.PI);
+    const recoil = Math.sin(enemy.hurt * Math.PI) * 0.5;
+    const forward = lunge * 1.1 - recoil;
+    transform.position.set(enemy.x + Math.sin(enemy.heading) * forward, enemy.y + scurry + lunge * 0.35 - deathSink(enemy) * 0.8, enemy.z + Math.cos(enemy.heading) * forward);
+    transform.rotation.set(-lunge * 0.25 + recoil * 0.3, enemy.heading + Math.sin(time * 9 + enemy.id) * 0.05 * enemy.motion, deathFall(enemy) * Math.PI);
+    transform.scale.setScalar(1);
+    transform.updateMatrix();
+    placeInstance(ratMesh, enemy.slot, enemy, transform.matrix);
+  }
+
+  function renderCat(enemy, time) {
+    const lunge = Math.sin(enemy.strike * Math.PI);
+    const windup = enemy.zone ? 1 - enemy.zone.timer / enemy.zone.duration : 0;
+    const crouch = enemy.zone && enemy.zone.pounce ? windup * 0.18 : 0;
+    const hop = enemy.leap ? Math.sin(enemy.leap.time * Math.PI) * 6 : 0;
+    const breathe = 0.02 * Math.sin(time * 1.6 + enemy.id);
+    transform.position.set(enemy.x + Math.sin(enemy.heading) * lunge * 1.4, enemy.y + hop - deathSink(enemy) * 2, enemy.z + Math.cos(enemy.heading) * lunge * 1.4);
+    transform.rotation.set(-windup * 0.12 + lunge * 0.15 - (enemy.leap ? 0.25 : 0), enemy.heading, deathFall(enemy) * 1.4);
+    transform.scale.set(1 + breathe, 1 - crouch + breathe, 1 + crouch * 0.5);
+    transform.updateMatrix();
+    placeInstance(catMesh, enemy.slot, enemy, transform.matrix);
   }
 
   function renderGull(enemy, time) {
@@ -866,6 +925,8 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       else if (enemy.kind === 'octopus') renderOctopus(enemy, time);
       else if (enemy.kind === 'mantisShrimp') renderMantis(enemy, time);
       else if (enemy.kind === 'giantLobster') renderLobster(enemy, time);
+      else if (enemy.kind === 'rat') renderRat(enemy, time);
+      else if (enemy.kind === 'shipCat') renderCat(enemy, time);
       const barVisible = alive(enemy) && (enemy.health < enemy.definition.health || engaged(enemy) || enemy.id === playerTargetId) && !(enemy.definition.flies && enemy.altitude > 6);
       if (barVisible) labelPoint.set(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z).project(camera);
       const onScreen = barVisible && labelPoint.z < 1;
@@ -895,8 +956,8 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     return best ? best.enemy : null;
   }
 
-  function spawn(kind, x, z) {
-    const enemy = list.find((candidate) => candidate.kind === kind);
+  function spawn(kind, x, z, which = 0) {
+    const enemy = list.filter((candidate) => candidate.kind === kind)[which];
     if (!enemy) return null;
     place(enemy, { x, z });
     return enemy;
@@ -904,5 +965,5 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
 
   const inkAt = (time) => (ink.until > time ? ink : null);
 
-  return { list, update, render, pick, damage, calmAll, alive, spawn, startChase, giveUp, setReefVisible, inkAt };
+  return { list, update, render, pick, damage, calmAll, alive, spawn, startChase, giveUp, setReefVisible, setCampVisible, inkAt };
 }

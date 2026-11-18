@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { createPerformanceMonitor } from '../performance.js';
 import { QUALITY_LEVELS, chosenQualityName, storeQualityName } from './quality.js';
-import { seaUniforms, SEA_COMMON_GLSL, lighting } from './seaside.js';
+import { seaUniforms, SEA_COMMON_GLSL, lighting, cutawayUniforms } from './seaside.js';
 import { createNoiseTexture, createWaveGradientTexture } from './textures.js';
-import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES, REEF_ENEMIES } from './world.js';
+import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES, REEF_ENEMIES, CAMP_ENEMIES, CAMP, isInCamp } from './world.js';
 import { createPipeline } from './pipeline.js';
 import { createWater } from './water.js';
 import { createProps } from './props.js';
 import { createReefProps } from './reef.js';
+import { createCampProps } from './camp.js';
 import { createLife } from './life.js';
 import { createHermit } from './hermit.js';
 import { createNavigation } from './navigation.js';
@@ -60,9 +61,11 @@ const HOME_SPOT = { x: 13, z: -21 };
 const WORKSHOP_SPOT = { x: 18, z: -17 };
 const FIRST_GOAL = { shellBits: 5, driftwood: 3, seaLettuce: 3 };
 const REEF_FALLBACK_SPOT = { x: 14, z: 62 };
+const CAMP_FALLBACK_SPOT = { x: -74, z: -36 };
 const REEF_VIEW_THRESHOLD_Z = 42;
+const CAMP_VIEW_MARGIN = 30;
 const REEF_VIEW_REACH_PER_DISTANCE = 1.6;
-const STARTER_SPOTS = { shellBits: { x: 11, z: -26.5 }, driftwood: { x: 17.5, z: -23 }, seaLettuce: { x: 12, z: -14 }, coral: { x: 14, z: 57 } };
+const STARTER_SPOTS = { shellBits: { x: 11, z: -26.5 }, driftwood: { x: 17.5, z: -23 }, seaLettuce: { x: 12, z: -14 }, coral: { x: 14, z: 57 }, scrap: { x: -74, z: -34 } };
 const FAR_ZOOM_RING_DISTANCES = [46, 66];
 const STARTING_HEADING = 2.3;
 const BODY_WET_MINIMUM_DEPTH = 0.04;
@@ -168,6 +171,15 @@ const POSES = {
   66: { x: -1.6, z: 66.6, distance: 20, tideShare: 0.75, heading: -1.2, level: 8, enemy: { kind: 'moray', offsetX: -2.6, offsetZ: 1.8 }, fightSeconds: 0.9 },
   67: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 5.2 },
   74: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 4.5 },
+  75: { x: -78, z: -40, distance: 60, tideShare: 0.56, heading: 3.6 },
+  76: { x: -84, z: -48, distance: 30, tideShare: 0.56, heading: 3.4 },
+  77: { x: -70, z: -60, distance: 24, tideShare: 0.56, heading: 3.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 3 }, enemy: { kind: 'rat', offsetX: -2, offsetZ: -3 }, fightSeconds: 1.2 },
+  78: { x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
+  79: { x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
+  80: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 0 } },
+  81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'bottle', claws: 'fishhook', level: 0 } },
+  82: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 9, scrap: 10, cloth: 6, driftwood: 3 }, scrollPanel: true },
+  83: { x: -20, z: -30, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
   69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
   70: { x: -60, z: 91, distance: 32, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
@@ -183,7 +195,7 @@ const POSES = {
 };
 
 function createEmptySave() {
-  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [], rack: null, wellFedSeconds: 0, reefFound: false };
+  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [], rack: null, wellFedSeconds: 0, reefFound: false, reefGearCrafted: false, campFound: false };
 }
 
 function migrateSave(stored) {
@@ -286,6 +298,7 @@ scene.add(sun, sun.target);
 scene.add(world.terrainMesh);
 createProps(scene, world, quality);
 const reefProps = createReefProps(scene, world, quality);
+const campProps = createCampProps(scene, world, quality);
 const life = createLife(scene, world, quality);
 
 const pipeline = createPipeline(renderer, quality);
@@ -330,7 +343,7 @@ const enemies = createEnemies({
   world,
   navigation,
   quality,
-  spawnTable: [...HOME_BEACH_ENEMIES, ...REEF_ENEMIES].map((entry) => ({ ...entry, avoid: HOME_SPOT })),
+  spawnTable: [...HOME_BEACH_ENEMIES, ...REEF_ENEMIES, ...CAMP_ENEMIES].map((entry) => ({ ...entry, avoid: HOME_SPOT })),
   labelParent: hud.root,
   onAttackPlayer: hitPlayer,
   onKilled: enemyKilled,
@@ -599,6 +612,8 @@ function refreshHud(bumpedType) {
     hud.setGoal('🔨 Tap the workshop to craft', { done: true, action: !underground });
   } else if (!save.reefFound) {
     hud.setGoal('🪸 Explore the reef', { action: !underground });
+  } else if (save.reefGearCrafted && !save.campFound) {
+    hud.setGoal('🏴‍☠️ Find the pirate camp', { action: !underground });
   } else {
     hud.setGoal(null);
   }
@@ -792,6 +807,10 @@ function goalTapped() {
     walkTowardReef();
     return;
   }
+  if (!underground && save.reefFound && save.reefGearCrafted && !save.campFound) {
+    walkTowardCamp();
+    return;
+  }
   if (!underground) {
     walkToEntrance({ enter: true });
     return;
@@ -806,6 +825,21 @@ function walkTowardReef() {
   const nearest = corals.sort((first, second) => Math.hypot(first.x - player.x, first.z - player.z) - Math.hypot(second.x - player.x, second.z - player.z))[0];
   if (nearest) return setDestination(nearest.x, nearest.z, nearest);
   return setDestination(REEF_FALLBACK_SPOT.x, REEF_FALLBACK_SPOT.z);
+}
+
+function walkTowardCamp() {
+  const scraps = resources.nodes.filter((node) => node.type === 'scrap' && !node.gathered);
+  const nearest = scraps.sort((first, second) => Math.hypot(first.x - player.x, first.z - player.z) - Math.hypot(second.x - player.x, second.z - player.z))[0];
+  if (nearest) return setDestination(nearest.x, nearest.z, nearest);
+  return setDestination(CAMP_FALLBACK_SPOT.x, CAMP_FALLBACK_SPOT.z);
+}
+
+function noticeCamp() {
+  if (save.campFound || underground || !isInCamp(player.x, player.z)) return;
+  save.campFound = true;
+  hud.toast('🏴‍☠️ A pirate camp! Giants sleep here — mind the rats and the cat');
+  refreshHud(null);
+  persist();
 }
 
 function noticeReef() {
@@ -948,6 +982,7 @@ function craftItem(category, kind) {
   if (!item) return null;
   const label = (category === 'shell' ? SHELLS : CLAWS)[kind].label;
   save.craftedOnce = true;
+  if ((category === 'shell' ? SHELLS : CLAWS)[kind].tier === 2) save.reefGearCrafted = true;
   soundAt('craft');
   hud.toast(`🔨 New ${label.toLowerCase()}! Open 🎒 to wear it`);
   hud.setBagDot(true);
@@ -1080,7 +1115,7 @@ function strike(enemy) {
   const stats = playerStats();
   player.hitCount++;
   const isSting = stats.ability && stats.ability.id === 'sting' && player.hitCount % (stats.ability.everyHits || STING_EVERY_HITS) === 0;
-  const damage = rollDamage(stats.attack, enemy.definition.defense) * (isSting ? 2 : 1);
+  const damage = rollDamage(stats.attack, stats.ability && stats.ability.pierce ? 0 : enemy.definition.defense) * (isSting ? 2 : 1);
   player.lastCombatTime = simulationTime;
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.7, enemy.z, isSting ? `${damage}!` : String(damage), isSting ? 'sting' : 'dealt');
   hermit.playAttack(isSting ? 'both' : player.hitCount % 2 ? 'big' : 'small');
@@ -1433,6 +1468,7 @@ function simulate(deltaTime) {
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   noticeReef();
+  noticeCamp();
   seaUniforms.uCrabPosition.value.set(player.x, player.y, player.z);
   updateAudio(deltaTime);
   if (!underground) {
@@ -1458,8 +1494,14 @@ function updateCamera(deltaTime, snap) {
   camera.lookAt(cameraFocus);
   camera.updateMatrixWorld();
   const reefInView = !underground && cameraFocus.z + cameraDistance * REEF_VIEW_REACH_PER_DISTANCE > REEF_VIEW_THRESHOLD_Z;
+  cutawayUniforms.uCutCamera.value.copy(camera.position);
+  cutawayUniforms.uCutPlayer.value.set(player.x, underground ? -1000 : player.y + 1, player.z);
   reefProps.setVisible(reefInView);
   enemies.setReefVisible(reefInView);
+  const campInView = !underground && Math.hypot(cameraFocus.x - CAMP.x, cameraFocus.z - CAMP.z) < CAMP.radius + CAMP_VIEW_MARGIN + cameraDistance;
+  campProps.setVisible(campInView);
+  resources.setCampVisible(campInView);
+  enemies.setCampVisible(campInView);
   resources.setReefVisible(reefInView);
 
   const shadowReach = THREE.MathUtils.clamp(cameraDistance * 1.7, 42, 120);
@@ -1509,6 +1551,7 @@ function renderScene() {
   burrow.update(simulationTime, camera, underground);
   helpers.render(simulationTime);
   rack.render(simulationTime, camera, !underground);
+  campProps.update(simulationTime);
   const buffs = [isWellFed() ? `🍂 Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null, simulationTime < (player.inkedUntil || 0) ? `🦑 Inked · ${Math.ceil(player.inkedUntil - simulationTime)} s` : null].filter(Boolean);
   hud.setBuff(buffs.length ? buffs.join('  ') : null);
   if (rackPanel.isOpen && Math.floor(simulationTime) !== Math.floor(simulationTime - 1 / 60)) rackPanel.render();
@@ -1782,6 +1825,7 @@ if (isScreenshotMode) {
     buildWorkshop();
   }
   if (pose.inventory) Object.assign(save.inventory, pose.inventory);
+  if (pose.reefFound) save.reefFound = true;
   for (const kind of pose.crafted || []) {
     Object.assign(save.inventory, SHELLS[kind].cost);
     craftItem('shell', kind);
