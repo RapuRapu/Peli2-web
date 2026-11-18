@@ -108,7 +108,7 @@ export const SHELLS = {
     label: 'Lobster shell',
     tier: 2,
     trophy: 'giantLobster',
-    role: 'Boss trophy · tank',
+    role: 'Tank',
     defense: 16,
     speedFactor: 0.85,
     attackFactor: 1,
@@ -236,6 +236,18 @@ export function createGear(saved) {
     return true;
   }
 
+  function unequip(category) {
+    if (category === 'shell') {
+      if (!state.wornShellId) return false;
+      state.wornShellId = null;
+      return true;
+    }
+    const bare = state.claws.find((item) => !CLAWS[item.kind].cost);
+    if (!bare || state.wornClawsId === bare.id) return false;
+    state.wornClawsId = bare.id;
+    return true;
+  }
+
   function findItem(id) {
     const shell = state.shells.find((item) => item.id === id);
     if (shell) return { category: 'shell', item: shell, definition: SHELLS[shell.kind] };
@@ -325,6 +337,7 @@ export function createGear(saved) {
     craft,
     grant,
     wear,
+    unequip,
     findItem,
     enchantableItems,
     enchant,

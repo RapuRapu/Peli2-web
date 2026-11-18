@@ -42,6 +42,7 @@ FLOW = r'''
   step(2);
   out.hungryRegenInCombat = +(d.progression.state.health - hungryStart).toFixed(2);
   d.openBackpack();
+  d.backpack.select('material:driedKelp');
   const eatButton = document.querySelector('#hud .backpack [data-eat]');
   if (!eatButton) return out;
   eatButton.click();

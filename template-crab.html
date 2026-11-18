@@ -107,6 +107,63 @@
   #hud .health-text { position: absolute; inset: 0; font: bold 11px/15px system-ui, sans-serif; text-align: center; }
   #hud .experience-track { height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.5); overflow: hidden; }
   #hud .experience-fill { height: 100%; background: #f2c14e; transition: width 0.3s; }
+  #hud .backpack .workbench-card { width: min(96vw, 760px); }
+  #hud .storage-panel .workbench-card { width: min(96vw, 760px); }
+  #hud .inventory-layout { display: flex; flex-direction: column; gap: 10px; }
+  #hud .doll-column { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  #hud .doll-frame { width: 150px; height: 120px; border-radius: 14px; background: radial-gradient(circle at 50% 60%, rgba(201, 180, 138, 0.35), rgba(30, 40, 44, 0) 70%); display: flex; align-items: center; justify-content: center; border: 1px dashed rgba(255, 244, 214, 0.25); }
+  #hud .doll-image { width: 150px; height: 150px; object-fit: contain; margin-top: -10px; pointer-events: none; }
+  #hud .doll-fallback { font-size: 64px; }
+  #hud .equip-row { display: flex; gap: 10px; }
+  #hud .equip-slot { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; border-radius: 12px; background: #2c3a3f; min-width: 120px; }
+  #hud .equip-label { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.7; }
+  #hud .equip-name { font-size: 13px; font-weight: bold; text-align: center; }
+  #hud .equip-stats { font-size: 12px; opacity: 0.85; }
+  #hud .doll-summary { text-align: center; }
+  #hud .grid-column { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+  #hud .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; padding: 6px; border-radius: 12px; background: rgba(0, 0, 0, 0.18); min-height: 74px; align-content: start; }
+  #hud .slot-cell { position: relative; width: 62px; height: 62px; border-radius: 10px; background: #34444a; border: 2px solid #6f7a7e; display: flex; align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+  #hud .slot-cell.selected { outline: 3px solid #ffffff; outline-offset: 2px; }
+  #hud .slot-cell.material-cell { border-color: #4f5c60; }
+  #hud .slot-cell.empty-cell { cursor: default; opacity: 0.6; font-size: 24px; border-style: dashed; }
+  #hud .slot-cell.tier-1 { border-color: #9aa3a6; }
+  #hud .slot-cell.tier-2 { border-color: #4fc46a; background: #2f4a3a; }
+  #hud .slot-cell.tier-3 { border-color: #4aa3ff; background: #2c3f55; }
+  #hud .slot-cell.tier-4 { border-color: #b06cff; background: #3d3156; }
+  #hud .slot-cell.tier-5 { border-color: #ff9a3a; background: #553a26; }
+  #hud .slot-cell.tier-trophy .slot-tier { background: #8a6a12; color: #fff3c4; }
+  #hud .slot-image { width: 56px; height: 56px; object-fit: contain; pointer-events: none; }
+  #hud .slot-emoji { font-size: 28px; pointer-events: none; }
+  #hud .slot-count { position: absolute; right: 4px; bottom: 2px; font-size: 13px; font-weight: bold; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  #hud .slot-tier { position: absolute; left: 3px; top: 2px; font-size: 10px; font-weight: bold; padding: 0 3px; border-radius: 5px; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
+  #hud .slot-enchant { position: absolute; right: 3px; bottom: 2px; font-size: 13px; font-weight: bold; color: #ffe2a8; text-shadow: 0 1px 2px #000; pointer-events: none; }
+  #hud .workbench .slot-new { position: absolute; right: -5px; top: -7px; margin: 0; padding: 0 4px; font-size: 9px; line-height: 14px; pointer-events: none; }
+  #hud .item-tier { font-size: 12px; font-weight: bold; }
+  #hud .item-tier.tier-2 { color: #7be08f; }
+  #hud .item-tier.tier-3 { color: #7cc0ff; }
+  #hud .item-tier.tier-4 { color: #cfa2ff; }
+  #hud .item-tier.tier-5 { color: #ffb36b; }
+  #hud .item-tier.tier-trophy { color: #ffd34d; }
+  #hud .stat-delta.better { color: #7be08f; font-weight: bold; }
+  #hud .stat-delta.worse { color: #ff8a78; font-weight: bold; }
+  #hud .inventory-body, #hud .storage-panel .workbench-body { -webkit-mask-image: none; mask-image: none; padding-bottom: 6px; }
+  #hud .grid-title { padding-top: 0; text-transform: none; letter-spacing: 0; }
+  #hud .workbench .item-action:disabled { background: #4a5154; border-color: #6b7275; color: #b8bec0; opacity: 0.8; }
+  #hud .item-details { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; background: #384449; min-height: 52px; }
+  #hud .details-actions { display: flex; flex-direction: column; gap: 6px; }
+  #hud .details-hint { font-size: 13px; opacity: 0.75; padding: 4px; grid-column: 1 / -1; }
+  #hud .drag-ghost { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; opacity: 0.9; transform: translate(-200px, -200px); }
+  #hud .drop-hover { outline: 3px dashed #bfeaf2; outline-offset: 2px; }
+  #hud .storage-sides { display: flex; flex-direction: column; gap: 8px; }
+  #hud .storage-side { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+  #hud .workbench .item.tier-2 { border-left: 4px solid #4fc46a; }
+  #hud .workbench .item.tier-3 { border-left: 4px solid #4aa3ff; }
+  #hud .workbench .item.tier-4 { border-left: 4px solid #b06cff; }
+  #hud .workbench .item.tier-5 { border-left: 4px solid #ff9a3a; }
+  #hud .workbench .item.tier-1 { border-left: 4px solid #9aa3a6; }
+  @media (min-width: 640px) { #hud .inventory-layout { flex-direction: row; align-items: flex-start; } #hud .doll-column { width: 270px; flex: none; } #hud .storage-sides { flex-direction: row; } }
+  @media (max-width: 639px) { #hud .backpack .workbench-card { max-height: 97vh; } #hud .doll-frame { height: 84px; width: 120px; } #hud .doll-image { width: 112px; height: 112px; margin-top: -16px; } #hud .equip-slot { min-width: 110px; padding: 4px; } #hud .equip-slot .slot-cell { width: 54px; height: 54px; } #hud .equip-slot .slot-image { width: 48px; height: 48px; } #hud .grid-column .item-details { order: -1; } #hud .grid-column .grid-title { order: -2; } }
+  @media (max-height: 500px) { #hud .doll-frame { height: 92px; width: 130px; } #hud .doll-image { width: 120px; height: 120px; margin-top: -14px; } #hud .equip-slot { min-width: 108px; padding: 4px; } #hud .slot-cell { width: 54px; height: 54px; } #hud .slot-grid { grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); } #hud .slot-image { width: 48px; height: 48px; } }
   #hud .enemy-bar { position: absolute; left: 0; top: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
   #hud .enemy-bar.hidden { display: none; }
   #hud .enemy-name { font: bold 13px system-ui, sans-serif; padding: 1px 8px; border-radius: 8px; background: rgba(40, 12, 10, 0.85); white-space: nowrap; }

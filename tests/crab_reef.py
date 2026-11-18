@@ -72,7 +72,7 @@ async () => {
   d.setDestination(glass.x, glass.z, glass);
   out.glassSeconds = +step(240, () => glass.gathered).toFixed(1);
   out.glassInBag = d.save.inventory.seaGlass || 0;
-  out.backpackRows = (() => { d.openBackpack(); const rows = [...document.querySelectorAll('#hud .backpack [data-material]')].map((m) => m.dataset.material); d.backpack.close(); return rows; })();
+  out.backpackRows = (() => { d.openBackpack(); const rows = [...document.querySelectorAll('#hud .backpack .slot-grid [data-material]')].map((m) => m.dataset.material); d.backpack.close(); return rows; })();
   const returned = d.resources.washAshore({ x: d.player.x, z: d.player.z });
   out.washedBack = returned;
   out.washedOnReef = [target, glass].every((n) => !n.gathered && d.world.isOnReef(n.x, n.z));

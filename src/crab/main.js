@@ -26,6 +26,7 @@ import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
 import { createAudio } from './audio.js';
 import { createBurrow, createEmptyBurrow, BURROW_GRID, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, cellCenter } from './burrow.js';
+import { createThumbnails } from './thumbnails.js';
 import { createBuildPanel, createStoragePanel, createHelpersPanel, createRackPanel } from './burrowPanels.js';
 import { createRack, RACK_BATCH, RACK_DRY_SECONDS, RACK_REACH, RACK_BLOCK_RADIUS } from './rack.js';
 import { createHelpers, HELPER_LIMIT, HELPER_COST, HELPER_JOBS } from './helpers.js';
@@ -203,6 +204,9 @@ const POSES = {
   95: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 16 } },
   96: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: -96, z: -76, distance: 30, tideShare: 0.56, heading: 0.2, level: 10, enchanted: { shell: 'tinCan', claws: 'whisker', level: 3 }, restingBosses: ['shipCat'] },
   97: { x: 24, z: -27, distance: 40, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'lobster', claws: 'cleaver', level: 16 } },
+  98: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], enchanted: { shell: 'tinCan', claws: 'fishhook', level: 6 }, extraGear: [{ category: 'shell', kind: 'skull', enchant: 11 }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', enchant: 14 }, { category: 'claws', kind: 'coralTipped', enchant: 2 }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', enchant: 5 }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 1 },
+  99: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], enchanted: { shell: 'tinCan', claws: 'fishhook', level: 6 }, extraGear: [{ category: 'shell', kind: 'skull', enchant: 11 }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', enchant: 14 }, { category: 'claws', kind: 'coralTipped', enchant: 2 }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', enchant: 5 }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 3 },
+  100: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, coral: 4 }, extraGear: [{ category: 'shell', kind: 'coral', enchant: 4, stored: true }, { category: 'claws', kind: 'fork', enchant: 9, stored: true }], storagePanel: true },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
   69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
@@ -404,8 +408,10 @@ const buildPanel = createBuildPanel(hud.root, {
   onChoose: chooseStation,
   onClose: () => buildPanel.close(),
 });
+const thumbnails = createThumbnails(quality);
 const storagePanel = createStoragePanel(hud.root, {
   gear,
+  thumbnails,
   inventory: () => save.inventory,
   storage,
   onChange: () => {
@@ -504,7 +510,9 @@ const backpack = createBackpackPanel(hud.root, {
   inventory: () => save.inventory,
   combatStats: () => playerStats(),
   maxHealth: () => progression.maxHealth(),
+  thumbnails,
   onWear: wearItem,
+  onUnequip: unequipItem,
   onEat: eatKelp,
   onClose: () => {
     backpack.close();
@@ -1102,6 +1110,14 @@ function enchantItem(id) {
 
 function wearItem(id) {
   if (!gear.wear(id)) return false;
+  applyWornLook();
+  backpack.render();
+  persist();
+  return true;
+}
+
+function unequipItem(category) {
+  if (!gear.unequip(category)) return false;
   applyWornLook();
   backpack.render();
   persist();
@@ -2010,6 +2026,15 @@ if (isScreenshotMode) {
     buildStation(kind, cell.column, cell.row);
   }
   if (pose.stored) Object.assign(storage.inventory, pose.stored);
+  for (const extra of pose.extraGear || []) {
+    const item = gear.grant(extra.category, extra.kind);
+    item.enchant = extra.enchant || 0;
+    if (extra.stored) {
+      const list = extra.category === 'shell' ? gear.state.shells : gear.state.claws;
+      list.splice(list.indexOf(item), 1);
+      (extra.category === 'shell' ? storage.shells : storage.claws).push(item);
+    }
+  }
   if (pose.rack) {
     Object.assign(save.inventory, STATION_KINDS.dryingRack.cost);
     buildRackStation();
@@ -2043,6 +2068,8 @@ if (isScreenshotMode) {
   if (pose.scrollPanel) for (const body of hud.root.querySelectorAll('.workbench.visible .workbench-body')) body.scrollTop = body.scrollHeight;
   if (pose.armEnchant) hud.root.querySelector('.workbench .enchant-odds.risky')?.closest('.item').querySelector('[data-enchant]').click();
   if (pose.backpack) openBackpack();
+  const poseSlot = pose.selectSlot && hud.root.querySelector(`.backpack .slot-grid [data-slot-key]:nth-child(${pose.selectSlot})`);
+  if (poseSlot) backpack.select(poseSlot.dataset.slotKey);
   if (pose.walkFrom) {
     const walkStart = navigation.nearestWalkable(pose.walkFrom.x, pose.walkFrom.z, 40);
     Object.assign(player, { x: walkStart.x, z: walkStart.z });
@@ -2116,7 +2143,7 @@ if (isScreenshotMode) {
 
 window.__debug = {
   simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
-  tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
+  tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
   audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,

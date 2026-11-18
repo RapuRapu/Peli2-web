@@ -4,6 +4,7 @@ import { applySeaside } from './seaside.js';
 import { createNoise2D } from '../noise.js';
 import { SHELLS, CLAWS, canAfford, enchantBonus, enchantCost, ENCHANT_LEVELS, MAX_ENCHANT } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
+import { tierClass, tierBadge } from './itemInfo.js';
 
 export const WORKSHOP_REACH = 2.9;
 export const WORKSHOP_BLOCK_RADIUS = 1.7;
@@ -167,9 +168,9 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
       ...Object.entries(CLAWS).filter(([, definition]) => definition.cost).map(([kind, definition]) => ({ category: 'claws', kind, definition })),
     ];
     for (const { category, kind, definition } of entries) {
-      const row = element('div', 'item', body);
+      const row = element('div', `item ${tierClass(definition)}`, body);
       const text = element('div', 'item-text', row);
-      element('div', 'item-name', text, category === 'shell' ? `${definition.label} · ${definition.role}` : definition.label);
+      element('div', 'item-name', text, `${category === 'shell' ? `${definition.label} · ${definition.role}` : definition.label} · ${tierBadge(definition)}`);
       element('div', 'item-stats', text, category === 'shell' ? shellStatsText(definition) : `🗡️ +${definition.attackBonus} attack`);
       if (definition.ability) element('div', 'item-ability', text, `${definition.ability.label} — ${definition.ability.description}`);
       if (definition.healOnHit) element('div', 'item-ability', text, `Mend — every hit heals ${definition.healOnHit} HP`);
@@ -199,7 +200,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onEnchant
     for (const { category, item, definition } of entries) {
       const level = item.enchant || 0;
       const targetLevel = level + 1;
-      const row = element('div', isWorn(item) ? 'item worn' : 'item', body);
+      const row = element('div', `${isWorn(item) ? 'item worn' : 'item'} ${tierClass(definition)}`, body);
       row.dataset.enchantItem = String(item.id);
       const text = element('div', 'item-text', row);
       const name = element('div', 'item-name', text, level ? `${definition.label} +${level}` : definition.label);

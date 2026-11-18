@@ -258,6 +258,15 @@ function buildClaw(material, size) {
   return { shoulder, wrist, thumb, tines };
 }
 
+export function buildClawPreview(tint, hasTines) {
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 });
+  if (tint) material.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
+  const claw = buildClaw(material, 1.25);
+  claw.tines.visible = hasTines;
+  claw.thumb.rotation.x = -0.35;
+  return claw.shoulder;
+}
+
 const GROUND_GLOW_RADIUS = 2.4;
 
 function buildGroundGlow() {

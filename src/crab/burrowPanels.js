@@ -1,7 +1,8 @@
-import { SHELLS, CLAWS, canAfford } from './gear.js';
+import { CLAWS, canAfford } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { STATION_KINDS } from './burrow.js';
 import { element } from './workbench.js';
+import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures } from './inventoryView.js';
 
 function createPanelShell(root, className, title, onClose) {
   const overlay = element('div', `workbench ${className}`, root);
@@ -73,8 +74,9 @@ export function createBuildPanel(root, { inventory, hasStation, onChoose, onClos
   };
 }
 
-export function createStoragePanel(root, { gear, inventory, storage, onChange, onClose }) {
+export function createStoragePanel(root, { gear, inventory, storage, thumbnails, onChange, onClose }) {
   const shell = createPanelShell(root, 'storage-panel', '📦 Storage', onClose);
+  let selected = null;
 
   function moveMaterial(type, toStorage) {
     const from = toStorage ? inventory() : storage.inventory;
@@ -120,73 +122,75 @@ export function createStoragePanel(root, { gear, inventory, storage, onChange, o
     onChange();
   }
 
-  function itemLabel(item, isShell) {
-    const definition = (isShell ? SHELLS : CLAWS)[item.kind];
-    return item.enchant ? `${definition.label} +${item.enchant}` : definition.label;
+  const backpackEntries = () => [...gearEntries(gear.state.shells.filter((item) => item.id !== gear.state.wornShellId), gear.state.claws.filter((item) => item.id !== gear.state.wornClawsId)), ...materialEntries(inventory())];
+  const storageEntries = () => [...gearEntries(storage.shells, storage.claws), ...materialEntries(storage.inventory)];
+
+  function entryFor(key, zone) {
+    return (zone === 'storage' ? storageEntries() : backpackEntries()).find((entry) => entry.key === key) || null;
+  }
+
+  function move(entry, fromZone) {
+    const toStorage = fromZone === 'backpack';
+    selected = { key: entry.key, zone: toStorage ? 'storage' : 'backpack' };
+    if (entry.kind === 'material') moveMaterial(entry.type, toStorage);
+    else if (toStorage) storeItem(entry.item.id);
+    else takeItem(entry.item.id);
+  }
+
+  function renderSide(parent, title, zone, entries) {
+    const side = element('div', 'storage-side', parent);
+    element('div', 'section-title', side, `${title} · ${entries.length}`);
+    const grid = element('div', 'slot-grid', side);
+    grid.dataset.drop = zone;
+    for (const entry of entries) renderSlot(grid, entry, thumbnails, { selected: Boolean(selected) && selected.key === entry.key && selected.zone === zone, zone });
+    if (!entries.length) element('div', 'details-hint', grid, zone === 'storage' ? 'Empty.' : 'Nothing to store. Worn gear stays on you.');
   }
 
   function render() {
     shell.body.replaceChildren();
     element('div', 'summary', shell.body, 'Stored things stay safe here when you are defeated.');
-    const storeAllButton = element('button', 'item-action store-all', shell.body, '⬇ Store everything');
+    const storeAllButton = element('button', 'item-action store-all', shell.body, '⬇ Store all · worn gear stays on you');
     storeAllButton.addEventListener('click', storeAll);
-    element('div', 'section-title', shell.body, 'Materials');
-    for (const [type, definition] of Object.entries(RESOURCE_TYPES)) {
-      const carried = inventory()[type] || 0;
-      const stored = storage.inventory[type] || 0;
-      const row = element('div', 'item storage-row', shell.body);
-      row.dataset.material = type;
-      const text = element('div', 'item-text', row);
-      element('div', 'item-name', text, `${definition.icon} ${definition.label}`);
-      element('div', 'item-stats', text, `🎒 ${carried} · 📦 ${stored}`);
-      const storeButton = element('button', 'item-action small', row, 'Store');
-      storeButton.dataset.store = type;
-      storeButton.disabled = !carried;
-      storeButton.addEventListener('click', () => moveMaterial(type, true));
-      const takeButton = element('button', 'item-action small take', row, 'Take');
-      takeButton.dataset.take = type;
-      takeButton.disabled = !stored;
-      takeButton.addEventListener('click', () => moveMaterial(type, false));
+    const sides = element('div', 'storage-sides', shell.body);
+    renderSide(sides, '🎒 Backpack', 'backpack', backpackEntries());
+    renderSide(sides, '📦 Storage', 'storage', storageEntries());
+    const entry = selected ? entryFor(selected.key, selected.zone) : null;
+    if (!entry) selected = null;
+    const actions = [];
+    if (entry) {
+      const toStorage = selected.zone === 'backpack';
+      const data = entry.kind === 'material' ? { [toStorage ? 'store' : 'take']: entry.type } : { [toStorage ? 'storeItem' : 'takeItem']: String(entry.item.id) };
+      actions.push({ label: toStorage ? '⬇ Store' : '⬆ Take', secondary: !toStorage, data, run: () => move(entry, selected.zone) });
     }
-    element('div', 'section-title', shell.body, 'Gear in your backpack');
-    const carriedGear = [...gear.state.shells.map((item) => [item, true]), ...gear.state.claws.filter((item) => CLAWS[item.kind].cost).map((item) => [item, false])];
-    let anyCarried = false;
-    for (const [item, isShell] of carriedGear) {
-      const worn = item.id === gear.state.wornShellId || item.id === gear.state.wornClawsId;
-      const row = element('div', worn ? 'item worn' : 'item', shell.body);
-      element('div', 'item-name item-text', row, itemLabel(item, isShell));
-      if (worn) {
-        element('div', 'item-badge', row, '✓ Wearing');
-        continue;
-      }
-      anyCarried = true;
-      const button = element('button', 'item-action small', row, 'Store');
-      button.dataset.storeItem = String(item.id);
-      button.addEventListener('click', () => storeItem(item.id));
-    }
-    if (!carriedGear.length) element('div', 'enchant-hint', shell.body, 'Nothing to store.');
-    else if (!anyCarried) element('div', 'enchant-hint', shell.body, 'Worn gear stays on you.');
-    element('div', 'section-title', shell.body, 'Gear in storage');
-    const storedGear = [...storage.shells.map((item) => [item, true]), ...storage.claws.map((item) => [item, false])];
-    if (!storedGear.length) element('div', 'enchant-hint', shell.body, 'Empty.');
-    for (const [item, isShell] of storedGear) {
-      const row = element('div', 'item', shell.body);
-      element('div', 'item-name item-text', row, itemLabel(item, isShell));
-      const button = element('button', 'item-action small take', row, 'Take');
-      button.dataset.takeItem = String(item.id);
-      button.addEventListener('click', () => takeItem(item.id));
-    }
+    renderDetails(shell.body, entry, actions, 'Tap an item to see it. Double-tap or drag it to the other side to move it.');
   }
+
+  attachSlotGestures(shell.overlay, {
+    entryFor,
+    onSelect: (entry, zone) => {
+      selected = { key: entry.key, zone };
+      render();
+    },
+    onActivate: (entry, zone) => move(entry, zone),
+    onDrop: (entry, fromZone, toZone) => {
+      if ((fromZone === 'backpack' && toZone === 'storage') || (fromZone === 'storage' && toZone === 'backpack')) move(entry, fromZone);
+    },
+  });
 
   return {
     get isOpen() {
       return shell.isOpen;
     },
     open() {
+      selected = null;
       render();
       shell.show();
     },
     close: () => shell.hide(),
+    select(key, zone) {
+      selected = { key, zone };
+      render();
+    },
     render,
     storeAll,
   };

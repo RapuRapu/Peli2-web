@@ -86,6 +86,7 @@ AFTER_PLACE = r'''
   out.storedInventory = { ...d.storage.inventory };
   out.storedShellKinds = d.storage.shells.map((item) => item.kind);
   out.carriedAfterStore = { ...d.save.inventory };
+  d.storagePanel.select('material:pearls', 'storage');
   document.querySelector('#hud .storage-panel [data-take="pearls"]').click();
   out.pearlTaken = d.save.inventory.pearls === 1 && !d.storage.inventory.pearls;
   d.storagePanel.close();
