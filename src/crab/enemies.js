@@ -17,7 +17,7 @@ export const ENEMY_KINDS = {
   mantisShrimp: { label: 'Mantis shrimp', health: 55, attack: 13, defense: 1, attackInterval: 1.8, windup: 0.35, speed: 6.5, radius: 0.75, temperament: 'aggressive', sightRange: 9, followUpSeconds: 0.25, experience: 60, pearlChance: 0.1, respawnSeconds: 90, barHeight: 1.7, reef: true },
   rat: { label: 'Rat', health: 100, attack: 22, defense: 6, attackInterval: 1.4, windup: 0.4, speed: 6.2, radius: 1.3, temperament: 'aggressive', sightRange: 10, experience: 140, pearlChance: 0.15, respawnSeconds: 120, barHeight: 3.2, camp: true },
   shipCat: { label: "Ship's cat", health: 1000, attack: 36, defense: 12, attackInterval: 2.4, windup: 1.0, speed: 4.2, radius: 2.9, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 3.8, radius: 3.0, pounceEvery: 3, pounceRange: 16, pounceRadius: 3.4, pounceWindup: 1.5 }, experience: 1500, pearlChance: 1, pearlCount: 3, respawnSeconds: 420, barHeight: 7.5, boss: true, camp: true },
-  cockroach: { label: 'Cockroach', health: 60, attack: 24, defense: 10, attackInterval: 1.0, windup: 0.25, speed: 7.5, radius: 1.1, temperament: 'aggressive', sightRange: 9, experience: 160, pearlChance: 0.1, respawnSeconds: 100, barHeight: 2.4, hold: true },
+  cockroach: { label: 'Cockroach', health: 60, attack: 24, defense: 10, attackInterval: 1.0, windup: 0.25, speed: 7.5, radius: 1.1, bodyReach: 2.2, temperament: 'aggressive', sightRange: 9, experience: 160, pearlChance: 0.1, respawnSeconds: 100, barHeight: 2.4, hold: true },
   cook: { label: 'The Cook', health: 1300, attack: 48, defense: 16, attackInterval: 2.6, windup: 1.3, speed: 0, radius: 3.6, temperament: 'aggressive', sightRange: 0, telegraph: { shape: 'line', lineLength: 16, lineWidth: 3.6, lineRange: 21, stompEvery: 3, stompRadius: 7.5, stompWindup: 1.1 }, experience: 2000, pearlChance: 1, pearlCount: 4, respawnSeconds: 480, barHeight: 13, boss: true, hold: true },
   giantLobster: { label: 'Giant lobster', health: 800, attack: 30, defense: 8, attackInterval: 2.6, windup: 1.2, speed: 3.2, radius: 3.0, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 4.4, radius: 3.0 }, experience: 800, pearlChance: 1, pearlCount: 2, respawnSeconds: 300, barHeight: 7.5, boss: true, reef: true },
 };
@@ -276,7 +276,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   const lobsterBodyMesh = new THREE.InstancedMesh(buildLobsterBodyGeometry(), reefMaterial, Math.max(1, counts.giantLobster));
   const lobsterClawMesh = new THREE.InstancedMesh(buildLobsterClawGeometry(), reefMaterial, Math.max(1, counts.giantLobster * 2));
   const ratMesh = new THREE.InstancedMesh(buildRatGeometry(), reefMaterial, Math.max(1, counts.rat));
-  const catMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), { cutaway: true, chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.2, instanceFlash: true });
+  const catMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), { cutaway: 'soft', chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.2, instanceFlash: true });
   const catMesh = new THREE.InstancedMesh(buildCatGeometry().scale(CAT_SCALE, CAT_SCALE, CAT_SCALE), catMaterial, Math.max(1, counts.shipCat));
   const campMeshes = [ratMesh, catMesh];
   const cockroachMesh = new THREE.InstancedMesh(buildCockroachGeometry(), reefMaterial, Math.max(1, counts.cockroach));
@@ -666,7 +666,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   }
 
   function keepOffPlayer(enemy, player) {
-    const minimumGap = enemy.definition.radius + PLAYER_BODY_RADIUS * 0.8;
+    const minimumGap = Math.max(enemy.definition.radius, enemy.definition.bodyReach || 0) + PLAYER_BODY_RADIUS * 0.8;
     const offsetX = enemy.x - player.x;
     const offsetZ = enemy.z - player.z;
     const distance = Math.hypot(offsetX, offsetZ);
@@ -940,7 +940,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     const scurry = Math.abs(Math.sin(time * 22 + enemy.id)) * 0.08 * enemy.motion;
     const lunge = Math.sin(enemy.strike * Math.PI);
     const recoil = Math.sin(enemy.hurt * Math.PI) * 0.4;
-    const forward = lunge * 0.9 - recoil;
+    const forward = lunge * 0.4 - recoil;
     transform.position.set(enemy.x + Math.sin(enemy.heading) * forward, enemy.y + scurry + 0.25 - deathSink(enemy) * 0.6, enemy.z + Math.cos(enemy.heading) * forward);
     transform.rotation.set(-lunge * 0.2, enemy.heading + Math.sin(time * 13 + enemy.id) * 0.06 * enemy.motion, deathFall(enemy) * Math.PI);
     transform.scale.setScalar(1);

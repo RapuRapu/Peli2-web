@@ -146,7 +146,6 @@ function buildSkullGeometry(look) {
   parts.push(colorize(jaw, (color, x, y, z) => color.copy(bone).multiplyScalar(0.92).lerp(shadow, Math.abs(Math.sin(x * 22)) > 0.9 && y > -radius * 0.4 ? 0.7 : 0)));
   for (const side of [-1, 1]) {
     parts.push(colorize(new THREE.SphereGeometry(radius * 0.3, 14, 10).scale(1, 0.3, 1).translate(side * radius * 0.4, radius * 0.74, length * 0.86), (color) => color.copy(shadow).multiplyScalar(0.45)));
-    parts.push(colorize(new THREE.TorusGeometry(radius * 0.32, radius * 0.07, 6, 16).rotateX(Math.PI / 2 - 0.3).translate(side * radius * 0.4, radius * 0.8, length * 0.86), (color) => color.copy(bone).lerp(shadow, 0.35)));
   }
   parts.push(colorize(new THREE.ConeGeometry(radius * 0.5, length * 0.8, 14).rotateX(Math.PI / 2 + 0.25).scale(1, 0.55, 1).translate(0, radius * 0.1, length * 1.38), (color, x, y, z) => color.copy(BEAK_COLOR).lerp(bone, THREE.MathUtils.smoothstep(z, length * 1.4, length * 1.05))));
   parts.push(colorize(new THREE.CircleGeometry(radius * 0.55, 22).translate(0, 0, 0.3), (color) => color.copy(inside)));
@@ -250,10 +249,13 @@ function buildClaw(material, size) {
   thumb.position.set(0, 0.08 * size, 0.36 * size);
   const thumbMesh = new THREE.Mesh(tinted(new THREE.ConeGeometry(0.085 * size, 0.4 * size, 8).rotateX(Math.PI / 2).translate(0, 0, 0.2 * size), CLAW_TIP, 0), material);
   thumb.add(thumbMesh);
-  wrist.add(palm, thumb);
+  const tineGeometries = [-1, 0, 1].map((offset) => tinted(new THREE.CylinderGeometry(0.022 * size, 0.034 * size, 0.46 * size, 5).rotateX(Math.PI / 2).rotateY(offset * 0.16).translate(offset * 0.1 * size, -0.03 * size, 0.92 * size), CLAW_TIP, 0));
+  const tines = new THREE.Mesh(mergeGeometries(tineGeometries), material);
+  tines.visible = false;
+  wrist.add(palm, thumb, tines);
   shoulder.add(arm, wrist);
   for (const mesh of [arm, palm, thumbMesh]) mesh.castShadow = true;
-  return { shoulder, wrist, thumb };
+  return { shoulder, wrist, thumb, tines };
 }
 
 const GROUND_GLOW_RADIUS = 2.4;
@@ -523,10 +525,14 @@ export function createHermit(scene, quality, shellLook) {
     for (const eye of eyes) eye.rotation.x += retract * 0.9;
   }
 
+  function setClawTines(visible) {
+    for (const claw of [bigClaw, smallClaw]) claw.tines.visible = visible;
+  }
+
   function setClawTint(tint) {
     if (tint) clawMaterial.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
     else clawMaterial.color.setRGB(1, 1, 1);
   }
 
-  return { root, update, wetnessUniforms, setShell, setEnchant, setClawTint, playAttack, playHurt, playDeath, resetPose, clawPosition };
+  return { root, update, wetnessUniforms, setShell, setEnchant, setClawTint, setClawTines, playAttack, playHurt, playDeath, resetPose, clawPosition };
 }

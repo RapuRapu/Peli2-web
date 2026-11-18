@@ -277,11 +277,15 @@ float cutAway = length(vSeaWorld - uCutCamera - cutDirection * cutAlong);
 float cutRadius = 3.4 + 0.1 * max(0.0, cutLength - cutAlong);
 if (cutAlong < cutLength - 1.2 && cutAway < cutRadius && vSeaWorld.y > uCutPlayer.y - 0.6) {
   float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
-  if (checker < 0.5 || cutAway < cutRadius * 0.7) discard;
-}
-if (cutAlong < cutLength * 0.55 && vSeaWorld.y > uCutPlayer.y + 2.0) {
-  float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
+#ifdef SEA_SOFT_CUTAWAY
   if (checker < 0.5) discard;
+#else
+  if (checker < 0.5 || cutAway < cutRadius * 0.7 || cutAlong < cutLength * 0.5) discard;
+#endif
+}
+if (cutAlong < cutLength * 0.62 && vSeaWorld.y > uCutPlayer.y + 2.0) {
+  float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
+  if (checker < 0.5 || cutAlong < cutLength * 0.52) discard;
 }
 `;
 
@@ -293,6 +297,7 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
   if (glow > 0) material.defines.SEA_GLOW = glow.toFixed(3);
   if (glowPulse) material.defines.SEA_GLOW_PULSE = '';
   if (bodyWetness) material.defines.SEA_BODY_WETNESS = '';
+  if (cutaway === 'soft') material.defines.SEA_SOFT_CUTAWAY = '';
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {}, enchant || {});
     shader.vertexShader = injectVertexMotion(shader.vertexShader.replace('#include <project_vertex>', VERTEX_WORLD_GLSL), vertexMotion)
@@ -323,6 +328,6 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.9, 0.82) * vFlash;');
     }
   };
-  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${enchant ? 'enchant' : ''}|${cutaway ? 'cutaway' : ''}`;
+  material.customProgramCacheKey = () => `seaside|${surface}|${vertexMotion ? vertexMotion.key : ''}|${bodyWetness ? 'body-wet' : ''}|${instanceFlash ? 'flash' : ''}|${enchant ? 'enchant' : ''}|${cutaway ? `cutaway-${cutaway}` : ''}`;
   return material;
 }

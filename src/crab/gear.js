@@ -122,7 +122,7 @@ export const CLAWS = {
   kelpWrapped: { label: 'Kelp-wrapped claws', attackBonus: 2, cost: { driedKelp: 4, shellBits: 4 }, breakable: true, healOnHit: 1 },
   coralTipped: { label: 'Coral-tipped claws', tier: 2, attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, breakable: true, tint: [1.7, 1.25, 1.6] },
   fishhook: { label: 'Fishhook claws', tier: 3, attackBonus: 13, cost: { scrap: 5, cloth: 2, coral: 2 }, breakable: true, tint: [0.85, 2.3, 4.2] },
-  fork: { label: 'Fork-tine claws', tier: 4, attackBonus: 19, cost: { scrap: 6, fishBone: 4, cloth: 2 }, breakable: true, tint: [1.1, 3.0, 5.2] },
+  fork: { label: 'Fork-tine claws', tier: 4, attackBonus: 19, cost: { scrap: 6, fishBone: 4, cloth: 2 }, breakable: true, tint: [1.35, 1.4, 1.5], tines: true },
 };
 
 export const BASE_ATTACK = 4;

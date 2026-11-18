@@ -41,6 +41,8 @@ const SAVE_VERSION = 4;
 const AUTOSAVE_INTERVAL_SECONDS = 5;
 const FIXED_STEP = 1 / 60;
 const CAMERA_YAW = 0.3;
+const PORTRAIT_LEAD_SHARE = 0.9;
+const PLAYER_RING_DANGER_DISTANCE = 6;
 const CAMERA_PITCH = 0.74;
 const CAMERA_DISTANCE_LIMITS = [13, 85];
 const LANDSCAPE_FIELD_OF_VIEW = 28;
@@ -174,23 +176,24 @@ const POSES = {
   66: { x: -1.6, z: 66.6, distance: 20, tideShare: 0.75, heading: -1.2, level: 8, enemy: { kind: 'moray', offsetX: -2.6, offsetZ: 1.8 }, fightSeconds: 0.9 },
   67: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 5.2 },
   74: { x: 10, z: 80, distance: 22, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'octopus', offsetX: 2.5, offsetZ: 2.5 }, fightSeconds: 4.5 },
-  75: { x: -78, z: -40, distance: 60, tideShare: 0.56, heading: 3.6 },
-  76: { x: -84, z: -48, distance: 30, tideShare: 0.56, heading: 3.4 },
-  77: { x: -70, z: -60, distance: 24, tideShare: 0.56, heading: 3.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 3 }, enemy: { kind: 'rat', offsetX: -2, offsetZ: -3 }, fightSeconds: 1.2 },
-  78: { x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
-  79: { x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
+  75: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -78, z: -40, distance: 60, tideShare: 0.56, heading: 3.6 },
+  76: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -84, z: -48, distance: 30, tideShare: 0.56, heading: 3.4 },
+  77: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -70, z: -60, distance: 24, tideShare: 0.56, heading: 3.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 3 }, enemy: { kind: 'rat', offsetX: -2, offsetZ: -3 }, fightSeconds: 1.2 },
+  78: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 5.4 },
+  79: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 4 }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
   80: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 0 } },
   81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'bottle', claws: 'fishhook', level: 0 } },
   82: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 9, scrap: 10, cloth: 6, driftwood: 3 }, scrollPanel: true },
   83: { x: -20, z: -30, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
-  84: { x: 80, z: -46, distance: 60, tideShare: 0.56, heading: 3.4 },
-  85: { x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 3 } },
-  86: { x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 3 }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
-  87: { x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'skull', claws: 'fork', level: 4 }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  88: { x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'skull', claws: 'fork', level: 4 }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  89: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'skull', claws: 'fork', level: 0 } },
-  90: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'thimble', claws: 'fork', level: 0 } },
+  84: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -46, distance: 60, tideShare: 0.56, heading: 3.4 },
+  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 3 } },
+  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'tinCan', claws: 'fishhook', level: 3 }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
+  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'skull', claws: 'fork', level: 4 }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, enchanted: { shell: 'skull', claws: 'fork', level: 4 }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'skull', claws: 'fork', level: 0 } },
+  90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'thimble', claws: 'fork', level: 0 } },
   91: { x: 40, z: -40, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'] },
+  92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
   69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
   70: { x: -60, z: 91, distance: 32, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
@@ -327,6 +330,7 @@ function applyWornLook() {
   hermit.setShell(gear.wornLook());
   hermit.setEnchant(gear.wornShell() ? gear.wornShell().enchant || 0 : 0, gear.wornClaws().enchant || 0);
   hermit.setClawTint(CLAWS[gear.wornClaws().kind].tint || null);
+  hermit.setClawTines(Boolean(CLAWS[gear.wornClaws().kind].tines));
 }
 applyWornLook();
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
@@ -527,8 +531,25 @@ playerRing.renderOrder = 5;
 scene.add(playerRing);
 for (const marker of [destinationMarker, playerRing]) marker.layers.enable(BURROW_LAYER);
 
+const GOAL_ARROW_RADIUS = 3.1;
+const GOAL_ARROW_MIN_DISTANCE = 14;
+const goalArrowShape = new THREE.Shape([new THREE.Vector2(0, 0.9), new THREE.Vector2(0.48, 0.1), new THREE.Vector2(0.17, 0.1), new THREE.Vector2(0.17, -0.6), new THREE.Vector2(-0.17, -0.6), new THREE.Vector2(-0.17, 0.1), new THREE.Vector2(-0.48, 0.1)]);
+const goalArrowGeometry = new THREE.ShapeGeometry(goalArrowShape).rotateX(-Math.PI / 2).rotateY(Math.PI);
+const goalArrow = new THREE.Group();
+const goalArrowOutline = new THREE.Mesh(goalArrowGeometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.05, 0.03, 0.01), transparent: true, opacity: 0.85, depthWrite: false, depthTest: false, fog: false, side: THREE.DoubleSide }));
+goalArrowOutline.scale.setScalar(1.3);
+goalArrowOutline.position.z = -0.06;
+goalArrowOutline.renderOrder = 6;
+const goalArrowFill = new THREE.Mesh(goalArrowGeometry, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.35, 0.08), depthWrite: false, depthTest: false, fog: false, side: THREE.DoubleSide, toneMapped: false }));
+goalArrowFill.position.y = 0.01;
+goalArrowFill.renderOrder = 7;
+goalArrow.add(goalArrowOutline, goalArrowFill);
+goalArrow.visible = false;
+scene.add(goalArrow);
+
 const camera = new THREE.PerspectiveCamera(LANDSCAPE_FIELD_OF_VIEW, 1, 1.5, 1600);
 const cameraFocus = new THREE.Vector3();
+const playerFocusPoint = new THREE.Vector3();
 const cameraDistances = { surface: save.cameraDistances?.surface ?? SURFACE_CAMERA_DISTANCE, burrow: save.cameraDistances?.burrow ?? null };
 let cameraDistance = cameraDistances.surface;
 
@@ -836,6 +857,26 @@ function goalTapped() {
   if (!burrow.hasStation('workshop') && goalReached()) {
     buildPanel.open();
   }
+}
+
+function exploreGoalSpot() {
+  if (underground || placement.entrance || remains.list.length || !burrow.exists || !burrow.hasStation('workshop') || !hasCraftedGear()) return null;
+  if (!save.reefFound) return REEF_FALLBACK_SPOT;
+  if (save.reefGearCrafted && !save.campFound) return CAMP_FALLBACK_SPOT;
+  if (save.campGearCrafted && !save.holdFound) return HOLD_FALLBACK_SPOT;
+  return null;
+}
+
+function updateGoalArrow(time, zoomScale) {
+  const spot = exploreGoalSpot();
+  const distance = spot ? Math.hypot(spot.x - player.x, spot.z - player.z) : 0;
+  goalArrow.visible = Boolean(spot) && distance > GOAL_ARROW_MIN_DISTANCE;
+  if (!goalArrow.visible) return;
+  const heading = Math.atan2(spot.x - player.x, spot.z - player.z);
+  const reach = (GOAL_ARROW_RADIUS + 0.35 * Math.sin(time * 3.2)) * zoomScale;
+  goalArrow.position.set(player.x + Math.sin(heading) * reach, player.y + 0.2, player.z + Math.cos(heading) * reach);
+  goalArrow.rotation.y = heading;
+  goalArrow.scale.setScalar(zoomScale);
 }
 
 function walkTowardReef() {
@@ -1309,7 +1350,7 @@ function updatePlayer(deltaTime) {
   if (!combatTarget) player.combatTarget = null;
   let inStrikingRange = false;
   if (combatTarget && !steering) {
-    const reach = PLAYER_ATTACK_REACH + combatTarget.definition.radius + (player.wasInStrikingRange ? STRIKING_RANGE_TOLERANCE : 0);
+    const reach = PLAYER_ATTACK_REACH + Math.max(combatTarget.definition.radius, combatTarget.definition.bodyReach || 0) + (player.wasInStrikingRange ? STRIKING_RANGE_TOLERANCE : 0);
     const distance = Math.hypot(combatTarget.x - player.x, combatTarget.z - player.z);
     if (distance <= reach) {
       inStrikingRange = true;
@@ -1519,10 +1560,16 @@ function simulate(deltaTime) {
   }
 }
 
+function portraitLead() {
+  const extraHalfTangent = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) - Math.tan(THREE.MathUtils.degToRad(LANDSCAPE_FIELD_OF_VIEW / 2));
+  return Math.max(0, extraHalfTangent) * cameraDistance * PORTRAIT_LEAD_SHARE;
+}
+
 function updateCamera(deltaTime, snap) {
   const follow = snap ? 1 : Math.min(1, deltaTime * 5);
-  cameraFocus.x += (player.x - cameraFocus.x) * follow;
-  cameraFocus.z += (player.z - cameraFocus.z) * follow;
+  const lead = underground ? 0 : portraitLead();
+  cameraFocus.x += (player.x - Math.sin(CAMERA_YAW) * lead - cameraFocus.x) * follow;
+  cameraFocus.z += (player.z + Math.cos(CAMERA_YAW) * lead - cameraFocus.z) * follow;
   cameraFocus.y += (player.y + 0.6 - cameraFocus.y) * follow;
   const horizontal = Math.cos(CAMERA_PITCH) * cameraDistance;
   camera.position.set(cameraFocus.x + Math.sin(CAMERA_YAW) * horizontal, cameraFocus.y + Math.sin(CAMERA_PITCH) * cameraDistance, cameraFocus.z - Math.cos(CAMERA_YAW) * horizontal);
@@ -1607,9 +1654,11 @@ function renderScene() {
   const farZoomShare = THREE.MathUtils.smoothstep(cameraDistance, ...FAR_ZOOM_RING_DISTANCES);
   playerRing.position.set(player.x, player.y + 0.15, player.z);
   playerRing.scale.setScalar(1 + farZoomShare * 0.9);
-  playerRing.material.opacity = farZoomShare * 0.75;
-  playerRing.visible = farZoomShare > 0.01;
-  pipeline.render(scene, camera, { focusDistance: camera.position.distanceTo(cameraFocus), time: simulationTime });
+  const dangerShare = enemies.list.some((enemy) => enemy.zone || (enemy.state === 'chase' && enemy.health > 0 && Math.hypot(enemy.x - player.x, enemy.z - player.z) < PLAYER_RING_DANGER_DISTANCE)) ? 0.8 : 0;
+  playerRing.material.opacity = Math.max(farZoomShare * 0.75, dangerShare);
+  playerRing.visible = farZoomShare > 0.01 || dangerShare > 0;
+  updateGoalArrow(simulationTime, 1 + farZoomShare * 0.9);
+  pipeline.render(scene, camera, { focusDistance: camera.position.distanceTo(playerFocusPoint.set(player.x, player.y + 0.6, player.z)), time: simulationTime });
   hud.setTide(tideLabel(), (seaLevelAt(save.worldTime) - TIDE_MIDDLE) / TIDE_AMPLITUDE / 2 + 0.5);
 }
 
