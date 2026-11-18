@@ -24,7 +24,7 @@ ODDS = r'''
   d.randomSource.next = seeded;
   const inventory = {};
   const results = [];
-  for (let target = 1; target <= 9; target++) {
+  for (let target = 1; target <= d.enchantLevels.length - 1; target++) {
     let successes = 0;
     let costOk = true;
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -100,8 +100,8 @@ BEHAVIOUR = r'''
 
   give({ shellBits: 8, driftwood: 4 });
   const cone = d.craftItem('shell', 'cone');
-  cone.enchant = 9;
-  give({ pearls: 1, shellBits: 20 });
+  cone.enchant = d.enchantLevels.length - 1;
+  give({ pearls: 1, shellBits: 40 });
   out.maxRefused = d.enchantItem(cone.id) === null;
 
   const pearlsBefore = d.save.inventory.pearls;

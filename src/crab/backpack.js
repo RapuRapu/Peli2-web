@@ -49,7 +49,7 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
       const name = element('div', 'item-name', text, isShell ? `${definition.label} · ${definition.role}` : definition.label);
       if (item.isNew) element('span', 'new-badge', name, 'NEW');
       element('div', 'item-stats', text, isShell ? shellStatsText(definition) : `🗡️ +${definition.attackBonus} attack`);
-      if (isShell && definition.ability) element('div', 'item-ability', text, `${definition.ability.label} — ${definition.ability.description}`);
+      if (definition.ability) element('div', 'item-ability', text, `${definition.ability.label} — ${definition.ability.description}`);
       if (worn) {
         element('div', 'item-badge', row, '✓ Wearing');
       } else {

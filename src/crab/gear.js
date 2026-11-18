@@ -104,6 +104,19 @@ export const SHELLS = {
     breakable: true,
     look: { form: 'thimble', radius: 0.74, length: 1.7, whorlRadius: 0.74, light: [0.86, 0.87, 0.9], band: [0.5, 0.52, 0.56], inside: [0.3, 0.3, 0.33] },
   },
+  lobster: {
+    label: 'Lobster shell',
+    tier: 2,
+    trophy: 'giantLobster',
+    role: 'Boss trophy · tank',
+    defense: 16,
+    speedFactor: 0.85,
+    attackFactor: 1,
+    ability: { id: 'brace', label: 'Brace+ · Spikes', description: '−40% damage taken while standing still; attackers take 5 damage', damageFactor: 0.6, thorns: 5 },
+    cost: { lobsterPlate: 3, coral: 4, seaGlass: 2 },
+    breakable: true,
+    look: { turns: 2.2, spireShare: 0.88, whorlRadius: 0.64, tubeRadius: 0.84, height: 0.9, bandFrequency: 18, knobs: 46, light: [0.9, 0.3, 0.12], band: [0.45, 0.07, 0.04], inside: [0.98, 0.84, 0.7] },
+  },
 
 };
 
@@ -123,7 +136,19 @@ export const CLAWS = {
   coralTipped: { label: 'Coral-tipped claws', tier: 2, attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, breakable: true, tint: [1.7, 1.25, 1.6] },
   fishhook: { label: 'Fishhook claws', tier: 3, attackBonus: 13, cost: { scrap: 5, cloth: 2, coral: 2 }, breakable: true, tint: [0.85, 2.3, 4.2] },
   fork: { label: 'Fork-tine claws', tier: 4, attackBonus: 19, cost: { scrap: 6, fishBone: 4, cloth: 2 }, breakable: true, tint: [1.35, 1.4, 1.5], tines: true },
+  quill: { label: 'Quill claws', trophy: 'gull', attackBonus: 6, cost: { gullFeather: 3, driftwood: 4, shellBits: 4 }, breakable: true, tint: [1.55, 1.5, 1.35] },
+  whisker: { label: 'Whisker claws', tier: 3, trophy: 'shipCat', attackBonus: 16, cost: { catWhisker: 3, scrap: 4, cloth: 2 }, breakable: true, tint: [1.6, 1.15, 0.7], ability: { id: 'swift', label: 'Swift', description: 'attacks 20% faster', attackIntervalFactor: 0.8 } },
+  cleaver: { label: 'Cleaver claws', tier: 5, trophy: 'cook', attackBonus: 24, cost: { apronScrap: 3, scrap: 6, fishBone: 4 }, breakable: true, tint: [1.25, 1.3, 1.4] },
 };
+
+export const BOSS_TROPHIES = {
+  gull: { material: 'gullFeather', category: 'claws', kind: 'quill' },
+  giantLobster: { material: 'lobsterPlate', category: 'shell', kind: 'lobster' },
+  shipCat: { material: 'catWhisker', category: 'claws', kind: 'whisker' },
+  cook: { material: 'apronScrap', category: 'claws', kind: 'cleaver' },
+};
+export const BOSS_MATERIAL_DROP = 2;
+export const BOSS_ITEM_CHANCE = 0.1;
 
 export const BASE_ATTACK = 4;
 export const ENCHANT_SHARE_PER_LEVEL = 0.12;
@@ -132,17 +157,30 @@ export function enchantBonus(baseValue, enchantLevel) {
   return enchantLevel * Math.max(1, Math.round(baseValue * ENCHANT_SHARE_PER_LEVEL));
 }
 
+const ENCHANT_BLUE = [0.12, 0.42, 1];
+const ENCHANT_VIOLET = [0.6, 0.22, 1];
+const ENCHANT_GOLD = [1, 0.62, 0.08];
+const ENCHANT_FIRE = [1, 0.06, 0.01];
+export const ENCHANT_RISKY_CHANCE = 0.7;
+
 export const ENCHANT_LEVELS = [
   null,
   { chance: 1, glow: 0, color: [1, 1, 1], pulse: false },
   { chance: 1, glow: 0, color: [1, 1, 1], pulse: false },
   { chance: 1, glow: 0.35, color: [1, 0.97, 0.9], pulse: false },
-  { chance: 0.7, glow: 0.55, color: [0.12, 0.42, 1], pulse: false },
-  { chance: 0.55, glow: 0.75, color: [0.12, 0.42, 1], pulse: false },
-  { chance: 0.4, glow: 0.85, color: [0.12, 0.42, 1], pulse: true },
-  { chance: 0.3, glow: 0.9, color: [0.6, 0.22, 1], pulse: false },
-  { chance: 0.2, glow: 1.05, color: [0.6, 0.22, 1], pulse: true },
-  { chance: 0.15, glow: 1.6, color: [1, 0.5, 0.06], pulse: true, groundGlow: true },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 0.5, color: ENCHANT_BLUE, pulse: false },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 0.62, color: ENCHANT_BLUE, pulse: false },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 0.75, color: ENCHANT_BLUE, pulse: true },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 0.85, color: ENCHANT_VIOLET, pulse: false, groundGlow: 0.6 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 0.95, color: ENCHANT_VIOLET, pulse: true, groundGlow: 0.8 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 1.05, color: ENCHANT_VIOLET, pulse: true, groundGlow: 1 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 1.2, color: ENCHANT_GOLD, pulse: false, groundGlow: 1 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 1.35, color: ENCHANT_GOLD, pulse: true, groundGlow: 1.1 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 1.5, color: ENCHANT_GOLD, pulse: true, groundGlow: 1.2 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 1.7, color: ENCHANT_FIRE, pulse: true, groundGlow: 0.9, sparks: 12 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 1.85, color: ENCHANT_FIRE, pulse: true, groundGlow: 1.0, sparks: 18 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 2.0, color: ENCHANT_FIRE, pulse: true, groundGlow: 1.1, sparks: 24 },
+  { chance: ENCHANT_RISKY_CHANCE, glow: 2.05, color: [1, 1, 1], pulse: true, groundGlow: 1.4, sparks: 24, orbs: 6, rainbow: true },
 ];
 export const MAX_ENCHANT = ENCHANT_LEVELS.length - 1;
 export const ENCHANT_PEARL_COST = 1;
@@ -180,6 +218,12 @@ export function createGear(saved) {
     const definition = (category === 'shell' ? SHELLS : CLAWS)[kind];
     if (!definition || !definition.cost || !canAfford(definition.cost, inventory)) return null;
     for (const [type, amount] of Object.entries(definition.cost)) inventory[type] -= amount;
+    const item = { id: state.nextId++, kind, enchant: 0, isNew: true };
+    (category === 'shell' ? state.shells : state.claws).push(item);
+    return item;
+  }
+
+  function grant(category, kind) {
     const item = { id: state.nextId++, kind, enchant: 0, isNew: true };
     (category === 'shell' ? state.shells : state.claws).push(item);
     return item;
@@ -241,6 +285,7 @@ export function createGear(saved) {
       attack: Math.round((BASE_ATTACK + levelAttackBonus + claws.attackBonus + enchantBonus(claws.attackBonus, clawsItem.enchant || 0)) * shell.attackFactor),
       ability: shell.ability,
       healOnHit: claws.healOnHit || 0,
+      attackIntervalFactor: (claws.ability && claws.ability.attackIntervalFactor) || 1,
     };
   }
 
@@ -278,6 +323,7 @@ export function createGear(saved) {
     hasNewItems,
     markAllSeen,
     craft,
+    grant,
     wear,
     findItem,
     enchantableItems,

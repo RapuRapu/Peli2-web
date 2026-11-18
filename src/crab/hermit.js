@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySeaside, createEnchantUniforms, updateEnchantUniforms } from './seaside.js';
+import { applySeaside, createEnchantUniforms, updateEnchantUniforms, enchantColorAt } from './seaside.js';
 import { enchantLook } from './gear.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
@@ -261,7 +261,7 @@ function buildClaw(material, size) {
 const GROUND_GLOW_RADIUS = 2.4;
 
 function buildGroundGlow() {
-  const uniforms = { uColor: { value: new THREE.Color() } };
+  const uniforms = { uColor: { value: new THREE.Color() }, uRainbow: { value: 0 }, uPhase: { value: 0 } };
   const material = new THREE.ShaderMaterial({
     uniforms,
     transparent: true,
@@ -275,18 +275,87 @@ function buildGroundGlow() {
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uColor;
+      uniform float uRainbow;
+      uniform float uPhase;
       varying vec2 vDisc;
       void main() {
         float distanceShare = length(vDisc);
         float falloff = 1.0 - smoothstep(0.0, 1.0, distanceShare);
-        float ring = smoothstep(0.62, 0.74, distanceShare) * (1.0 - smoothstep(0.78, 0.9, distanceShare));
-        gl_FragColor = vec4(uColor * (falloff * falloff * 1.6 + ring * 1.5), 1.0);
+        float ring = smoothstep(0.62, 0.72, distanceShare) * (1.0 - smoothstep(0.76, 0.84, distanceShare));
+        vec3 color = uColor;
+        if (uRainbow > 0.5) {
+          float hue = fract(atan(vDisc.y, vDisc.x) / 6.2831853 + uPhase);
+          color = clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0) * length(uColor);
+        }
+        gl_FragColor = vec4(color * (falloff * falloff * 1.2 + ring * 2.2), 1.0);
       }`,
   });
   const mesh = new THREE.Mesh(new THREE.CircleGeometry(GROUND_GLOW_RADIUS, 40).rotateX(-Math.PI / 2).translate(0, 0.06, 0), material);
   mesh.renderOrder = 3;
   mesh.visible = false;
   return { mesh, uniforms };
+}
+
+const ENCHANT_PARTICLE_LIMIT = 48;
+const SPARK_RISE_SECONDS = 1.4;
+const SPARK_HEIGHT = 3.4;
+const ORB_RADIUS = 2.3;
+const ORB_HEIGHT = 1.7;
+const ORB_TRAIL = [{ lag: 0, scale: 0.075, intensity: 5 }, { lag: 0, scale: 0.2, intensity: 0.45 }, { lag: 0.16, scale: 0.055, intensity: 2.2 }, { lag: 0.32, scale: 0.04, intensity: 1.1 }];
+const EMBER_YOUNG = new THREE.Color(1, 0.75, 0.2);
+const EMBER_OLD = new THREE.Color(1, 0.08, 0.01);
+
+function buildEnchantParticles() {
+  const material = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), material, ENCHANT_PARTICLE_LIMIT);
+  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(ENCHANT_PARTICLE_LIMIT * 3), 3);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 4;
+  mesh.count = 0;
+  mesh.visible = false;
+  const transform = new THREE.Object3D();
+  const color = new THREE.Color();
+
+  function update(look, time) {
+    const sparkCount = Math.min(look.sparks || 0, ENCHANT_PARTICLE_LIMIT);
+    const orbCount = Math.min(look.orbs || 0, Math.floor((ENCHANT_PARTICLE_LIMIT - sparkCount) / ORB_TRAIL.length));
+    mesh.visible = sparkCount + orbCount > 0;
+    if (!mesh.visible) return;
+    let index = 0;
+    for (let spark = 0; spark < sparkCount; spark++) {
+      const seed = spark * 12.9898;
+      const age = ((time / SPARK_RISE_SECONDS) + (Math.sin(seed) * 0.5 + 0.5)) % 1;
+      const angle = seed * 2.4 + Math.floor(time / SPARK_RISE_SECONDS + Math.sin(seed)) * 1.7;
+      const radius = 0.9 + 0.7 * (Math.sin(seed * 3.1) * 0.5 + 0.5);
+      const flicker = 0.75 + 0.25 * Math.sin(time * 23 + seed);
+      transform.position.set(Math.cos(angle) * radius + Math.sin(time * 3 + seed) * 0.12 * age, 0.2 + age * SPARK_HEIGHT, Math.sin(angle) * radius);
+      transform.rotation.set(0, 0, 0);
+      transform.scale.set(0.045, 0.16 * (1 - age * 0.5), 0.045);
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+      if (look.rainbow) enchantColorAt(look, time, color, spark / sparkCount);
+      else color.copy(EMBER_YOUNG).lerp(EMBER_OLD, age);
+      mesh.setColorAt(index, color.multiplyScalar(2.4 * flicker * (1 - age * 0.7)));
+      index++;
+    }
+    for (let orb = 0; orb < orbCount; orb++) {
+      for (const trail of ORB_TRAIL) {
+        const angle = (time - trail.lag) * 1.4 + (orb / orbCount) * Math.PI * 2;
+        transform.position.set(Math.cos(angle) * ORB_RADIUS, ORB_HEIGHT + 0.3 * Math.sin((time - trail.lag) * 2.2 + orb), Math.sin(angle) * ORB_RADIUS);
+        transform.scale.setScalar(trail.scale);
+        transform.updateMatrix();
+        mesh.setMatrixAt(index, transform.matrix);
+        enchantColorAt(look, time, color, orb / orbCount).multiplyScalar(trail.intensity);
+        mesh.setColorAt(index, color);
+        index++;
+      }
+    }
+    mesh.count = index;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.needsUpdate = true;
+  }
+
+  return { mesh, update };
 }
 
 export function createHermit(scene, quality, shellLook) {
@@ -299,6 +368,7 @@ export function createHermit(scene, quality, shellLook) {
   const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, enchant: shellEnchantUniforms });
   const enchant = { shell: 0, claws: 0 };
   const groundGlow = buildGroundGlow();
+  const enchantParticles = buildEnchantParticles();
   const eyeMaterial = new THREE.MeshStandardMaterial({ color: EYE, roughness: 0.08 });
 
   const root = new THREE.Group();
@@ -376,7 +446,7 @@ export function createHermit(scene, quality, shellLook) {
     }
   }
 
-  root.add(groundGlow.mesh);
+  root.add(groundGlow.mesh, enchantParticles.mesh);
   scene.add(root);
 
   function setEnchant(shellLevel, clawLevel) {
@@ -510,12 +580,16 @@ export function createHermit(scene, quality, shellLook) {
     const shellEnchantLook = enchantLook(enchant.shell);
     updateEnchantUniforms(shellEnchantUniforms, shellEnchantLook, pose.idleTime);
     updateEnchantUniforms(clawEnchantUniforms, enchantLook(enchant.claws), pose.idleTime);
-    const groundLook = [shellEnchantLook, enchantLook(enchant.claws)].find((look) => look.groundGlow);
-    groundGlow.mesh.visible = Boolean(groundLook);
-    if (groundLook) {
-      groundGlow.uniforms.uColor.value.setRGB(groundLook.color[0], groundLook.color[1], groundLook.color[2]).multiplyScalar(0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2);
+    const strongestLook = enchantLook(Math.max(enchant.shell, enchant.claws));
+    groundGlow.mesh.visible = Boolean(strongestLook.groundGlow);
+    if (strongestLook.groundGlow) {
+      enchantColorAt(strongestLook, pose.idleTime, groundGlow.uniforms.uColor.value).multiplyScalar(strongestLook.groundGlow * (0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2));
+      groundGlow.uniforms.uRainbow.value = strongestLook.rainbow ? 1 : 0;
+      groundGlow.uniforms.uPhase.value = (pose.idleTime * 0.18) % 1;
       groundGlow.mesh.rotation.set(pose.tiltX, 0, pose.tiltZ);
+      groundGlow.mesh.scale.setScalar(0.75 + 0.25 * strongestLook.groundGlow);
     }
+    enchantParticles.update(strongestLook, pose.idleTime);
     shellMaterial.emissive.copy(flashColor).multiplyScalar(0.3);
 
     eyes[0].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8) * 0.06;

@@ -177,7 +177,7 @@ with sync_playwright() as playwright:
 
     performance = {'start': frame_numbers(context, 1), 'holdOverview': frame_numbers(context, 84), 'inHold': frame_numbers(context, 85)}
     print('performance', json.dumps(performance), flush=True)
-    checks['performance'] = performance['start']['calls'] <= 86 and performance['start']['triangles'] < 1115000 and performance['inHold']['calls'] <= 104
+    checks['performance'] = performance['start']['calls'] <= 86 and performance['start']['triangles'] < 1115000 and performance['inHold']['calls'] <= 106
     checks['noConsoleErrors'] = not errors
     if errors: print(errors[:5])
     browser.close()

@@ -11,15 +11,15 @@ export const WORLD_LABEL_TOP_PIXELS = 128;
 export const ENEMY_KINDS = {
   sandHopper: { label: 'Sand hopper', health: 12, attack: 2, defense: 0, attackInterval: 1.2, windup: 0.45, speed: 5.5, radius: 0.45, temperament: 'passive', sightRange: 0, experience: 10, pearlChance: 0, respawnSeconds: 60, barHeight: 1.4 },
   shoreCrab: { label: 'Shore crab', health: 30, attack: 5, defense: 2, attackInterval: 1.5, windup: 0.6, speed: 5.2, radius: 0.95, temperament: 'aggressive', sightRange: 9, experience: 25, pearlChance: 0.1, respawnSeconds: 90, barHeight: 2.0 },
-  gull: { label: 'Gull', health: 300, attack: 27, defense: 0, attackInterval: 2.2, windup: 1.0, speed: 5.5, radius: 2.4, temperament: 'aggressive', sightRange: 0, experience: 300, pearlChance: 0, respawnSeconds: 180, barHeight: 11.5, flies: true },
+  gull: { label: 'Gull', health: 300, attack: 27, defense: 0, attackInterval: 2.2, windup: 1.0, speed: 5.5, radius: 2.4, temperament: 'aggressive', sightRange: 0, experience: 300, pearlChance: 0, respawnSeconds: 180, barHeight: 11.5, flies: true, dailyBoss: true },
   moray: { label: 'Moray eel', health: 90, attack: 19, defense: 3, attackInterval: 1.6, windup: 0.3, speed: 0, radius: 0.9, temperament: 'lurker', sightRange: 0, strikeReach: 2.4, retreatSeconds: 0.8, experience: 70, pearlChance: 0.25, respawnSeconds: 120, barHeight: 3.8, reef: true },
   octopus: { label: 'Octopus', health: 180, attack: 14, defense: 4, attackInterval: 2.0, windup: 0.7, speed: 3.0, radius: 1.5, temperament: 'aggressive', sightRange: 8, inkEvery: 3, inkSlowSeconds: 3, inkSlowFactor: 0.5, experience: 110, pearlChance: 0.2, respawnSeconds: 150, barHeight: 3.0, reef: true },
   mantisShrimp: { label: 'Mantis shrimp', health: 55, attack: 13, defense: 1, attackInterval: 1.8, windup: 0.35, speed: 6.5, radius: 0.75, temperament: 'aggressive', sightRange: 9, followUpSeconds: 0.25, experience: 60, pearlChance: 0.1, respawnSeconds: 90, barHeight: 1.7, reef: true },
-  rat: { label: 'Rat', health: 100, attack: 22, defense: 6, attackInterval: 1.4, windup: 0.4, speed: 6.2, radius: 1.3, temperament: 'aggressive', sightRange: 10, experience: 140, pearlChance: 0.15, respawnSeconds: 120, barHeight: 3.2, camp: true },
-  shipCat: { label: "Ship's cat", health: 1000, attack: 36, defense: 12, attackInterval: 2.4, windup: 1.0, speed: 4.2, radius: 2.9, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 3.8, radius: 3.0, pounceEvery: 3, pounceRange: 16, pounceRadius: 3.4, pounceWindup: 1.5 }, experience: 1500, pearlChance: 1, pearlCount: 3, respawnSeconds: 420, barHeight: 7.5, boss: true, camp: true },
+  rat: { label: 'Rat', health: 100, attack: 22, defense: 6, attackInterval: 1.4, windup: 0.4, speed: 6.2, radius: 1.3, bodyReach: 2.4, temperament: 'aggressive', sightRange: 10, experience: 140, pearlChance: 0.15, respawnSeconds: 120, barHeight: 3.2, camp: true },
+  shipCat: { label: "Ship's cat", health: 1000, attack: 36, defense: 12, attackInterval: 2.4, windup: 1.0, speed: 4.2, radius: 2.9, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 3.8, radius: 3.0, pounceEvery: 3, pounceRange: 16, pounceRadius: 3.4, pounceWindup: 1.5 }, experience: 1500, pearlChance: 1, pearlCount: 3, respawnSeconds: 420, barHeight: 7.5, boss: true, camp: true, dailyBoss: true },
   cockroach: { label: 'Cockroach', health: 60, attack: 24, defense: 10, attackInterval: 1.0, windup: 0.25, speed: 7.5, radius: 1.1, bodyReach: 2.2, temperament: 'aggressive', sightRange: 9, experience: 160, pearlChance: 0.1, respawnSeconds: 100, barHeight: 2.4, hold: true },
-  cook: { label: 'The Cook', health: 1300, attack: 48, defense: 16, attackInterval: 2.6, windup: 1.3, speed: 0, radius: 3.6, temperament: 'aggressive', sightRange: 0, telegraph: { shape: 'line', lineLength: 16, lineWidth: 3.6, lineRange: 21, stompEvery: 3, stompRadius: 7.5, stompWindup: 1.1 }, experience: 2000, pearlChance: 1, pearlCount: 4, respawnSeconds: 480, barHeight: 13, boss: true, hold: true },
-  giantLobster: { label: 'Giant lobster', health: 800, attack: 30, defense: 8, attackInterval: 2.6, windup: 1.2, speed: 3.2, radius: 3.0, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 4.4, radius: 3.0 }, experience: 800, pearlChance: 1, pearlCount: 2, respawnSeconds: 300, barHeight: 7.5, boss: true, reef: true },
+  cook: { label: 'The Cook', health: 1300, attack: 48, defense: 16, attackInterval: 2.6, windup: 1.3, speed: 0, radius: 3.6, temperament: 'aggressive', sightRange: 0, telegraph: { shape: 'line', lineLength: 16, lineWidth: 3.6, lineRange: 21, stompEvery: 3, stompRadius: 7.5, stompWindup: 1.1 }, experience: 2000, pearlChance: 1, pearlCount: 4, respawnSeconds: 480, barHeight: 13, boss: true, hold: true, dailyBoss: true },
+  giantLobster: { label: 'Giant lobster', health: 800, attack: 30, defense: 8, attackInterval: 2.6, windup: 1.2, speed: 3.2, radius: 3.0, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 4.4, radius: 3.0 }, experience: 800, pearlChance: 1, pearlCount: 2, respawnSeconds: 300, barHeight: 7.5, boss: true, reef: true, dailyBoss: true },
 };
 
 const MINIMUM_RESPAWN_DISTANCE = 25;
@@ -43,6 +43,7 @@ const TELEGRAPH_LIFT = 0.3;
 const CHOP_LINGER_SECONDS = 0.6;
 const CLEAVER_HOVER_HEIGHT = 18;
 const CLEAVER_SHOW_PROGRESS = 0.8;
+const RESTING_LABEL_DISTANCE = 90;
 const CAT_SCALE = 0.62;
 const LABEL_EDGE_PIXELS = 72;
 const LABEL_SPACING_X = 120;
@@ -261,7 +262,7 @@ function createGullModel(scene, quality) {
   return { root, torso, wings, shadow, materials: [material, wingMaterial] };
 }
 
-export function createEnemies({ scene, world, navigation, quality, spawnTable, labelParent, onAttackPlayer, onKilled, onAlert = () => {}, onSound = () => {}, onInk = () => {}, onDodge = () => {}, onWarn = () => {} }) {
+export function createEnemies({ scene, world, navigation, quality, spawnTable, labelParent, onAttackPlayer, onKilled, onAlert = () => {}, onSound = () => {}, onInk = () => {}, onDodge = () => {}, onWarn = () => {}, bossAwake = () => true, bossReturnText = () => null }) {
   const hopperMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.6, wetRoughness: 0.1, instanceFlash: true });
   const crabMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.38 }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.6, wetRoughness: 0.1, instanceFlash: true });
   const counts = Object.fromEntries(Object.keys(ENEMY_KINDS).map((kind) => [kind, spawnTable.filter((entry) => entry.kind === kind).reduce((sum, entry) => sum + entry.count, 0)]));
@@ -350,7 +351,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     track.appendChild(fill);
     box.append(name, track);
     labelParent.appendChild(box);
-    return { box, fill };
+    return { box, fill, name };
   }
 
   function place(enemy, spot) {
@@ -383,6 +384,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
         packLeft--;
       }
       place(enemy, spot);
+      if (enemy.definition.dailyBoss && !bossAwake(enemy.kind)) enemy.state = 'dead';
       list.push(enemy);
     }
   }
@@ -748,6 +750,10 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     lastTime = time;
     for (const enemy of list) {
       if (enemy.state === 'dead') {
+        if (enemy.definition.dailyBoss) {
+          if (!bossAwake(enemy.kind)) continue;
+          enemy.respawnTimer = Math.min(enemy.respawnTimer, 0);
+        }
         enemy.respawnTimer -= deltaTime;
         if (enemy.respawnTimer <= 0) {
           const spot = (enemy.pack && spawnSpot(enemy.entry, player, enemy.pack)) || spawnSpot(enemy.entry, player);
@@ -983,7 +989,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     const scurry = Math.abs(Math.sin(time * 16 + enemy.id)) * 0.18 * enemy.motion;
     const lunge = Math.sin(enemy.strike * Math.PI);
     const recoil = Math.sin(enemy.hurt * Math.PI) * 0.5;
-    const forward = lunge * 1.1 - recoil;
+    const forward = lunge * 0.5 - recoil;
     transform.position.set(enemy.x + Math.sin(enemy.heading) * forward, enemy.y + scurry + lunge * 0.35 - deathSink(enemy) * 0.8, enemy.z + Math.cos(enemy.heading) * forward);
     transform.rotation.set(-lunge * 0.25 + recoil * 0.3, enemy.heading + Math.sin(time * 9 + enemy.id) * 0.05 * enemy.motion, deathFall(enemy) * Math.PI);
     transform.scale.setScalar(1);
@@ -1045,13 +1051,23 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       else if (enemy.kind === 'shipCat') renderCat(enemy, time);
       else if (enemy.kind === 'cockroach') renderCockroach(enemy, time);
       else if (enemy.kind === 'cook') renderCook(enemy, time);
-      const barVisible = alive(enemy) && (enemy.health < enemy.definition.health || engaged(enemy) || enemy.id === playerTargetId) && !(enemy.definition.flies && enemy.altitude > 6);
-      if (barVisible) labelPoint.set(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z).project(camera);
+      const restText = enemy.state === 'dead' && enemy.definition.dailyBoss && enemy.home && Math.hypot(enemy.home.x - camera.position.x, enemy.home.z - camera.position.z) < RESTING_LABEL_DISTANCE ? bossReturnText(enemy.kind) : null;
+      const barVisible = (alive(enemy) && (enemy.health < enemy.definition.health || engaged(enemy) || enemy.id === playerTargetId) && !(enemy.definition.flies && enemy.altitude > 6)) || Boolean(restText);
+      if (restText) labelPoint.set(enemy.home.x, world.heightAt(enemy.home.x, enemy.home.z) + Math.min(enemy.definition.barHeight, 6), enemy.home.z).project(camera);
+      else if (barVisible) labelPoint.set(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z).project(camera);
       const onScreen = barVisible && labelPoint.z < 1;
       enemy.bar.box.classList.toggle('hidden', !onScreen);
+      enemy.bar.box.classList.toggle('resting', Boolean(restText));
       if (onScreen) {
+        const nameText = restText || (enemy.definition.boss ? `👑 ${enemy.definition.label}` : enemy.definition.label);
+        if (enemy.bar.name.textContent !== nameText) {
+          enemy.bar.name.textContent = nameText;
+          enemy.bar.halfWidth = 0;
+        }
+        if (!enemy.bar.halfWidth) enemy.bar.halfWidth = enemy.bar.box.offsetWidth / 2;
         enemy.bar.fill.style.width = `${(enemy.health / enemy.definition.health) * 100}%`;
-        const labelX = THREE.MathUtils.clamp((labelPoint.x * 0.5 + 0.5) * innerWidth, LABEL_EDGE_PIXELS, innerWidth - LABEL_EDGE_PIXELS);
+        const edge = Math.max(LABEL_EDGE_PIXELS, enemy.bar.halfWidth + 8);
+        const labelX = THREE.MathUtils.clamp((labelPoint.x * 0.5 + 0.5) * innerWidth, edge, innerWidth - edge);
         let labelY = Math.max(WORLD_LABEL_TOP_PIXELS, (-labelPoint.y * 0.5 + 0.5) * innerHeight);
         while (placedLabels.some((placed) => Math.abs(placed.x - labelX) < LABEL_SPACING_X && Math.abs(placed.y - labelY) < LABEL_SPACING_Y)) labelY -= LABEL_SPACING_Y;
         placedLabels.push({ x: labelX, y: labelY });

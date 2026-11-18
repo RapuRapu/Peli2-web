@@ -17,11 +17,11 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
-import { createGear, SHELLS, CLAWS, ENCHANT_LEVELS, canAfford } from './gear.js';
+import { createGear, SHELLS, CLAWS, ENCHANT_LEVELS, canAfford, BOSS_TROPHIES, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createProgression, GATHER_EXPERIENCE } from './progression.js';
-import { createEnemies } from './enemies.js';
+import { createEnemies, ENEMY_KINDS } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
 import { createAudio } from './audio.js';
@@ -78,6 +78,11 @@ const BODY_WET_MAXIMUM_HEIGHT_PER_SIZE = 2.0;
 const BODY_DRYING_SECONDS = 30;
 const PLAYER_ATTACK_REACH = 1.25;
 const PLAYER_ATTACK_INTERVAL = 0.9;
+const BOSS_REST_MS = 24 * 3600000;
+const COMMON_DROP_CHANCE = 0.08;
+const REGION_MATERIALS = { beach: ['shellBits', 'driftwood', 'seaLettuce'], reef: ['coral', 'seaGlass'], camp: ['scrap', 'cloth'], hold: ['fishBone', 'wax'] };
+let wallClockOffsetMs = 0;
+const wallClock = () => Date.now() + wallClockOffsetMs;
 const PLAYER_FIRST_STRIKE_SECONDS = 0.3;
 const COMBAT_REPATH_SECONDS = 0.4;
 const DAMAGE_SPREAD = 0.15;
@@ -193,6 +198,11 @@ const POSES = {
   89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'skull', claws: 'fork', level: 0 } },
   90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'thimble', claws: 'fork', level: 0 } },
   91: { x: 40, z: -40, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'] },
+  93: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 11 } },
+  94: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 14 } },
+  95: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'tinCan', claws: 'fork', level: 16 } },
+  96: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: -96, z: -76, distance: 30, tideShare: 0.56, heading: 0.2, level: 10, enchanted: { shell: 'tinCan', claws: 'whisker', level: 3 }, restingBosses: ['shipCat'] },
+  97: { x: 24, z: -27, distance: 40, tideShare: 0.56, heading: 1.75, enchanted: { shell: 'lobster', claws: 'cleaver', level: 16 } },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
   69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, enchanted: { shell: 'coral', claws: 'coralTipped', level: 4 }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
@@ -209,7 +219,7 @@ const POSES = {
 };
 
 function createEmptySave() {
-  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [], rack: null, wellFedSeconds: 0, reefFound: false, reefGearCrafted: false, campFound: false, campGearCrafted: false, holdFound: false };
+  return { version: SAVE_VERSION, x: HOME_SPOT.x, z: HOME_SPOT.z, heading: STARTING_HEADING, worldTime: STARTING_TIDE_TIME, inventory: {}, nodes: null, goalAnnounced: false, hasMoved: false, wetness: 0, wetHeight: 0, gear: null, workshopBuilt: false, craftedOnce: false, progression: null, remains: [], burrow: null, storage: { inventory: {}, shells: [], claws: [] }, underground: false, helpers: [], rack: null, wellFedSeconds: 0, reefFound: false, reefGearCrafted: false, campFound: false, campGearCrafted: false, holdFound: false, bossDefeatedAt: {} };
 }
 
 function migrateSave(stored) {
@@ -361,6 +371,11 @@ const enemies = createEnemies({
   quality,
   spawnTable: [...HOME_BEACH_ENEMIES, ...REEF_ENEMIES, ...CAMP_ENEMIES, ...HOLD_ENEMIES].map((entry) => ({ ...entry, avoid: HOME_SPOT })),
   labelParent: hud.root,
+  bossAwake: (kind) => bossRestRemainingMs(kind) <= 0,
+  bossReturnText: (kind) => {
+    const hours = Math.ceil(bossRestRemainingMs(kind) / 3600000);
+    return `💤 ${ENEMY_KINDS[kind].label} returns in ${hours} h`;
+  },
   onAttackPlayer: hitPlayer,
   onKilled: enemyKilled,
   onAlert: (enemy) => {
@@ -1232,6 +1247,49 @@ function hitPlayer(enemy) {
   if (progression.state.health <= 0) die();
 }
 
+
+function bossRestRemainingMs(kind) {
+  const defeatedAt = save.bossDefeatedAt && save.bossDefeatedAt[kind];
+  return defeatedAt ? defeatedAt + BOSS_REST_MS - wallClock() : 0;
+}
+
+function regionAt(x, z) {
+  if (isInHold(x, z)) return 'hold';
+  if (isInCamp(x, z)) return 'camp';
+  if (world.isOnReef(x, z)) return 'reef';
+  return 'beach';
+}
+
+function giveMaterial(type, amount, enemy) {
+  save.inventory[type] = (save.inventory[type] || 0) + amount;
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.55, enemy.z, `+${amount} ${RESOURCE_TYPES[type].icon}`, 'experience');
+  refreshHud(type);
+}
+
+function dropLoot(enemy) {
+  const trophy = BOSS_TROPHIES[enemy.kind];
+  if (trophy) {
+    save.bossDefeatedAt = { ...(save.bossDefeatedAt || {}), [enemy.kind]: wallClock() };
+    giveMaterial(trophy.material, BOSS_MATERIAL_DROP, enemy);
+    const pearls = enemy.definition.pearlCount || 0;
+    const message = [`${RESOURCE_TYPES[trophy.material].icon} ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[trophy.material].label.toLowerCase()}s`];
+    if (pearls) message.push(`· 🦪 ${pearls}`);
+    if (random() < BOSS_ITEM_CHANCE) {
+      gear.grant(trophy.category, trophy.kind);
+      hud.setBagDot(true);
+      const itemLabel = (trophy.category === 'shell' ? SHELLS : CLAWS)[trophy.kind].label;
+      message.push(`and ${itemLabel}!`);
+      soundAt('craft');
+    }
+    hud.toast(`👑 ${enemy.definition.label} dropped ${message.join(' ')} · back in 24 h`);
+    return;
+  }
+  if (random() < COMMON_DROP_CHANCE) {
+    const options = REGION_MATERIALS[regionAt(enemy.x, enemy.z)];
+    giveMaterial(options[Math.floor(random() * options.length)], 1, enemy);
+  }
+}
+
 function enemyKilled(enemy) {
   if (player.combatTarget === enemy) player.combatTarget = null;
   const levelsGained = progression.gainExperience(enemy.definition.experience);
@@ -1239,9 +1297,10 @@ function enemyKilled(enemy) {
   if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
     const pearls = enemy.definition.pearlCount || 1;
     save.inventory.pearls = (save.inventory.pearls || 0) + pearls;
-    hud.toast(pearls > 1 ? `🦪 The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `🦪 The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
+    if (!BOSS_TROPHIES[enemy.kind]) hud.toast(pearls > 1 ? `🦪 The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `🦪 The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
     refreshHud('pearls');
   }
+  dropLoot(enemy);
   if (levelsGained) announceLevel();
   persist();
 }
@@ -1465,7 +1524,7 @@ function updatePlayer(deltaTime) {
     turnToward(Math.atan2(combatTarget.x - player.x, combatTarget.z - player.z), deltaTime);
     player.attackTimer -= deltaTime;
     if (player.attackTimer <= 0) {
-      player.attackTimer = PLAYER_ATTACK_INTERVAL;
+      player.attackTimer = PLAYER_ATTACK_INTERVAL * playerStats().attackIntervalFactor;
       strike(combatTarget);
     }
   } else if (combatTarget) {
@@ -1918,6 +1977,10 @@ if (isScreenshotMode) {
   if (pose.inventory) Object.assign(save.inventory, pose.inventory);
   if (pose.reefFound) save.reefFound = true;
   if (pose.campFound) save.campFound = true;
+  for (const kind of pose.restingBosses || []) {
+    save.bossDefeatedAt = { ...(save.bossDefeatedAt || {}), [kind]: wallClock() - 5 * 3600000 };
+    for (const enemy of enemies.list) if (enemy.kind === kind) enemy.state = 'dead';
+  }
   for (const kind of pose.crafted || []) {
     Object.assign(save.inventory, SHELLS[kind].cost);
     craftItem('shell', kind);
@@ -2057,4 +2120,6 @@ window.__debug = {
   audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, enchantItem, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, enchantLevels: ENCHANT_LEVELS, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   isPaused: () => paused,
+  advanceWallClock: (milliseconds) => { wallClockOffsetMs += milliseconds; },
+  bossRestRemainingMs, dropLoot, regionAt,
 };

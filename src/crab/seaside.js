@@ -247,13 +247,22 @@ const ENCHANT_PULSE_SPEED = 3.2;
 const ENCHANT_PULSE_DEPTH = 0.45;
 
 export function createEnchantUniforms() {
-  return { uEnchantColor: { value: new THREE.Color(1, 1, 1) }, uEnchantGlow: { value: 0 } };
+  return { uEnchantColor: { value: new THREE.Color(1, 1, 1) }, uEnchantGlow: { value: 0 }, uEnchantRainbow: { value: 0 }, uEnchantPhase: { value: 0 } };
+}
+
+const RAINBOW_CYCLE_SPEED = 0.18;
+
+export function enchantColorAt(look, time, target, offset = 0) {
+  if (look.rainbow) return target.setHSL((time * RAINBOW_CYCLE_SPEED + offset) % 1, 1, 0.5);
+  return target.setRGB(look.color[0], look.color[1], look.color[2]);
 }
 
 export function updateEnchantUniforms(uniforms, look, time) {
   const pulse = look.pulse ? 1 - ENCHANT_PULSE_DEPTH * (0.5 + 0.5 * Math.sin(time * ENCHANT_PULSE_SPEED)) : 1;
-  uniforms.uEnchantColor.value.setRGB(look.color[0], look.color[1], look.color[2]);
+  enchantColorAt(look, time, uniforms.uEnchantColor.value);
   uniforms.uEnchantGlow.value = look.glow * pulse;
+  uniforms.uEnchantRainbow.value = look.rainbow ? 1 : 0;
+  uniforms.uEnchantPhase.value = (time * RAINBOW_CYCLE_SPEED) % 1;
 }
 
 const ENCHANT_RIM_GLSL = /* glsl */ `
@@ -261,7 +270,12 @@ const ENCHANT_RIM_GLSL = /* glsl */ `
 {
   vec3 enchantViewDirection = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vViewPosition);
   float enchantRim = smoothstep(0.58, 0.97, 1.0 - abs(dot(normal, enchantViewDirection)));
-  totalEmissiveRadiance += uEnchantColor * uEnchantGlow * (0.04 + 2.2 * enchantRim);
+  vec3 enchantColor = uEnchantColor;
+  if (uEnchantRainbow > 0.5) {
+    float enchantHue = fract(dot(vSeaWorld.xz, vec2(0.45, 0.3)) + vSeaWorld.y * 0.6 + uEnchantPhase);
+    enchantColor = clamp(abs(mod(enchantHue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+  }
+  totalEmissiveRadiance += enchantColor * uEnchantGlow * (0.04 + 2.2 * enchantRim);
 }
 `;
 
@@ -310,7 +324,7 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
     if (surfaceCode) shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_maps>', surfaceCode.normal);
     if (enchant) {
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uEnchantColor;\nuniform float uEnchantGlow;')
+        .replace('#include <common>', '#include <common>\nuniform vec3 uEnchantColor;\nuniform float uEnchantGlow;\nuniform float uEnchantRainbow;\nuniform float uEnchantPhase;')
         .replace('#include <emissivemap_fragment>', ENCHANT_RIM_GLSL);
     }
     if (cutaway) {
