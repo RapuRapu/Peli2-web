@@ -344,7 +344,7 @@ pipeline.overlayScene.add(water.mesh);
 const navigation = createNavigation(world);
 const gear = createGear(save.gear);
 const progression = createProgression(save.progression);
-if (searchParameters.get('asset') === 'crab') await loadCrabAsset().catch((error) => console.warn('crab asset failed, using procedural crab', error));
+if (searchParameters.get('asset') !== 'procedural') await loadCrabAsset().catch((error) => console.warn('crab asset failed, using procedural crab', error));
 const hermit = createHermit(scene, quality, gear.wornLook());
 hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
 
