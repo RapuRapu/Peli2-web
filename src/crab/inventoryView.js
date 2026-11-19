@@ -42,6 +42,7 @@ export function renderSlot(parent, entry, thumbnails, { selected = false, zone =
   if (image) element('img', 'slot-image', slot).src = image;
   else element('div', 'slot-emoji', slot, entry.category === 'shell' ? '🐚' : '🦀');
   element('div', 'slot-tier', slot, tierBadge(definition));
+  if (entry.category === 'claws') element('div', 'slot-category', slot, '🦀');
   const badge = qualityBadge(entry.item);
   if (badge) element('div', `slot-quality quality-${entry.item.quality}`, slot, badge);
   const glow = masterworkGlowCss(entry.item);

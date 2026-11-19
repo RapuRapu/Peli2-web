@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import crabModelBytes from './assets/crab.glb';
 import shellModelBytes from './assets/shells.glb';
+import weaponModelBytes from './assets/weapons.glb';
 import { Joint, limbChain, parseModel } from './rig.js';
 
 const LEG_NAMES = ['leg_front_L', 'leg_middle_R', 'leg_rear_L', 'leg_front_R', 'leg_middle_L', 'leg_rear_R'];
@@ -23,13 +24,24 @@ export const SHELL_MODEL_FIT = {
   whelk: { scale: 1.05, rotation: [-1.25, Math.PI, 0], offset: [0.15, 0.25, -0.55] },
 };
 
+export const WEAPON_MODEL_FIT = {
+  shellEdged: { length: 1.35, along: 0.45, rotation: [-Math.PI / 2, 0, 0], anchor: [0, 0, 0], metalness: 0, roughness: 0.85, tint: [0.96, 0.86, 0.72], normalScale: 0.5 },
+  coralTipped: { length: 1.3, along: 0.85, rotation: [-Math.PI / 2, 0, 0], anchor: [0, 0, 0], metalness: 0, roughness: 0.75 },
+  cleaver: { length: 2.4, along: 0.85, rotation: [0, 0, -Math.PI / 2], anchor: [0.64, 0.16, 0], metalness: 0.45, roughness: 0.4 },
+};
+const WEAPON_MODEL_LENGTH = 1.9;
+
 let loadedCrab = null;
 const shellModels = new Map();
+const weaponModels = new Map();
 
 
 export async function loadCrabAsset() {
-  const [crab, shells] = await Promise.all([parseModel(crabModelBytes), parseModel(shellModelBytes)]);
+  const [crab, shells, weapons] = await Promise.all([parseModel(crabModelBytes), parseModel(shellModelBytes), parseModel(weaponModelBytes)]);
   loadedCrab = crab.scene;
+  weapons.scene.traverse((node) => {
+    if (node.isMesh && WEAPON_MODEL_FIT[node.name]) weaponModels.set(node.name, node);
+  });
   shells.scene.traverse((node) => {
     if (node.isMesh && SHELL_MODEL_FIT[node.name]) shellModels.set(node.name, node);
   });
@@ -37,6 +49,21 @@ export async function loadCrabAsset() {
 }
 
 export const shellModelAvailable = (kind) => shellModels.has(kind);
+export const weaponModelAvailable = (kind) => weaponModels.has(kind);
+export const weaponModel = (kind) => weaponModels.get(kind);
+
+export function dressWeaponMaterial(kind, material, { thumbnail = false } = {}) {
+  const source = weaponModels.get(kind).material;
+  const fit = WEAPON_MODEL_FIT[kind];
+  for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap']) material[key] = source[key];
+  material.metalness = thumbnail ? 0 : fit.metalness;
+  material.roughness = thumbnail ? 0.6 : fit.roughness;
+  material.normalScale.copy(source.normalScale).multiplyScalar(fit.normalScale ?? 1);
+  if (fit.tint) material.color.setRGB(...fit.tint, THREE.SRGBColorSpace);
+  material.side = THREE.DoubleSide;
+  material.needsUpdate = true;
+  return material;
+}
 
 export function dressShellMaterial(kind, material) {
   const source = shellModels.get(kind).material;
@@ -95,6 +122,26 @@ export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rea
 
   const clawTips = { big: bones.claw_big_tip, small: bones.claw_small_tip };
   const tines = {};
+  let weapon = null;
+
+  function setClawWeapon(kind, material) {
+    if (weapon) weapon.removeFromParent();
+    weapon = null;
+    if (!kind || !weaponModels.has(kind)) return;
+    const fit = WEAPON_MODEL_FIT[kind];
+    const hand = bones.claw_big_3;
+    const handLength = bones.claw_big_tip.position.length();
+    const scale = (handLength * fit.length) / WEAPON_MODEL_LENGTH;
+    const mesh = new THREE.Mesh(weaponModels.get(kind).geometry, material);
+    mesh.castShadow = true;
+    mesh.position.set(-fit.anchor[0], -fit.anchor[1], -fit.anchor[2]).multiplyScalar(scale);
+    mesh.scale.setScalar(scale);
+    weapon = new THREE.Group();
+    weapon.rotation.set(...fit.rotation);
+    weapon.position.set(0, handLength * fit.along, 0);
+    weapon.add(mesh);
+    hand.add(weapon);
+  }
 
   function setClawTines(mesh, which) {
     if (tines[which]) tines[which].removeFromParent();
@@ -136,5 +183,5 @@ export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rea
     bodyBone.position.set(bodyRest.x, bodyRest.y - 0.16 * retract, bodyRest.z - 0.32 * retract);
   }
 
-  return { object: model, pose, setNaked, setClawGrowth, setClawTines, clawTips, abdomenAnchor, meshes };
+  return { object: model, pose, setNaked, setClawGrowth, setClawTines, setClawWeapon, clawTips, abdomenAnchor, meshes };
 }

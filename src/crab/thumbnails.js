@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { SHELLS, CLAWS, NAKED, gearGlowLook } from './gear.js';
 import { buildShellGeometry, buildClawPreview, createHermit } from './hermit.js';
-import { shellModelAvailable, buildShellModel, dressShellMaterial } from './hermitAsset.js';
+const WEAPON_ICON_FIT = 0.62;
+import { shellModelAvailable, buildShellModel, dressShellMaterial, weaponModelAvailable, weaponModel, dressWeaponMaterial } from './hermitAsset.js';
 
 const ITEM_PIXELS = 128;
 const DOLL_PIXELS = 240;
@@ -35,7 +36,7 @@ export function createThumbnails(quality) {
     return true;
   }
 
-  function frame(object, pixels, viewDirection) {
+  function frame(object, pixels, viewDirection, fit = 1) {
     renderer.setSize(pixels, pixels, false);
     const bounds = new THREE.Box3();
     object.updateMatrixWorld(true);
@@ -45,7 +46,7 @@ export function createThumbnails(quality) {
       bounds.union(part.geometry.boundingBox.clone().applyMatrix4(part.matrixWorld));
     });
     const sphere = bounds.getBoundingSphere(new THREE.Sphere());
-    const distance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05;
+    const distance = sphere.radius / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) * 1.05 * fit;
     camera.position.copy(sphere.center).addScaledVector(viewDirection.clone().normalize(), distance);
     camera.lookAt(sphere.center);
     camera.updateProjectionMatrix();
@@ -68,6 +69,9 @@ export function createThumbnails(quality) {
     } else if (category === 'shell') {
       const built = buildShellGeometry(SHELLS[kind].look);
       object = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, side: THREE.DoubleSide }));
+    } else if (weaponModelAvailable(kind)) {
+      object = new THREE.Mesh(weaponModel(kind).geometry.clone(), dressWeaponMaterial(kind, new THREE.MeshStandardMaterial(), { thumbnail: true }));
+      object.rotation.set(0.5, kind === 'cleaver' ? 0.4 : -0.9, kind === 'cleaver' ? 0.6 : 0);
     } else {
       const definition = CLAWS[kind];
       object = buildClawPreview(definition.tint || null, Boolean(definition.tines));
@@ -76,7 +80,7 @@ export function createThumbnails(quality) {
     object.position.copy(STAGE);
     scene.add(object);
     object.updateMatrixWorld(true);
-    const image = frame(object, ITEM_PIXELS, new THREE.Vector3(0.9, 0.75, 1.2));
+    const image = frame(object, ITEM_PIXELS, new THREE.Vector3(0.9, 0.75, 1.2), category === 'claws' && weaponModelAvailable(kind) ? WEAPON_ICON_FIT : 1);
     scene.remove(object);
     object.traverse((part) => {
       if (part.geometry && !model) part.geometry.dispose();
@@ -93,6 +97,7 @@ export function createThumbnails(quality) {
     if (!ensureStage()) return null;
     if (!doll) doll = createHermit(scene, quality, NAKED.look);
     doll.setShell(shellKind ? SHELLS[shellKind].look : NAKED.look);
+    doll.setClawWeapon(clawKind);
     doll.setClawTint(CLAWS[clawKind].tint || null);
     doll.setClawTines(Boolean(CLAWS[clawKind].tines));
     doll.setGearGlow(gearGlowLook(shellItem), gearGlowLook(clawItem));

@@ -8,6 +8,13 @@ SCENES = {
     'shoreCrab': {'offset': (3.5, 2.0), 'distance': 9},
     'sandHopper': {'offset': (2.5, 1.5), 'distance': 7},
     'gull': {'offset': (10, 4), 'distance': 55},
+    'cockroach': {'offset': (3, 1.5), 'distance': 10},
+    'rat': {'offset': (4, 2), 'distance': 13},
+    'shipCat': {'offset': (7, 3), 'distance': 24},
+    'moray': {'offset': (3, 2), 'distance': 12},
+    'octopus': {'offset': (4, 2), 'distance': 13},
+    'mantisShrimp': {'offset': (3, 1.5), 'distance': 10},
+    'giantLobster': {'offset': (7, 3), 'distance': 22},
 }
 
 with sync_playwright() as playwright:
@@ -24,10 +31,10 @@ with sync_playwright() as playwright:
           for (const enemy of d.enemies.list) Object.assign(enemy, {{ state: 'dead', respawnTimer: 1e9 }});
           const spot = d.navigation.nearestWalkable(d.player.x + {scene['offset'][0]}, d.player.z + {scene['offset'][1]}, 10);
           window.__creature = d.enemies.spawn('{kind}', spot.x, spot.z);
-          window.__creature.altitude = 0; window.__creature.state = 'idle';
+          window.__creature.altitude = 0; window.__creature.state = 'idle'; window.__creature.emerge = 1;
           d.setCameraDistance({scene['distance']}); }})()""")
         for index, (frames, action) in enumerate([(2, ''), (8, "window.__creature.motion = 1; window.__creature.heading += 0.0"), (8, "window.__creature.strike = 1"), (6, "window.__creature.hurt = 1")]):
-            page.evaluate(f"(() => {{ const d = window.__debug; {action}; for (let i = 0; i < {frames}; i++) d.simulate(1 / 60); d.updateCamera && d.updateCamera(1, true); d.setRendering(true); d.renderScene(); d.setRendering(false); }})()")
+            page.evaluate(f"(() => {{ const d = window.__debug; {action}; for (let i = 0; i < {frames}; i++) d.simulate(1 / 60); d.updateCamera && d.updateCamera(1, true); d.enemies.setReefVisible(true); d.enemies.setCampVisible(true); d.enemies.setHoldVisible(true); d.setRendering(true); d.renderScene(); d.setRendering(false); }})()")
             page.screenshot(path=f'{out_dir}/{kind}_{index}.png')
         print(kind, 'errors', errors[:3])
         page.close()

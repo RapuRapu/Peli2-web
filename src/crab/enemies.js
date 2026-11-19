@@ -62,6 +62,8 @@ const COOK_STUCK_SECONDS = 2;
 const COOK_FLEE_ANIMATION_RATE = 1.15;
 const LOBSTER_SCALE = 1.35;
 const LOBSTER_CLAW_SCALE = 1.4;
+const LOBSTER_CLAW_REACH = 1.35;
+const MANTIS_SINK_SHARE = 0.12;
 const FLASH_STRENGTH = 0.3;
 const GULL_CIRCLE_RADIUS = 16;
 const GULL_CIRCLE_ALTITUDE = 30;
@@ -303,7 +305,29 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   const reefMeshes = [morayMesh, octopusMesh, mantisMesh, lobsterBodyMesh, lobsterClawMesh];
   const shadowless = new Set([morayMesh, mantisMesh, lobsterClawMesh]);
   const allMeshes = [hopperMesh, crabBodyMesh, crabLegMesh, crabClawMesh, ...reefMeshes, ...campMeshes, ...holdMeshes];
-  const replacedByModels = [...(creatureAssetAvailable('sandHopper') ? [hopperMesh] : []), ...(creatureAssetAvailable('shoreCrab') ? [crabBodyMesh, crabLegMesh, crabClawMesh] : [])];
+  const MODEL_REPLACES = {
+    sandHopper: { meshes: [hopperMesh] },
+    shoreCrab: { meshes: [crabBodyMesh, crabLegMesh, crabClawMesh] },
+    cockroach: { meshes: [cockroachMesh], region: 'hold', scale: 0.85 },
+    rat: { meshes: [ratMesh], region: 'camp', scale: 0.85 },
+    shipCat: { meshes: [catMesh], region: 'camp', scale: 1 },
+    moray: { meshes: [morayMesh], region: 'reef', scale: MORAY_SCALE },
+    octopus: { meshes: [octopusMesh], region: 'reef', scale: 1 },
+    mantisShrimp: { meshes: [mantisMesh], region: 'reef', scale: 1.25 },
+    giantLobster: { meshes: [lobsterBodyMesh, lobsterClawMesh], region: 'reef', scale: LOBSTER_SCALE * LOBSTER_CLAW_REACH },
+  };
+  const replacedByModels = Object.entries(MODEL_REPLACES).filter(([kind]) => creatureAssetAvailable(kind)).flatMap(([, entry]) => entry.meshes);
+  const replacedMeshes = new Set(replacedByModels);
+  const regionVisible = { reef: true, camp: true, hold: true };
+
+  function modelScale(kind, creature) {
+    const entry = MODEL_REPLACES[kind];
+    if (!entry || !entry.scale) return 1;
+    const geometry = entry.meshes[0].geometry;
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    const proceduralLength = (geometry.boundingBox.max.z - geometry.boundingBox.min.z) * entry.scale;
+    return proceduralLength / creature.length;
+  }
   const flatDisc = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   const telegraphMaterial = new THREE.ShaderMaterial({ uniforms: { uProgress: { value: 0 }, uOpacity: { value: 0 } }, vertexShader: TELEGRAPH_VERTEX_GLSL.replace('position.xy', 'position.xz'), fragmentShader: TELEGRAPH_FRAGMENT_GLSL, transparent: true, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   const telegraphMesh = new THREE.Mesh(flatDisc, telegraphMaterial);
@@ -393,6 +417,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       if (entry.kind === 'gull') enemy.model = createGullModel(scene, quality);
       if (creatureAssetAvailable(entry.kind)) {
         enemy.creature = createCreature(entry.kind, quality);
+        enemy.modelScale = modelScale(entry.kind, enemy.creature);
         scene.add(enemy.creature.object);
         if (enemy.model) enemy.model.torso.visible = false;
       }
@@ -887,9 +912,15 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     setFlash(hopperMesh, enemy.slot, flashFor(enemy));
   }
 
+  function showCreature(enemy, poseArguments) {
+    placeCreature(enemy, enemy.modelScale);
+    if (enemy.creature.object.visible) enemy.creature.pose(poseArguments);
+  }
+
   function placeCreature(enemy, scale) {
     const { object } = enemy.creature;
-    object.visible = enemy.state !== 'dead';
+    const region = MODEL_REPLACES[enemy.kind] && MODEL_REPLACES[enemy.kind].region;
+    object.visible = enemy.state !== 'dead' && (!region || regionVisible[region]);
     object.position.copy(transform.position);
     object.rotation.copy(transform.rotation);
     object.scale.setScalar(scale);
@@ -962,6 +993,13 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(lunge * 0.55 - (1 - enemy.emerge) * 0.15, enemy.heading + Math.sin(time * 1.7 + enemy.id) * 0.15 * (1 - lunge), Math.sin(time * 2.3 + enemy.id) * 0.07 + deathFall(enemy) * 0.8);
     transform.scale.setScalar(MORAY_SCALE);
     transform.updateMatrix();
+    if (enemy.creature) {
+      morayMesh.setMatrixAt(enemy.slot, hidden);
+      transform.position.set(enemy.x + Math.sin(enemy.heading) * lunge * 1.3, enemy.y - (1 - rise) * 0.9 - deathSink(enemy) * 1.5, enemy.z + Math.cos(enemy.heading) * lunge * 1.3);
+      transform.rotation.set(0, enemy.heading, 0);
+      showCreature(enemy, { time, emerge: enemy.emerge, lunge, fall: deathFall(enemy) });
+      return;
+    }
     placeInstance(morayMesh, enemy.slot, enemy, transform.matrix);
   }
 
@@ -974,6 +1012,11 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-recoil * 0.5, enemy.heading + Math.sin(time * 0.8 + enemy.id) * 0.1, 0);
     transform.scale.set(1 + breathe + swell * 0.5, (1 + swell - breathe) * (1 - deathFall(enemy) * 0.6), 1 + breathe + swell * 0.5);
     transform.updateMatrix();
+    if (enemy.creature) {
+      octopusMesh.setMatrixAt(enemy.slot, hidden);
+      showCreature(enemy, { time, motion: enemy.motion, lunge, swell, fall: deathFall(enemy) });
+      return;
+    }
     placeInstance(octopusMesh, enemy.slot, enemy, transform.matrix);
   }
 
@@ -986,6 +1029,12 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-lunge * 0.35 + recoil * 0.5, enemy.heading, deathFall(enemy) * Math.PI);
     transform.scale.setScalar(1.25);
     transform.updateMatrix();
+    if (enemy.creature) {
+      mantisMesh.setMatrixAt(enemy.slot, hidden);
+      transform.position.y -= enemy.creature.height * enemy.modelScale * MANTIS_SINK_SHARE;
+      showCreature(enemy, { stride: time * 12 + enemy.id, motion: enemy.motion, strike: lunge, fall: deathFall(enemy), time });
+      return;
+    }
     placeInstance(mantisMesh, enemy.slot, enemy, transform.matrix);
   }
 
@@ -997,6 +1046,13 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-windup * 0.12 + lunge * 0.1, enemy.heading, deathFall(enemy) * 0.5);
     transform.scale.setScalar(LOBSTER_SCALE);
     transform.updateMatrix();
+    if (enemy.creature) {
+      lobsterBodyMesh.setMatrixAt(enemy.slot, hidden);
+      lobsterClawMesh.setMatrixAt(enemy.slot * 2, hidden);
+      lobsterClawMesh.setMatrixAt(enemy.slot * 2 + 1, hidden);
+      showCreature(enemy, { stride, motion: enemy.motion, raised: (enemy.state === 'chase' ? 0.25 : 0.05) + windup * 0.75, lunge, fall: deathFall(enemy), time });
+      return;
+    }
     parentMatrix.copy(transform.matrix);
     placeInstance(lobsterBodyMesh, enemy.slot, enemy, parentMatrix);
     for (const side of [-1, 1]) {
@@ -1043,17 +1099,20 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   }
 
   function setReefVisible(visible) {
-    for (const mesh of reefMeshes) mesh.visible = visible;
+    regionVisible.reef = visible;
+    for (const mesh of reefMeshes) mesh.visible = visible && !replacedMeshes.has(mesh);
   }
 
   function setCampVisible(visible) {
-    for (const mesh of campMeshes) mesh.visible = visible;
+    regionVisible.camp = visible;
+    for (const mesh of campMeshes) mesh.visible = visible && !replacedMeshes.has(mesh);
   }
 
   let holdVisible = true;
   function setHoldVisible(visible) {
     holdVisible = visible;
-    for (const mesh of holdMeshes) mesh.visible = visible;
+    regionVisible.hold = visible;
+    for (const mesh of holdMeshes) mesh.visible = visible && !replacedMeshes.has(mesh);
   }
 
   function renderCockroach(enemy, time) {
@@ -1065,6 +1124,12 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-lunge * 0.2, enemy.heading + Math.sin(time * 13 + enemy.id) * 0.06 * enemy.motion, deathFall(enemy) * Math.PI);
     transform.scale.setScalar(1);
     transform.updateMatrix();
+    if (enemy.creature) {
+      cockroachMesh.setMatrixAt(enemy.slot, hidden);
+      transform.position.y -= 0.25;
+      showCreature(enemy, { stride: time * 20 + enemy.id, motion: enemy.motion, lunge, fall: deathFall(enemy), time });
+      return;
+    }
     placeInstance(cockroachMesh, enemy.slot, enemy, transform.matrix);
   }
 
@@ -1135,6 +1200,11 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-lunge * 0.25 + recoil * 0.3, enemy.heading + Math.sin(time * 9 + enemy.id) * 0.05 * enemy.motion, deathFall(enemy) * Math.PI);
     transform.scale.setScalar(1);
     transform.updateMatrix();
+    if (enemy.creature) {
+      ratMesh.setMatrixAt(enemy.slot, hidden);
+      showCreature(enemy, { stride: time * 14 + enemy.id, motion: enemy.motion, lunge, fall: deathFall(enemy), time });
+      return;
+    }
     placeInstance(ratMesh, enemy.slot, enemy, transform.matrix);
   }
 
@@ -1148,6 +1218,11 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-windup * 0.12 + lunge * 0.15 - (enemy.leap ? 0.25 : 0), enemy.heading, deathFall(enemy) * 1.4);
     transform.scale.set(1 + breathe, 1 - crouch + breathe, 1 + crouch * 0.5);
     transform.updateMatrix();
+    if (enemy.creature) {
+      catMesh.setMatrixAt(enemy.slot, hidden);
+      showCreature(enemy, { stride: time * 7 + enemy.id, motion: enemy.motion, crouch, leap: enemy.leap ? 1 : 0, lunge, windup: enemy.zone && !enemy.zone.pounce ? windup : 0, fall: deathFall(enemy), time });
+      return;
+    }
     placeInstance(catMesh, enemy.slot, enemy, transform.matrix);
   }
 

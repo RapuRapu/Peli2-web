@@ -365,6 +365,7 @@ function applyWornLook() {
   hermit.setShell(gear.wornLook());
   hermit.setGearGlow(gearGlowLook(gear.wornShell()), gearGlowLook(gear.wornClaws()));
   hermit.setClawGrowth(1 + CLAW_GROWTH_PER_MOLT * progression.moltCount('crusher'), 1 + CLAW_GROWTH_PER_MOLT * progression.moltCount('cutter'));
+  hermit.setClawWeapon(gear.wornClaws().kind);
   hermit.setClawTint(CLAWS[gear.wornClaws().kind].tint || null);
   hermit.setClawTines(Boolean(CLAWS[gear.wornClaws().kind].tines));
 }

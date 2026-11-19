@@ -10,6 +10,9 @@ SCENARIOS = {
     'walk': {'pose': 15, 'action': "d.setDestination(d.player.x + 6, d.player.z + 1)", 'steps': [6, 3, 3, 3]},
     'attack': {'pose': 22, 'action': "d.hermit.playAttack('big')", 'steps': [1, 8, 5, 8]},
     'hurt': {'pose': 15, 'action': "d.hermit.playHurt(1, 1)", 'steps': [2, 8, 10, 12]},
+    'shellEdged': {'pose': 22, 'action': "d.equipBuild('snail', 'shellEdged', false); d.setCameraDistance(6); d.hermit.playAttack('big')", 'steps': [1, 10, 10]},
+    'coralTipped': {'pose': 22, 'action': "d.equipBuild('snail', 'coralTipped', false); d.setCameraDistance(6); d.hermit.playAttack('big')", 'steps': [1, 10, 10]},
+    'cleaver': {'pose': 22, 'action': "d.equipBuild('snail', 'cleaver', false); d.setCameraDistance(6); d.hermit.playAttack('big')", 'steps': [1, 10, 10]},
     'naked': {'pose': 22, 'action': "d.setDestination(d.player.x - 5, d.player.z + 2)", 'steps': [12, 12]},
 }
 

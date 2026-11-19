@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside, createGearGlowUniforms, updateGearGlowUniforms, gearGlowColorAt } from './seaside.js';
-import { buildAssetRig, crabAssetLoaded, shellModelAvailable, buildShellModel, dressShellMaterial } from './hermitAsset.js';
+import { buildAssetRig, crabAssetLoaded, shellModelAvailable, buildShellModel, dressShellMaterial, weaponModelAvailable, dressWeaponMaterial } from './hermitAsset.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const CARAPACE = linearColor(0.86, 0.3, 0.14);
@@ -556,6 +556,7 @@ export function createHermit(scene, quality, shellLook) {
     else flashColor.setRGB(0.75 * flash, 0.62 * flash, 0.55 * flash);
     material.emissive.copy(flashColor);
     clawMaterial.emissive.copy(flashColor);
+    for (const weaponMaterial of weaponMaterials.values()) weaponMaterial.emissive.copy(flashColor);
     if (abdomenMaterial) abdomenMaterial.emissive.copy(flashColor);
     if (rearMaterial) rearMaterial.emissive.copy(flashColor);
     const shellGearGlowLook = gearGlow.shell;
@@ -583,12 +584,23 @@ export function createHermit(scene, quality, shellLook) {
     for (const claw of [proceduralRig.bigClaw, proceduralRig.smallClaw]) claw.tines.visible = visible;
   }
 
+  const weaponMaterials = new Map();
+  let wornWeapon = null;
+
+  function setClawWeapon(kind) {
+    if (!assetRig) return;
+    wornWeapon = kind && weaponModelAvailable(kind) ? kind : null;
+    if (wornWeapon && !weaponMaterials.has(kind)) weaponMaterials.set(kind, dressWeaponMaterial(kind, applySeaside(new THREE.MeshStandardMaterial(), { ...wetSurface, gearGlow: clawGearGlowUniforms })));
+    assetRig.setClawWeapon(wornWeapon, wornWeapon ? weaponMaterials.get(wornWeapon) : null);
+  }
+
   function setClawTint(tint) {
+    if (assetRig && wornWeapon) tint = null;
     if (tint) clawMaterial.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
     else clawMaterial.color.setRGB(1, 1, 1);
   }
 
-  return { root, update, wetnessUniforms, setShell, setGearGlow, setClawGrowth, setClawTint, setClawTines, playAttack, playHurt, playDeath, resetPose, clawPosition };
+  return { root, update, wetnessUniforms, setShell, setGearGlow, setClawGrowth, setClawTint, setClawTines, setClawWeapon, playAttack, playHurt, playDeath, resetPose, clawPosition };
 }
 
 const ASSET_SHELL_OFFSET = new THREE.Vector3(0, 0, 0);
