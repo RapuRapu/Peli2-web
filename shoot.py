@@ -3,6 +3,7 @@ from playwright.sync_api import sync_playwright
 
 out_dir = sys.argv[1] if len(sys.argv) > 1 else 'shots'
 poses = sys.argv[2].split(',') if len(sys.argv) > 2 else ['1', '2', '3', '4', '5', '6', '7']
+extra_query = sys.argv[3] if len(sys.argv) > 3 else ''
 import os
 os.makedirs(out_dir, exist_ok=True)
 
@@ -19,7 +20,7 @@ with sync_playwright() as p:
         page.on('console', lambda m: errors.append(m.text) if m.type in ('error', 'warning') else None)
         page.on('pageerror', lambda e: errors.append(str(e)))
         started = time.time()
-        page.goto(f'file://{os.path.abspath("dist/index.html")}?pose={pose}&hud')
+        page.goto(f'file://{os.path.abspath("dist/index.html")}?pose={pose}&hud{extra_query}')
         page.wait_for_function('!!window.__frameReady', timeout=180000)
         stats = page.evaluate('window.__frameReady')
         page.screenshot(path=f'{out_dir}/pose{pose}.png')

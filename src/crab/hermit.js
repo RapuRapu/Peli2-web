@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside, createGearGlowUniforms, updateGearGlowUniforms, gearGlowColorAt } from './seaside.js';
+import { buildAssetRig, crabAssetLoaded } from './hermitAsset.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const CARAPACE = linearColor(0.86, 0.3, 0.14);
@@ -367,26 +368,29 @@ function buildGearGlowParticles() {
 }
 
 export function createHermit(scene, quality, shellLook) {
+  const useAsset = crabAssetLoaded();
   const wetnessUniforms = { uBodyWetness: { value: 0 }, uBodyWetTop: { value: -1000 } };
   const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
   const shellGearGlowUniforms = createGearGlowUniforms();
   const clawGearGlowUniforms = createGearGlowUniforms();
-  const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), wetSurface);
-  const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, gearGlow: clawGearGlowUniforms });
+  const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), wetSurface);
+  const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, gearGlow: clawGearGlowUniforms });
+  const abdomenMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial(), wetSurface) : null;
   const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, gearGlow: shellGearGlowUniforms });
   const NO_GLOW = { glow: 0, color: [1, 1, 1], pulse: false };
   const gearGlow = { shell: NO_GLOW, claws: NO_GLOW };
   const groundGlow = buildGroundGlow();
   const gearGlowParticles = buildGearGlowParticles();
-  const eyeMaterial = new THREE.MeshStandardMaterial({ color: EYE, roughness: 0.08 });
 
   const root = new THREE.Group();
   const tilt = new THREE.Group();
   const body = new THREE.Group();
-  const front = new THREE.Group();
   root.add(tilt);
   tilt.add(body);
-  body.add(front);
+
+  const assetRig = useAsset ? buildAssetRig({ bodyMaterial: material, clawMaterial, abdomenMaterial }) : null;
+  const proceduralRig = useAsset ? null : buildProceduralRig(body, material, clawMaterial);
+  if (assetRig) body.add(assetRig.object);
 
   const shell = new THREE.Mesh(undefined, shellMaterial);
   shell.castShadow = true;
@@ -398,12 +402,197 @@ export function createHermit(scene, quality, shellLook) {
     shell.geometry = built.geometry;
     shell.position.set(built.mouthOffset, 0, 0);
     shellMaterial.roughness = look.soft ? 0.82 : 0.32;
+    if (assetRig) {
+      assetRig.setNaked(Boolean(look.soft));
+      shell.visible = !look.soft;
+    }
   }
   setShell(shellLook);
   shellPivot.add(shell);
-  shellPivot.position.set(0, 0.64, -0.12);
+  if (assetRig) {
+    shellPivot.position.copy(assetRig.abdomenAnchor).add(ASSET_SHELL_OFFSET);
+    shellPivot.scale.setScalar(ASSET_SHELL_SCALE);
+  } else {
+    shellPivot.position.set(0, 0.64, -0.12);
+  }
   shellPivot.rotation.set(SHELL_LEAN_BACK, 0, 0.1);
   body.add(shellPivot);
+
+  root.add(groundGlow.mesh, gearGlowParticles.mesh);
+  scene.add(root);
+
+  function setGearGlow(shellLook, clawLook) {
+    gearGlow.shell = shellLook || NO_GLOW;
+    gearGlow.claws = clawLook || NO_GLOW;
+  }
+
+  function setClawGrowth(bigClawScale, smallClawScale) {
+    if (assetRig) {
+      assetRig.setClawGrowth(bigClawScale, smallClawScale);
+      return;
+    }
+    proceduralRig.bigClaw.shoulder.scale.setScalar(bigClawScale);
+    proceduralRig.smallClaw.shoulder.scale.setScalar(smallClawScale);
+  }
+
+  const pose = { stride: 0, snip: 0, idleTime: 0, tiltX: 0, tiltZ: 0 };
+  const attack = { time: 1, variant: 'big' };
+  const hurt = { amount: 0, strength: 1, side: 0 };
+  const death = { time: -1 };
+  const flashColor = new THREE.Color();
+
+  function playAttack(variant) {
+    attack.time = 0;
+    attack.variant = variant;
+  }
+
+  function playHurt(strength, sideways) {
+    hurt.amount = 1;
+    hurt.strength = strength;
+    hurt.side = sideways;
+  }
+
+  function playDeath() {
+    death.time = 0;
+  }
+
+  function resetPose() {
+    death.time = -1;
+    hurt.amount = 0;
+    attack.time = 1;
+  }
+
+  const clawWorld = new THREE.Vector3();
+  function clawPosition(which, target = clawWorld) {
+    if (assetRig) return assetRig.clawTips[which === 'small' ? 'small' : 'big'].getWorldPosition(target);
+    return (which === 'small' ? proceduralRig.smallClaw : proceduralRig.bigClaw).thumb.getWorldPosition(target);
+  }
+
+  function gatherPose(type, progress) {
+    const reachDown = THREE.MathUtils.smoothstep(progress, 0, 0.35) * (1 - THREE.MathUtils.smoothstep(progress, 0.55, 0.9));
+    const lifted = THREE.MathUtils.smoothstep(progress, 0.55, 0.9);
+    const pinch = progress > 0.45 && progress < 0.95 ? 0.05 : 0.6;
+    if (type === 'driftwood') {
+      const tug = Math.sin(progress * Math.PI * 7) * THREE.MathUtils.smoothstep(progress, 0.3, 0.45);
+      return { big: { reach: 0.75 * reachDown + 0.35, open: pinch, spread: -0.25 }, small: { reach: 0.7 * reachDown + 0.3, open: pinch, spread: -0.25 }, lunge: 0.1 * reachDown - 0.12 * Math.max(0, tug), pitch: 0.18 * reachDown, lifted };
+    }
+    if (type === 'seaLettuce') {
+      const nibble = Math.sin(progress * Math.PI * 8);
+      return { big: { reach: 0.55 + 0.45 * Math.max(0, nibble) - 0.5 * Math.max(0, -nibble), open: 0.35 + 0.3 * Math.max(0, nibble), spread: 0.1 }, small: { reach: 0.55 + 0.45 * Math.max(0, -nibble) - 0.5 * Math.max(0, nibble), open: 0.35 + 0.3 * Math.max(0, -nibble), spread: 0.1 }, lunge: 0.06, pitch: 0.2 + 0.05 * Math.sin(progress * Math.PI * 16), lifted: 0 };
+    }
+    if (type === 'pearls') {
+      return { big: { reach: 0.85 * reachDown - 0.3 * lifted, open: pinch * 0.6, spread: -0.35 }, small: { reach: 0.85 * reachDown - 0.3 * lifted, open: pinch * 0.6, spread: -0.35 }, lunge: 0.1 * reachDown, pitch: 0.22 * reachDown, lifted };
+    }
+    return { big: { reach: 0.1, open: 0.2, spread: 0 }, small: { reach: 0.95 * reachDown - 0.45 * lifted, open: pinch, spread: -0.3 }, lunge: 0.08 * reachDown, pitch: 0.2 * reachDown, lifted };
+  }
+
+  function update(deltaTime, { x, y, z, heading, speed, working, gatherType = null, gatherProgress = 0, groundNormal, withdrawn = false }) {
+    root.position.set(x, y, z);
+    root.rotation.y = heading;
+    pose.idleTime += deltaTime;
+    pose.stride += speed * deltaTime * 2.6;
+    const moving = Math.min(1, speed / 3);
+
+    const cosHeading = Math.cos(heading);
+    const sinHeading = Math.sin(heading);
+    const forwardSlope = groundNormal.x * sinHeading + groundNormal.z * cosHeading;
+    const sideSlope = groundNormal.x * cosHeading - groundNormal.z * sinHeading;
+    const blend = Math.min(1, deltaTime * 8);
+    pose.tiltX += (Math.atan2(forwardSlope, groundNormal.y) - pose.tiltX) * blend;
+    pose.tiltZ += (-Math.atan2(sideSlope, groundNormal.y) - pose.tiltZ) * blend;
+    tilt.rotation.set(pose.tiltX, 0, pose.tiltZ);
+
+    body.position.y = Math.sin(pose.stride * 2) * 0.03 * moving + Math.sin(pose.idleTime * 1.7) * 0.012;
+    shellPivot.rotation.z = 0.1 + Math.sin(pose.stride) * 0.06 * moving;
+    shellPivot.rotation.x = SHELL_LEAN_BACK + Math.sin(pose.stride * 2 + 0.6) * 0.03 * moving;
+
+    const idleOpen = 0.16 + 0.08 * Math.sin(pose.idleTime * 0.9);
+    const claws = { big: { reach: Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen, spread: 0 }, small: { reach: -Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen * 0.8, spread: 0 } };
+    let lunge = 0;
+    let pitch = 0;
+    if (working && gatherType) {
+      const gather = gatherPose(gatherType, gatherProgress);
+      Object.assign(claws, { big: gather.big, small: gather.small });
+      lunge = gather.lunge;
+      pitch = gather.pitch;
+    }
+    attack.time = Math.min(1, attack.time + deltaTime / ATTACK_SECONDS);
+    if (attack.time < 1) {
+      const windup = THREE.MathUtils.smoothstep(attack.time, 0, 0.33) * (1 - THREE.MathUtils.smoothstep(attack.time, 0.33, 0.48));
+      const strike = THREE.MathUtils.smoothstep(attack.time, 0.33, 0.48) * (1 - THREE.MathUtils.smoothstep(attack.time, 0.55, 1));
+      const power = attack.variant === 'both' ? 1.3 : 1;
+      for (const which of attack.variant === 'both' ? ['big', 'small'] : [attack.variant]) {
+        claws[which] = { reach: -0.75 * windup + 0.85 * strike * power, open: 0.9 * windup + 0.05 * strike, spread: -0.35 * strike };
+      }
+      lunge += (-0.14 * windup + 0.5 * strike) * power;
+      pitch += -0.12 * windup + 0.14 * strike * power;
+    }
+
+    hurt.amount = Math.max(0, hurt.amount - deltaTime / HURT_SECONDS);
+    const deathShare = death.time >= 0 ? Math.min(1, (death.time += deltaTime / DEATH_SECONDS)) : 0;
+    const moltWiggle = withdrawn ? 0.82 + 0.12 * Math.sin(pose.idleTime * 7) ** 2 : 0;
+    const retract = Math.max(Math.pow(hurt.amount, 0.5) * Math.min(1, 0.7 + 0.3 * hurt.strength), THREE.MathUtils.smoothstep(deathShare, 0, 0.35), moltWiggle);
+    const motion = { stride: pose.stride, moving, idleTime: pose.idleTime, claws, retract, withdrawn };
+    if (assetRig) assetRig.pose(motion);
+    else proceduralRig.pose(motion);
+    body.position.z = lunge;
+    body.rotation.x = pitch - 0.25 * hurt.amount * hurt.strength;
+    const fall = THREE.MathUtils.smoothstep(deathShare, 0.3, 0.8);
+    tilt.rotation.z += fall * 1.35 + hurt.side * hurt.amount * 0.25 * hurt.strength;
+    const flash = hurt.amount * hurt.amount;
+    if (assetRig) flashColor.setRGB(...ASSET_FLASH_COLOR).lerp(ASSET_FLASH_PEAK, THREE.MathUtils.smoothstep(hurt.amount, 0.82, 1)).multiplyScalar(Math.pow(hurt.amount, 3));
+    else flashColor.setRGB(0.75 * flash, 0.62 * flash, 0.55 * flash);
+    material.emissive.copy(flashColor);
+    clawMaterial.emissive.copy(flashColor);
+    if (abdomenMaterial) abdomenMaterial.emissive.copy(flashColor);
+    const shellGearGlowLook = gearGlow.shell;
+    updateGearGlowUniforms(shellGearGlowUniforms, shellGearGlowLook, pose.idleTime);
+    updateGearGlowUniforms(clawGearGlowUniforms, gearGlow.claws, pose.idleTime);
+    const strongestLook = gearGlow.shell.glow >= gearGlow.claws.glow ? gearGlow.shell : gearGlow.claws;
+    groundGlow.mesh.visible = Boolean(strongestLook.groundGlow);
+    if (strongestLook.groundGlow) {
+      gearGlowColorAt(strongestLook, pose.idleTime, groundGlow.uniforms.uColor.value).multiplyScalar(strongestLook.groundGlow * (0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2));
+      groundGlow.uniforms.uRainbow.value = strongestLook.rainbow ? 1 : 0;
+      groundGlow.uniforms.uPhase.value = (pose.idleTime * 0.18) % 1;
+      groundGlow.mesh.rotation.set(pose.tiltX, 0, pose.tiltZ);
+      groundGlow.mesh.scale.setScalar(0.75 + 0.25 * strongestLook.groundGlow);
+    }
+    gearGlowParticles.update(strongestLook, pose.idleTime);
+    shellMaterial.emissive.copy(flashColor).multiplyScalar(assetRig ? 0.6 : 0.3);
+  }
+
+  function setClawTines(visible) {
+    if (assetRig) {
+      for (const which of ['big', 'small']) assetRig.setClawTines(visible ? buildAssetTines(clawMaterial, which === 'big' ? 1.25 : 0.85) : null, which);
+      return;
+    }
+    for (const claw of [proceduralRig.bigClaw, proceduralRig.smallClaw]) claw.tines.visible = visible;
+  }
+
+  function setClawTint(tint) {
+    if (tint) clawMaterial.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
+    else clawMaterial.color.setRGB(1, 1, 1);
+  }
+
+  return { root, update, wetnessUniforms, setShell, setGearGlow, setClawGrowth, setClawTint, setClawTines, playAttack, playHurt, playDeath, resetPose, clawPosition };
+}
+
+const ASSET_SHELL_OFFSET = new THREE.Vector3(0, 0, 0);
+const ASSET_SHELL_SCALE = 1;
+const ASSET_FLASH_COLOR = [0.85, 0.12, 0.05];
+const ASSET_FLASH_PEAK = new THREE.Color(1.1, 0.95, 0.85);
+
+function buildAssetTines(material, size) {
+  const tineGeometries = [-1, 0, 1].map((offset) => tinted(new THREE.CylinderGeometry(0.022 * size, 0.034 * size, 0.46 * size, 5).rotateY(offset * 0.16).translate(offset * 0.1 * size, 0.2 * size, 0), CLAW_TIP, 0));
+  const tines = new THREE.Mesh(mergeGeometries(tineGeometries), material);
+  tines.castShadow = true;
+  return tines;
+}
+
+function buildProceduralRig(body, material, clawMaterial) {
+  const eyeMaterial = new THREE.MeshStandardMaterial({ color: EYE, roughness: 0.08 });
+  const front = new THREE.Group();
+  body.add(front);
 
   const headGeometry = mergeGeometries([
     tinted(new THREE.SphereGeometry(0.4, 18, 12).scale(0.95, 0.66, 1.2).translate(0, 0.5, 0.22), CARAPACE, 0.45),
@@ -455,116 +644,12 @@ export function createHermit(scene, quality, shellLook) {
     }
   }
 
-  root.add(groundGlow.mesh, gearGlowParticles.mesh);
-  scene.add(root);
-
-  function setGearGlow(shellLook, clawLook) {
-    gearGlow.shell = shellLook || NO_GLOW;
-    gearGlow.claws = clawLook || NO_GLOW;
-  }
-
-  function setClawGrowth(bigClawScale, smallClawScale) {
-    bigClaw.shoulder.scale.setScalar(bigClawScale);
-    smallClaw.shoulder.scale.setScalar(smallClawScale);
-  }
-
-  const pose = { stride: 0, snip: 0, idleTime: 0, tiltX: 0, tiltZ: 0 };
-  const attack = { time: 1, variant: 'big' };
-  const hurt = { amount: 0, strength: 1, side: 0 };
-  const death = { time: -1 };
-  const flashColor = new THREE.Color();
-
-  function playAttack(variant) {
-    attack.time = 0;
-    attack.variant = variant;
-  }
-
-  function playHurt(strength, sideways) {
-    hurt.amount = 1;
-    hurt.strength = strength;
-    hurt.side = sideways;
-  }
-
-  function playDeath() {
-    death.time = 0;
-  }
-
-  function resetPose() {
-    death.time = -1;
-    hurt.amount = 0;
-    attack.time = 1;
-  }
-
-  const clawWorld = new THREE.Vector3();
-  function clawPosition(which, target = clawWorld) {
-    return (which === 'small' ? smallClaw : bigClaw).thumb.getWorldPosition(target);
-  }
-
-  function gatherPose(type, progress) {
-    const reachDown = THREE.MathUtils.smoothstep(progress, 0, 0.35) * (1 - THREE.MathUtils.smoothstep(progress, 0.55, 0.9));
-    const lifted = THREE.MathUtils.smoothstep(progress, 0.55, 0.9);
-    const pinch = progress > 0.45 && progress < 0.95 ? 0.05 : 0.6;
-    if (type === 'driftwood') {
-      const tug = Math.sin(progress * Math.PI * 7) * THREE.MathUtils.smoothstep(progress, 0.3, 0.45);
-      return { big: { reach: 0.75 * reachDown + 0.35, open: pinch, spread: -0.25 }, small: { reach: 0.7 * reachDown + 0.3, open: pinch, spread: -0.25 }, lunge: 0.1 * reachDown - 0.12 * Math.max(0, tug), pitch: 0.18 * reachDown, lifted };
-    }
-    if (type === 'seaLettuce') {
-      const nibble = Math.sin(progress * Math.PI * 8);
-      return { big: { reach: 0.55 + 0.45 * Math.max(0, nibble) - 0.5 * Math.max(0, -nibble), open: 0.35 + 0.3 * Math.max(0, nibble), spread: 0.1 }, small: { reach: 0.55 + 0.45 * Math.max(0, -nibble) - 0.5 * Math.max(0, nibble), open: 0.35 + 0.3 * Math.max(0, -nibble), spread: 0.1 }, lunge: 0.06, pitch: 0.2 + 0.05 * Math.sin(progress * Math.PI * 16), lifted: 0 };
-    }
-    if (type === 'pearls') {
-      return { big: { reach: 0.85 * reachDown - 0.3 * lifted, open: pinch * 0.6, spread: -0.35 }, small: { reach: 0.85 * reachDown - 0.3 * lifted, open: pinch * 0.6, spread: -0.35 }, lunge: 0.1 * reachDown, pitch: 0.22 * reachDown, lifted };
-    }
-    return { big: { reach: 0.1, open: 0.2, spread: 0 }, small: { reach: 0.95 * reachDown - 0.45 * lifted, open: pinch, spread: -0.3 }, lunge: 0.08 * reachDown, pitch: 0.2 * reachDown, lifted };
-  }
-
-  function update(deltaTime, { x, y, z, heading, speed, working, gatherType = null, gatherProgress = 0, groundNormal, withdrawn = false }) {
-    root.position.set(x, y, z);
-    root.rotation.y = heading;
-    pose.idleTime += deltaTime;
-    pose.stride += speed * deltaTime * 2.6;
-    const moving = Math.min(1, speed / 3);
-
-    const cosHeading = Math.cos(heading);
-    const sinHeading = Math.sin(heading);
-    const forwardSlope = groundNormal.x * sinHeading + groundNormal.z * cosHeading;
-    const sideSlope = groundNormal.x * cosHeading - groundNormal.z * sinHeading;
-    const blend = Math.min(1, deltaTime * 8);
-    pose.tiltX += (Math.atan2(forwardSlope, groundNormal.y) - pose.tiltX) * blend;
-    pose.tiltZ += (-Math.atan2(sideSlope, groundNormal.y) - pose.tiltZ) * blend;
-    tilt.rotation.set(pose.tiltX, 0, pose.tiltZ);
-
-    body.position.y = Math.sin(pose.stride * 2) * 0.03 * moving + Math.sin(pose.idleTime * 1.7) * 0.012;
-    shellPivot.rotation.z = 0.1 + Math.sin(pose.stride) * 0.06 * moving;
-    shellPivot.rotation.x = SHELL_LEAN_BACK + Math.sin(pose.stride * 2 + 0.6) * 0.03 * moving;
-
+  function pose({ stride, moving, idleTime, claws, retract, withdrawn }) {
     for (const leg of legs) {
-      const cycle = pose.stride + leg.phase;
+      const cycle = stride + leg.phase;
       leg.hip.rotation.y = Math.sin(cycle) * 0.45 * moving * leg.side;
       leg.hip.rotation.z = LEG_RISE + Math.max(0, Math.cos(cycle)) * 0.3 * moving;
       leg.knee.rotation.z = LEG_SPLAY - leg.hip.rotation.z;
-    }
-
-    const idleOpen = 0.16 + 0.08 * Math.sin(pose.idleTime * 0.9);
-    const claws = { big: { reach: Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen, spread: 0 }, small: { reach: -Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen * 0.8, spread: 0 } };
-    let lunge = 0;
-    let pitch = 0;
-    if (working && gatherType) {
-      const gather = gatherPose(gatherType, gatherProgress);
-      Object.assign(claws, { big: gather.big, small: gather.small });
-      lunge = gather.lunge;
-      pitch = gather.pitch;
-    }
-    attack.time = Math.min(1, attack.time + deltaTime / ATTACK_SECONDS);
-    if (attack.time < 1) {
-      const windup = THREE.MathUtils.smoothstep(attack.time, 0, 0.33) * (1 - THREE.MathUtils.smoothstep(attack.time, 0.33, 0.48));
-      const strike = THREE.MathUtils.smoothstep(attack.time, 0.33, 0.48) * (1 - THREE.MathUtils.smoothstep(attack.time, 0.55, 1));
-      const power = attack.variant === 'both' ? 1.3 : 1;
-      for (const which of attack.variant === 'both' ? ['big', 'small'] : [attack.variant]) {
-        claws[which] = { reach: -0.75 * windup + 0.85 * strike * power, open: 0.9 * windup + 0.05 * strike, spread: -0.35 * strike };
-      }
-      lunge += (-0.14 * windup + 0.5 * strike) * power;
-      pitch += -0.12 * windup + 0.14 * strike * power;
     }
     for (const [which, claw] of [['big', bigClaw], ['small', smallClaw]]) {
       const side = which === 'big' ? -1 : 1;
@@ -572,59 +657,22 @@ export function createHermit(scene, quality, shellLook) {
       claw.shoulder.rotation.x = 0.25 + claws[which].reach;
       claw.shoulder.rotation.y = side * (0.5 + claws[which].spread);
     }
-
-    hurt.amount = Math.max(0, hurt.amount - deltaTime / HURT_SECONDS);
-    const deathShare = death.time >= 0 ? Math.min(1, (death.time += deltaTime / DEATH_SECONDS)) : 0;
-    const moltWiggle = withdrawn ? 0.82 + 0.12 * Math.sin(pose.idleTime * 7) ** 2 : 0;
-    const retract = Math.max(Math.pow(hurt.amount, 0.5) * Math.min(1, 0.7 + 0.3 * hurt.strength), THREE.MathUtils.smoothstep(deathShare, 0, 0.35), moltWiggle);
     for (const claw of [bigClaw, smallClaw]) {
       claw.shoulder.rotation.x = THREE.MathUtils.lerp(claw.shoulder.rotation.x, -0.55, retract);
       claw.thumb.rotation.x *= 1 - retract;
     }
     front.position.set(0, 0.12 * retract, -0.5 * retract);
     front.scale.setScalar(1 - 0.32 * retract);
-    body.position.z = lunge;
-    body.rotation.x = pitch - 0.25 * hurt.amount * hurt.strength;
-    const fall = THREE.MathUtils.smoothstep(deathShare, 0.3, 0.8);
-    tilt.rotation.z += fall * 1.35 + hurt.side * hurt.amount * 0.25 * hurt.strength;
     for (const leg of legs) {
       leg.knee.rotation.z += retract * 0.9;
       leg.hip.visible = !withdrawn;
     }
-    const flash = hurt.amount * hurt.amount;
-    flashColor.setRGB(0.75 * flash, 0.62 * flash, 0.55 * flash);
-    material.emissive.copy(flashColor);
-    clawMaterial.emissive.copy(flashColor);
-    const shellGearGlowLook = gearGlow.shell;
-    updateGearGlowUniforms(shellGearGlowUniforms, shellGearGlowLook, pose.idleTime);
-    updateGearGlowUniforms(clawGearGlowUniforms, gearGlow.claws, pose.idleTime);
-    const strongestLook = gearGlow.shell.glow >= gearGlow.claws.glow ? gearGlow.shell : gearGlow.claws;
-    groundGlow.mesh.visible = Boolean(strongestLook.groundGlow);
-    if (strongestLook.groundGlow) {
-      gearGlowColorAt(strongestLook, pose.idleTime, groundGlow.uniforms.uColor.value).multiplyScalar(strongestLook.groundGlow * (0.55 + 0.45 * Math.sin(pose.idleTime * 3.2) ** 2));
-      groundGlow.uniforms.uRainbow.value = strongestLook.rainbow ? 1 : 0;
-      groundGlow.uniforms.uPhase.value = (pose.idleTime * 0.18) % 1;
-      groundGlow.mesh.rotation.set(pose.tiltX, 0, pose.tiltZ);
-      groundGlow.mesh.scale.setScalar(0.75 + 0.25 * strongestLook.groundGlow);
-    }
-    gearGlowParticles.update(strongestLook, pose.idleTime);
-    shellMaterial.emissive.copy(flashColor).multiplyScalar(0.3);
-
-    eyes[0].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8) * 0.06;
-    eyes[1].rotation.x = 0.35 + Math.sin(pose.idleTime * 0.8 + 1.4) * 0.06;
-    antennae[0].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(pose.idleTime * 2.3) * 0.09;
-    antennae[1].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(pose.idleTime * 2.3 + 0.9) * 0.09;
+    eyes[0].rotation.x = 0.35 + Math.sin(idleTime * 0.8) * 0.06;
+    eyes[1].rotation.x = 0.35 + Math.sin(idleTime * 0.8 + 1.4) * 0.06;
+    antennae[0].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(idleTime * 2.3) * 0.09;
+    antennae[1].rotation.x = ANTENNA_FORWARD_TILT + Math.sin(idleTime * 2.3 + 0.9) * 0.09;
     for (const eye of eyes) eye.rotation.x += retract * 0.9;
   }
 
-  function setClawTines(visible) {
-    for (const claw of [bigClaw, smallClaw]) claw.tines.visible = visible;
-  }
-
-  function setClawTint(tint) {
-    if (tint) clawMaterial.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
-    else clawMaterial.color.setRGB(1, 1, 1);
-  }
-
-  return { root, update, wetnessUniforms, setShell, setGearGlow, setClawGrowth, setClawTint, setClawTines, playAttack, playHurt, playDeath, resetPose, clawPosition };
+  return { bigClaw, smallClaw, pose };
 }

@@ -2,7 +2,7 @@ import os, json, sys
 from playwright.sync_api import sync_playwright
 
 BASE = 'file://' + os.path.abspath('dist/index.html')
-URL = BASE + '?quality=low&dpr=0.5&norender'
+URL = BASE + '?quality=low&dpr=0.5&norender' + os.environ.get('CRAB_QUERY', '')
 
 SETUP = r'''() => {
   const d = window.__debug;

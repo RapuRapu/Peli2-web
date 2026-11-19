@@ -13,7 +13,8 @@ const result = await build({
   bundle: true,
   format: 'esm',
   minify: true,
-  target: 'es2020',
+  target: 'es2022',
+  loader: { '.glb': 'binary' },
   write: false,
 });
 

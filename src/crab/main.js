@@ -12,6 +12,7 @@ import { createCampProps } from './camp.js';
 import { createHoldProps } from './hold.js';
 import { createLife } from './life.js';
 import { createHermit } from './hermit.js';
+import { loadCrabAsset } from './hermitAsset.js';
 import { createNavigation } from './navigation.js';
 import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
@@ -343,6 +344,7 @@ pipeline.overlayScene.add(water.mesh);
 const navigation = createNavigation(world);
 const gear = createGear(save.gear);
 const progression = createProgression(save.progression);
+if (searchParameters.get('asset') === 'crab') await loadCrabAsset().catch((error) => console.warn('crab asset failed, using procedural crab', error));
 const hermit = createHermit(scene, quality, gear.wornLook());
 hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
 
