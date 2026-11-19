@@ -9,13 +9,18 @@ with sync_playwright() as p:
     url = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'
     pg.goto(url); pg.wait_for_function('!!window.__debug', timeout=120000)
     report = {}
-    report['hintVisibleAtStart'] = pg.evaluate("!document.querySelector('#hud .hint').classList.contains('hidden')")
+    report['noGoalOrHint'] = pg.evaluate("!document.querySelector('#hud .goal') && !document.querySelector('#hud .hint')")
+    report['vitalsAboveButtons'] = pg.evaluate("document.querySelector('#hud .vitals').getBoundingClientRect().bottom <= document.querySelector('#hud .pause-button').getBoundingClientRect().top")
+    report['settingsLabel'] = pg.evaluate("document.querySelector('#hud .pause-button').getAttribute('aria-label')")
+    pg.tap('#hud .level-badge')
+    report['statusOpens'] = pg.evaluate("document.querySelector('#hud .status-panel').classList.contains('visible') && document.querySelector('#hud .status-panel .status-value').textContent.startsWith('1 / 50')")
+    pg.tap('#hud .status-panel .workbench-close')
+    report['statusCloses'] = pg.evaluate("!document.querySelector('#hud .status-panel').classList.contains('visible')")
     start = pg.evaluate('[__debug.player.x, __debug.player.z]')
     pg.mouse.click(600, 150)
     pg.evaluate('for (let i = 0; i < 240; i++) __debug.simulate(1/60)')
     moved = pg.evaluate('[__debug.player.x, __debug.player.z]')
     report['tapWalkDistance'] = round(((moved[0]-start[0])**2 + (moved[1]-start[1])**2) ** 0.5, 1)
-    report['hintHiddenAfterMove'] = pg.evaluate("document.querySelector('#hud .hint').classList.contains('hidden')")
     report['footprints'] = pg.evaluate('__debug.tracks.activeCount()')
     node = pg.evaluate('''(() => { const d = __debug; const n = d.resources.nodes.filter(n => !n.gathered).map(n => { const v = new (d.camera.position.constructor)(n.x, n.y + 0.4, n.z).project(d.camera); return { id: n.id, sx: (v.x * 0.5 + 0.5) * innerWidth, sy: (-v.y * 0.5 + 0.5) * innerHeight }; }).filter(n => n.sx > 60 && n.sx < innerWidth - 60 && n.sy > 90 && n.sy < innerHeight - 40); return n[0] || null; })()''')
     report['visibleNode'] = node['id'] if node else None

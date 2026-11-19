@@ -85,7 +85,7 @@ export function createWorkbenchModel(scene, world, quality, spot, labelParent) {
   marker.position.set(spot.x, world.heightAt(spot.x, spot.z) + 0.1, spot.z);
   marker.visible = false;
   scene.add(marker);
-  const label = element('div', 'world-label burrow-label hidden', labelParent, '🔨 Workshop');
+  const label = element('div', 'world-label burrow-label hidden', labelParent, 'Workshop');
   const labelPoint = new THREE.Vector3();
 
   return {
@@ -150,7 +150,7 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
   const overlay = element('div', 'workbench workshop-panel', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
-  element('div', 'workbench-title', header, '🔨 Workshop');
+  element('div', 'workbench-title', header, 'Workshop');
   const closeButton = element('button', 'workbench-close', header, '✕');
   closeButton.setAttribute('aria-label', 'Close');
   const tabRow = element('div', 'workbench-tabs', card);
@@ -187,7 +187,7 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
       button.disabled = !canAfford(definition.cost, inventory());
       button.addEventListener('click', () => onCraft(category, kind));
     }
-    if (hidden) element('div', 'placeholder undiscovered', body, `❔ ${hidden} more ${hidden === 1 ? 'recipe' : 'recipes'} to discover — find new materials out in the world.`);
+    if (hidden) element('div', 'placeholder undiscovered', body, `${hidden} more ${hidden === 1 ? 'recipe' : 'recipes'} to discover — find new materials out in the world.`);
   }
 
   function renderResult() {
@@ -198,8 +198,8 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
     const tier = gear.state.toolTier;
     const section = element('div', 'item tools-row', body);
     const text = element('div', 'item-text', section);
-    element('div', 'item-name', text, `🔨 ${TOOL_TIERS[tier].label} · tools T${tier}`);
-    element('div', 'item-ability', text, `Crafting T${tier} gear → Fine. Lower tiers → ★ Masterwork (+25%). Higher tiers → Crude (−15%).`);
+    element('div', 'item-name', text, `${TOOL_TIERS[tier].label} · tools T${tier}`);
+    element('div', 'item-ability', text, `Crafting T${tier} gear: Fine. Lower tiers: ★ Masterwork (+25%). Higher tiers: Crude (−15%).`);
     const next = TOOL_TIERS[tier + 1];
     if (!next) {
       element('div', 'item-stats', text, 'Your tools are the best there are.');
@@ -211,7 +211,7 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
     button.dataset.upgradeTools = String(tier + 1);
     button.disabled = !canAfford(next.cost, inventory());
     button.addEventListener('click', () => {
-      if (onUpgradeTools()) improveState.lastResult = `🔨 New tools: ${next.label}!`;
+      if (onUpgradeTools()) improveState.lastResult = `New tools: ${next.label}!`;
       render();
     });
   }
@@ -260,7 +260,7 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
           description: `Rework it with your ${TOOL_TIERS[gear.state.toolTier].label.toLowerCase()}.`,
           cost: refineCost(definition), dataKey: 'refine', dataValue: String(item.id),
           onChoose: () => {
-            if (onRefine(item.id)) improveState.lastResult = `★ ${definition.label} is now ${QUALITIES[target].label.toLowerCase()}!`;
+            if (onRefine(item.id)) improveState.lastResult = `${definition.label} is now ${QUALITIES[target].label.toLowerCase()}!`;
             render();
           },
         });
@@ -272,7 +272,7 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
           label: choice.label, description: item[field] && item[field] !== key ? `${choice.description} · replaces ${modification.label.toLowerCase()}` : choice.description,
           cost: choice.cost, dataKey: 'modify', dataValue: `${item.id}:${key}`, current: item[field] === key,
           onChoose: () => {
-            if (onModify(item.id, key)) improveState.lastResult = `🔧 ${definition.label}: ${choice.label.toLowerCase()} on`;
+            if (onModify(item.id, key)) improveState.lastResult = `${definition.label}: ${choice.label.toLowerCase()} on`;
             render();
           },
         });

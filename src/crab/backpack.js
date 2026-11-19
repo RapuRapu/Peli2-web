@@ -1,16 +1,17 @@
 import { CLAWS } from './gear.js';
-import { element, percent } from './workbench.js';
-import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures, salvageAction } from './inventoryView.js';
+import { element } from './workbench.js';
+import { materialEntries, gearEntries, renderSlot, renderItemPopup, attachSlotGestures, salvageAction } from './inventoryView.js';
 import { itemName, itemStatsText, definitionOf, shellDefense, clawAttack } from './itemInfo.js';
 
-export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, growthText, thumbnails, onWear, onUnequip, onEat, onSalvage, onClose }) {
+export function createBackpackPanel(root, { gear, inventory, thumbnails, onWear, onUnequip, onEat, onSalvage, onClose }) {
   const overlay = element('div', 'workbench backpack', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
-  element('div', 'workbench-title', header, '🎒 Backpack');
+  element('div', 'workbench-title', header, 'Backpack');
   const closeButton = element('button', 'workbench-close', header, '✕');
   closeButton.setAttribute('aria-label', 'Close');
   const body = element('div', 'workbench-body inventory-body', card);
+  const popupHost = element('div', 'item-popup-host', card);
   let selectedKey = null;
 
   const wornEntry = (category) => {
@@ -29,12 +30,12 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
 
   function wearEntry(entry) {
     if (entry.kind !== 'gear') return;
-    selectedKey = entry.key;
+    selectedKey = null;
     onWear(entry.item.id);
   }
 
   function unequipEntry(entry) {
-    selectedKey = entry.key;
+    selectedKey = null;
     onUnequip(entry.category);
   }
 
@@ -89,21 +90,23 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     const equipRow = element('div', 'equip-row', dollColumn);
     renderEquipSlot(equipRow, 'shell');
     renderEquipSlot(equipRow, 'claws');
-    const stats = combatStats();
-    element('div', 'summary doll-summary', dollColumn, `❤ ${maxHealth()} · 🛡 ${stats.defense} · 🏃 ${percent(stats.speedFactor)} · 🗡️ ${stats.attack}`);
-    element('div', 'summary doll-summary growth-summary', dollColumn, growthText());
     const gridColumn = element('div', 'grid-column', layout);
     const entries = allEntries();
-    element('div', 'section-title grid-title', gridColumn, `🎒 ${entries.length} · double-tap to wear`);
+    element('div', 'section-title grid-title', gridColumn, `${entries.length} items · tap to inspect · double-tap to wear`);
     const grid = element('div', 'slot-grid', gridColumn);
     for (const entry of entries) renderSlot(grid, entry, thumbnails, { selected: entry.key === selectedKey, zone: 'grid' });
     if (!entries.length) element('div', 'details-hint', grid, 'Empty — gather on the beach!');
     const selected = selectedKey ? entryFor(selectedKey) : null;
     if (!selected) selectedKey = null;
-    renderDetails(gridColumn, selected, actionsFor(selected), undefined, compareWithWorn);
+    popupHost.replaceChildren();
+    renderItemPopup(popupHost, selected, actionsFor(selected), compareWithWorn, () => {
+      selectedKey = null;
+      render();
+    });
   }
 
   attachSlotGestures(card, {
+    deferSelect: true,
     entryFor,
     onSelect: (entry) => {
       selectedKey = entry.key;

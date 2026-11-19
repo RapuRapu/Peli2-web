@@ -69,7 +69,7 @@ function buildPropModel(name, width, material) {
 export const STATION_KINDS = {
   workshop: { label: 'Workshop', icon: '🔨', cost: { shellBits: 5, driftwood: 3, seaLettuce: 3 }, description: 'Craft shells and claws, improve your gear.' },
   storage: { label: 'Storage', icon: '📦', cost: { driftwood: 4 }, description: 'Keeps materials and gear safe — stored things stay here when you are defeated.' },
-  dryingRack: { label: 'Drying rack', icon: '🍂', cost: { driftwood: 4, shellBits: 2 }, description: 'Built in the sun beside your burrow entrance. Dries 3 🥬 into 1 🍂 in 60 s.', surface: true },
+  dryingRack: { label: 'Drying rack', icon: '🍂', cost: { driftwood: 4, shellBits: 2 }, description: 'Built in the sun beside your burrow entrance. Dries 3 sea lettuce into 1 dried kelp in 60 s.', surface: true },
 };
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
@@ -261,7 +261,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   }
   entranceGroup.visible = false;
   scene.add(entranceGroup);
-  const entranceLabel = element('div', 'world-label surface-label entrance-label hidden', labelParent, '🕳️ Burrow');
+  const entranceLabel = element('div', 'world-label surface-label entrance-label hidden', labelParent, 'Burrow');
 
   const interior = new THREE.Group();
   interior.position.set(BURROW_ORIGIN.x, BURROW_ORIGIN.y, BURROW_ORIGIN.z);
@@ -304,7 +304,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   highlights.renderOrder = 6;
   interior.add(highlights);
   scene.add(interior);
-  const exitLabel = element('div', 'world-label burrow-label exit-label hidden', labelParent, '⬆ Exit');
+  const exitLabel = element('div', 'world-label burrow-label exit-label hidden', labelParent, 'Exit');
   const stationMeshes = new Map();
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
@@ -434,7 +434,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     mesh.rotation.y = 0.35;
     interior.add(mesh);
     setLayers(mesh, [BURROW_LAYER]);
-    const label = element('div', 'world-label burrow-label station-label hidden', labelParent, '📦 Storage');
+    const label = element('div', 'world-label burrow-label station-label hidden', labelParent, 'Storage');
     stationMeshes.set(station, mesh);
     station.label = label;
   }
@@ -666,6 +666,11 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     if (show) label.style.transform = `translate(-50%, -100%) translate(${(projected.x * 0.5 + 0.5) * innerWidth}px, ${(-projected.y * 0.5 + 0.5) * innerHeight}px)`;
   }
 
+  function travelPoint(underground) {
+    if (underground) return { x: shaftCenter.x, y: BURROW_ORIGIN.y + 1.4, z: shaftCenter.z - 0.6 };
+    return { x: state.entrance.x, y: entranceGroup.position.y + 2.4, z: state.entrance.z };
+  }
+
   function update(time, camera, underground) {
     if (state.entrance) placeLabel(entranceLabel, state.entrance.x, entranceGroup.position.y + 2.4, state.entrance.z, camera, !underground);
     placeLabel(exitLabel, shaftCenter.x, BURROW_ORIGIN.y + 1.4, shaftCenter.z - 0.6, camera, underground);
@@ -716,6 +721,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     hasStation,
     stationOf,
     update,
+    travelPoint,
     get exists() {
       return Boolean(state.entrance);
     },

@@ -72,11 +72,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
   const carryOutline = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.38, 1), new THREE.MeshBasicMaterial({ color: 0x1a1208, side: THREE.BackSide }), HELPER_LIMIT);
   carryOutline.count = 0;
   carryOutline.frustumCulled = false;
-  const ringMesh = new THREE.InstancedMesh(new THREE.RingGeometry(0.75, 0.98, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 2.0, 1.9), transparent: true, opacity: 0.75, depthWrite: false, depthTest: false, fog: false }), HELPER_LIMIT);
-  ringMesh.count = 0;
-  ringMesh.frustumCulled = false;
-  ringMesh.renderOrder = 5;
-  scene.add(surfaceMesh, burrowMesh, carryMesh, carryOutline, ringMesh);
+  scene.add(surfaceMesh, burrowMesh, carryMesh, carryOutline);
   const transform = new THREE.Object3D();
   let entrance = null;
 
@@ -276,12 +272,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       transform.rotation.set(0, helper.heading || 0, 0);
       transform.scale.setScalar(HELPER_SIZE);
       transform.updateMatrix();
-      surfaceMesh.setMatrixAt(surfaceCount, transform.matrix);
-      transform.position.set(helper.x, helper.y + 0.12, helper.z);
-      transform.rotation.set(0, 0, 0);
-      transform.scale.setScalar(1);
-      transform.updateMatrix();
-      ringMesh.setMatrixAt(surfaceCount++, transform.matrix);
+      surfaceMesh.setMatrixAt(surfaceCount++, transform.matrix);
       if (helper.carrying) {
         transform.position.set(helper.x, helper.y + 1.45 + bob, helper.z);
         transform.scale.setScalar(1);
@@ -292,11 +283,10 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       }
     }
     surfaceMesh.count = surfaceCount;
-    ringMesh.count = surfaceCount;
     burrowMesh.count = burrowCount;
     carryMesh.count = carryCount;
     carryOutline.count = carryCount;
-    for (const mesh of [surfaceMesh, ringMesh, burrowMesh, carryMesh, carryOutline]) mesh.instanceMatrix.needsUpdate = true;
+    for (const mesh of [surfaceMesh, burrowMesh, carryMesh, carryOutline]) mesh.instanceMatrix.needsUpdate = true;
     if (carryMesh.instanceColor) carryMesh.instanceColor.needsUpdate = true;
   }
 

@@ -93,7 +93,6 @@ with sync_playwright() as playwright:
     goal = page.evaluate(r"""async () => {
       const d = window.__debug; const out = {};
       const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
-      const goalText = () => { const goal = document.querySelector('#hud .goal'); return goal.classList.contains('hidden') ? null : goal.textContent; };
       d.setPaused(false);
       for (const enemy of d.enemies.list) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 });
       Object.assign(d.save.inventory, { shellBits: 8, driftwood: 3, seaLettuce: 3 });
@@ -105,20 +104,19 @@ with sync_playwright() as playwright:
       Object.assign(d.save.inventory, { scrap: 4, cloth: 2, pearls: 2 });
       d.gear.state.toolTier = 2;
       d.upgradeTools();
-      out.goal = goalText();
-      document.querySelector('#hud .goal').click();
+      const nearest = d.resources.nodes.filter((node) => node.type === 'fishBone' && !node.gathered).sort((a, b) => Math.hypot(a.x - d.player.x, a.z - d.player.z) - Math.hypot(b.x - d.player.x, b.z - d.player.z))[0];
+      d.setDestination(nearest.x, nearest.z, nearest);
       const target = d.player.gatherTarget;
       out.walksToBone = !!target && target.type === 'fishBone';
       out.walkSeconds = +step(240, () => d.save.holdFound).toFixed(1);
       out.holdFound = d.save.holdFound;
-      out.goalAfter = goalText();
       step(60, () => target.gathered);
       out.boneInBag = d.save.inventory.fishBone || 0;
       d.persist();
       return out;
     }""")
     print('goal', json.dumps(goal), flush=True)
-    checks['shipwreckGoal'] = goal['goal'] == '⚓ Explore the shipwreck' and goal['walksToBone'] and goal['holdFound'] and goal['goalAfter'] is None and goal['boneInBag'] == 1
+    checks['findShipwreck'] = goal['walksToBone'] and goal['holdFound'] and goal['boneInBag'] == 1
 
     page.evaluate("() => __debug.setPaused(true)")
     page.evaluate(HELPERS)

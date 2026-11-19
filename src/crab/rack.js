@@ -78,7 +78,7 @@ export function createRack(scene, world, quality, labelParent, saved) {
   group.scale.setScalar(RACK_SCALE);
   group.visible = false;
   scene.add(group);
-  const label = element('div', 'world-label surface-label hidden', labelParent, '🍂 Drying rack');
+  const label = element('div', 'world-label surface-label hidden', labelParent, 'Drying rack');
   const transform = new THREE.Object3D();
   const color = new THREE.Color();
   const projected = new THREE.Vector3();
@@ -190,7 +190,7 @@ export function createRack(scene, world, quality, labelParent, saved) {
     const show = visible && projected.z < 1;
     label.classList.toggle('hidden', !show);
     if (show) {
-      label.textContent = current.ready ? `🍂 Drying rack · ${current.ready} ready` : '🍂 Drying rack';
+      label.textContent = current.ready ? `Drying rack · ${current.ready} ready` : 'Drying rack';
       label.style.transform = `translate(-50%, -100%) translate(${(projected.x * 0.5 + 0.5) * innerWidth}px, ${(-projected.y * 0.5 + 0.5) * innerHeight}px)`;
     }
   }

@@ -42,7 +42,7 @@ function costText(cost, inventory) {
 }
 
 export function createBuildPanel(root, { inventory, hasStation, onChoose, onClose }) {
-  const shell = createPanelShell(root, 'build-panel', '🏗️ Build', onClose);
+  const shell = createPanelShell(root, 'build-panel', 'Build', onClose);
 
   function render() {
     shell.body.replaceChildren();
@@ -76,7 +76,7 @@ export function createBuildPanel(root, { inventory, hasStation, onChoose, onClos
 }
 
 export function createStoragePanel(root, { gear, inventory, storage, thumbnails, onChange, onSalvage, onMove, onDismantle, onClose }) {
-  const shell = createPanelShell(root, 'storage-panel', '📦 Storage', onClose);
+  const shell = createPanelShell(root, 'storage-panel', 'Storage', onClose);
   let selected = null;
 
   function moveMaterial(type, toStorage) {
@@ -167,18 +167,18 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
   function render() {
     shell.body.replaceChildren();
     element('div', 'summary', shell.body, 'Stored things stay safe here when you are defeated.');
-    const storeAllButton = element('button', 'item-action store-all', shell.body, '⬇ Store all · worn gear stays on you');
+    const storeAllButton = element('button', 'item-action store-all', shell.body, 'Store all · worn gear stays on you');
     storeAllButton.addEventListener('click', storeAll);
     const sides = element('div', 'storage-sides', shell.body);
-    renderSide(sides, '🎒 Backpack', 'backpack', backpackEntries());
-    renderSide(sides, '📦 Storage', 'storage', storageEntries());
+    renderSide(sides, 'Backpack', 'backpack', backpackEntries());
+    renderSide(sides, 'Storage', 'storage', storageEntries());
     const entry = selected ? entryFor(selected.key, selected.zone) : null;
     if (!entry) selected = null;
     const actions = [];
     if (entry) {
       const toStorage = selected.zone === 'backpack';
       const data = entry.kind === 'material' ? { [toStorage ? 'store' : 'take']: entry.type } : { [toStorage ? 'storeItem' : 'takeItem']: String(entry.item.id) };
-      actions.push({ label: toStorage ? '⬇ Store' : '⬆ Take', secondary: !toStorage, data, run: () => move(entry, selected.zone) });
+      actions.push({ label: toStorage ? 'Store' : 'Take', secondary: !toStorage, data, run: () => move(entry, selected.zone) });
       const zone = selected.zone;
       const salvageButton = entry.kind === 'gear' ? salvageAction(entry, () => salvage(entry, zone)) : null;
       if (salvageButton) actions.push(salvageButton);
@@ -215,20 +215,20 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
   };
 }
 
-const JOB_LABELS = { shellBits: '🐚 Shell bits', driftwood: '🪵 Driftwood', seaLettuce: '🥬 Sea lettuce', rack: '🍂 Tend rack', driedKelp: '🍂 Dried kelp' };
+const JOB_LABELS = { shellBits: 'Shell bits', driftwood: 'Driftwood', seaLettuce: 'Sea lettuce', rack: 'Tend rack', driedKelp: 'Dried kelp' };
 function helperStatus(helper) {
   const job = JOB_LABELS[helper.job];
-  if (helper.state === 'resting') return helper.job === 'rack' ? '💤 Resting · tends the rack when there is 🥬 in storage or 🍂 to bring' : '💤 Resting in the burrow';
-  if (helper.state === 'toRack') return helper.carrying ? '➜ Taking 🥬 to the drying rack' : '➜ Fetching 🍂 from the drying rack';
-  if (helper.state === 'outbound') return `➜ Heading out for ${job}`;
-  if (helper.state === 'gathering') return `⛏ Gathering ${job}`;
+  if (helper.state === 'resting') return helper.job === 'rack' ? 'Resting · tends the rack when there is sea lettuce in storage or dried kelp to bring' : 'Resting in the burrow';
+  if (helper.state === 'toRack') return helper.carrying ? 'Taking sea lettuce to the drying rack' : 'Fetching dried kelp from the drying rack';
+  if (helper.state === 'outbound') return `Heading out for ${job}`;
+  if (helper.state === 'gathering') return `Gathering ${job}`;
   if (helper.state === 'returning') return helper.carrying ? `⬅ Carrying ${JOB_LABELS[helper.carrying]} home` : '⬅ Coming home';
-  if (helper.state === 'fleeing') return '⚠ Fleeing home!';
+  if (helper.state === 'fleeing') return 'Fleeing home!';
   return helper.state;
 }
 
 export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs, requirement, onRecruit, onJob, onClose }) {
-  const shell = createPanelShell(root, 'helpers-panel', '🦀 Helpers', onClose);
+  const shell = createPanelShell(root, 'helpers-panel', 'Helpers', onClose);
 
   function render() {
     shell.body.replaceChildren();
@@ -277,13 +277,13 @@ export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs
 }
 
 export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLoad, onCollect, onMove, onDismantle, onClose }) {
-  const shell = createPanelShell(root, 'rack-panel', '🍂 Drying rack', onClose);
+  const shell = createPanelShell(root, 'rack-panel', 'Drying rack', onClose);
 
   function render() {
     shell.body.replaceChildren();
     const state = rack.state;
     if (!state) return;
-    element('div', 'summary', shell.body, `${batch} 🥬 dry into 1 🍂 dried kelp in ${drySeconds} s. Eat it from 🎒 (Well fed: 2× HP regen for 90 s) or craft Kelp-wrapped claws.`);
+    element('div', 'summary', shell.body, `${batch} sea lettuce dry into 1 dried kelp in ${drySeconds} s. Eat it from the backpack (Well fed: 2× HP regen for 90 s) or craft Kelp-wrapped claws.`);
     const slots = element('div', 'rack-slots', shell.body);
     state.slots.forEach((progress, index) => {
       const slot = element('div', progress === null ? 'rack-slot empty' : 'rack-slot', slots);
@@ -299,8 +299,8 @@ export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLo
     const have = inventory().seaLettuce || 0;
     const loadRow = element('div', 'item', shell.body);
     const loadText = element('div', 'item-text', loadRow);
-    element('div', 'item-name', loadText, `Hang ${batch} 🥬 to dry`);
-    element('div', have >= batch ? 'item-stats' : 'item-stats short-text', loadText, `You have 🥬 ${have}`);
+    element('div', 'item-name', loadText, `Hang ${batch} sea lettuce to dry`);
+    element('div', have >= batch ? 'item-stats' : 'item-stats short-text', loadText, `You have ${have} sea lettuce`);
     if (have < batch) element('div', 'panel-hint', loadText, 'Sea lettuce grows at the waterline and in tide pools.');
     const loadButton = element('button', 'item-action', loadRow, 'Hang');
     loadButton.dataset.rackLoad = '1';
@@ -308,7 +308,7 @@ export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLo
     loadButton.addEventListener('click', () => onLoad());
     const collectRow = element('div', state.ready ? 'item ready-row' : 'item', shell.body);
     const collectText = element('div', 'item-text', collectRow);
-    element('div', 'item-name', collectText, `🍂 Ready: ${state.ready}`);
+    element('div', 'item-name', collectText, `Ready: ${state.ready}`);
     const collectButton = element('button', 'item-action take', collectRow, 'Collect');
     collectButton.dataset.rackCollect = '1';
     collectButton.disabled = state.ready === 0;

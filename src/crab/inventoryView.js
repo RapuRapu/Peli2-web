@@ -1,7 +1,7 @@
 import { CLAWS, salvageReturn } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { element } from './workbench.js';
-import { definitionOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, qualityBadge, masterworkGlowCss } from './itemInfo.js';
+import { definitionOf, modificationOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, qualityBadge, masterworkGlowCss } from './itemInfo.js';
 
 const QUALITY_RANK = ['crude', 'fine', 'masterwork'];
 
@@ -43,6 +43,7 @@ export function renderSlot(parent, entry, thumbnails, { selected = false, zone =
   else element('div', 'slot-emoji', slot, entry.category === 'shell' ? '🐚' : '🦀');
   element('div', 'slot-tier', slot, tierBadge(definition));
   element('div', 'slot-category', slot, entry.category === 'claws' ? '🗡️' : '🛡️');
+  if (modificationOf(entry.category, entry.item)) element('div', 'slot-modification', slot, '+');
   const badge = qualityBadge(entry.item);
   if (badge) element('div', `slot-quality quality-${entry.item.quality}`, slot, badge);
   const glow = masterworkGlowCss(entry.item);
@@ -50,6 +51,22 @@ export function renderSlot(parent, entry, thumbnails, { selected = false, zone =
   if (entry.item.isNew) element('div', 'new-badge slot-new', slot, 'NEW');
   slot.title = itemName(entry.category, entry.item);
   return slot;
+}
+
+export function renderItemPopup(parent, entry, actions, compareWith, onDismiss) {
+  if (!entry) return null;
+  const backdrop = element('div', 'item-popup', parent);
+  backdrop.addEventListener('pointerdown', (event) => {
+    if (event.target === backdrop) {
+      event.stopPropagation();
+      onDismiss();
+    }
+  });
+  const card = element('div', 'item-popup-card', backdrop);
+  const closeButton = element('button', 'workbench-close item-popup-close', card, '✕');
+  closeButton.setAttribute('aria-label', 'Close item');
+  closeButton.addEventListener('click', onDismiss);
+  return renderDetails(card, entry, actions, undefined, compareWith);
 }
 
 export function renderDetails(parent, entry, actions, hint = 'Tap an item to see it. Double-tap gear to wear it.', compareWith = null) {
@@ -82,9 +99,10 @@ export function renderDetails(parent, entry, actions, hint = 'Tap an item to see
   return details;
 }
 
-export function attachSlotGestures(container, { entryFor, onSelect, onActivate }) {
+export function attachSlotGestures(container, { entryFor, onSelect, onActivate, deferSelect = false }) {
   let press = null;
   let lastTap = { key: null, time: 0 };
+  let pendingSelect = 0;
 
   container.addEventListener('pointerdown', (event) => {
     const slot = event.target.closest('[data-slot-key]');
@@ -103,12 +121,15 @@ export function attachSlotGestures(container, { entryFor, onSelect, onActivate }
     const entry = entryFor(finished.key, finished.zone);
     if (!entry) return;
     if (lastTap.key === finished.key && event.timeStamp - lastTap.time < DOUBLE_TAP_MILLISECONDS) {
+      clearTimeout(pendingSelect);
       lastTap = { key: null, time: 0 };
       onActivate(entry, finished.zone);
       return;
     }
     lastTap = { key: finished.key, time: event.timeStamp };
-    onSelect(entry, finished.zone);
+    clearTimeout(pendingSelect);
+    if (!deferSelect) onSelect(entry, finished.zone);
+    else pendingSelect = setTimeout(() => onSelect(entryFor(finished.key, finished.zone) || entry, finished.zone), DOUBLE_TAP_MILLISECONDS);
   });
 
   container.addEventListener('pointercancel', () => {
@@ -144,12 +165,12 @@ export function confirmOnSecondTap(button, label, confirmLabel, run, key = confi
 
 export function renderStructureActions(parent, { label, onMove, onDismantle }) {
   const row = element('div', 'structure-actions', parent);
-  const moveButton = element('button', 'item-action take', row, '↔ Move');
+  const moveButton = element('button', 'item-action take', row, 'Move');
   moveButton.dataset.structureMove = label;
   moveButton.addEventListener('click', onMove);
-  const dismantleButton = element('button', 'item-action take dismantle', row, '🔨 Dismantle');
+  const dismantleButton = element('button', 'item-action take dismantle', row, 'Dismantle');
   dismantleButton.dataset.structureDismantle = label;
-  confirmOnSecondTap(dismantleButton, '🔨 Dismantle', `Tap again to dismantle the ${label}`, onDismantle);
+  confirmOnSecondTap(dismantleButton, 'Dismantle', `Tap again to dismantle the ${label}`, onDismantle);
   return row;
 }
 
@@ -157,5 +178,5 @@ export function salvageAction(entry, run) {
   const refund = salvageReturn(entry.item.kind, definitionOf(entry.category, entry.item.kind));
   if (!refund) return null;
   const gain = Object.entries(refund).map(([type, amount]) => `${amount} ${RESOURCE_TYPES[type].icon}`).join(' ');
-  return { label: `♻️ Salvage · +${gain}`, secondary: true, confirm: 'Tap again to salvage', data: { salvage: String(entry.item.id) }, run };
+  return { label: `Salvage · +${gain}`, secondary: true, confirm: 'Tap again to salvage', data: { salvage: String(entry.item.id) }, run };
 }

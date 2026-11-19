@@ -52,15 +52,19 @@ with sync_playwright() as playwright:
     }""")
     print('view', json.dumps(view), flush=True)
     grid = {g['id']: g for g in view['gridGear']}
-    checks['qualityInNames'] = view['wornNames'] == ['Masterwork coral shell', 'Masterwork coral-tipped claws'] and view['wornStats'][0].startswith('🛡 19') and view['wornStats'][1] == '🗡️ +12'
-    checks['tiers'] = grid['702']['tier'] == 'tier-1' and grid['703']['tier'] == 'tier-2' and grid['703']['badge'] == 'T2' and grid['705']['tier'] == 'tier-5 tier-trophy' and grid['705']['badge'] == '👑 T5' and grid['703']['quality'] == '★' and grid['702']['quality'] == ''
+    checks['qualityInNames'] = view['wornNames'] == ['Masterwork coral shell + metal plate', 'Masterwork coral-tipped claws + wire binding'] and view['wornStats'][0].startswith('🛡 19') and view['wornStats'][1] == '🗡️ +12'
+    checks['tiers'] = grid['702']['tier'] == 'tier-1' and grid['703']['tier'] == 'tier-2' and grid['703']['badge'] == 'T2' and grid['705']['tier'] == 'tier-5 tier-trophy' and grid['705']['badge'] == 'T5' and grid['703']['quality'] == '★' and grid['702']['quality'] == ''
     checks['slotsAndImages'] = len(view['gridGear']) == 3 and all(g['image'] for g in view['gridGear']) and view['materials'] == ['shellBits×8', 'coral×3', 'scrap×5', 'driedKelp×1'] and view['doll']
 
     page.click('#hud .backpack .slot-grid [data-slot-item="703"]')
+    page.wait_for_timeout(450)
     details = page.evaluate("() => ({ name: document.querySelector('#hud .backpack .item-details .item-name').textContent, tier: document.querySelector('#hud .backpack .item-details .item-tier').textContent, breakdown: document.querySelector('#hud .backpack .item-details .item-owned')?.textContent, delta: document.querySelector('#hud .backpack .item-details .stat-delta')?.textContent, wear: !!document.querySelector('#hud .backpack [data-wear=\"703\"]') })")
     print('details', json.dumps(details), flush=True)
     checks['details'] = details['delta'] == ' ▼13 vs worn' and details['name'] == 'Masterwork spiral whelk' and 'Tier 2' in details['tier'] and 'Boss trophy' not in details['tier'] and details['breakdown'] == '🛡 5 + 1 masterwork' and details['wear']
 
+    popup_shown = page.evaluate("() => !!document.querySelector('#hud .backpack .item-popup')")
+    page.click('#hud .backpack .item-popup-close')
+    checks['popupOpensAndCloses'] = popup_shown and page.evaluate("() => !document.querySelector('#hud .backpack .item-popup')")
     page.dblclick('#hud .backpack .slot-grid [data-slot-item="702"]')
     after_double = page.evaluate("() => __debug.gear.wornShell().kind")
     page.dblclick('#hud .backpack .slot-grid [data-slot-item="705"]')
@@ -80,6 +84,7 @@ with sync_playwright() as playwright:
     checks['doubleTapSwapAndSwipe'] = after_drag_doll == 'cleaver' and after_drag_slot == 'coral' and after_unequip_drag == 'bare' and coral_untouched
 
     page.click('#hud .backpack .slot-grid [data-material="driedKelp"]')
+    page.wait_for_timeout(450)
     page.click('#hud .backpack [data-eat]')
     checks['eatFromDetails'] = page.evaluate("() => __debug.isWellFed() && !__debug.save.inventory.driedKelp")
     page.evaluate("() => __debug.backpack.close()")

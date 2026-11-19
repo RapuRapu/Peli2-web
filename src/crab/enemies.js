@@ -86,7 +86,7 @@ function painted(geometry, colorAt) {
   return geometry.index ? geometry.toNonIndexed() : geometry;
 }
 
-const barName = (definition) => (definition.boss ? `👑 ${definition.label}` : definition.label);
+const barName = (definition) => definition.label;
 const solid = (geometry, color) => painted(geometry, (target) => target.copy(color));
 
 function buildHopperGeometry() {
@@ -565,7 +565,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     enemy.attackTimer -= deltaTime;
     if (definition.inkEvery && !enemy.inkWindup && enemy.attackTimer < definition.windup && (enemy.strikesMade + 1) % definition.inkEvery === 0) {
       enemy.inkWindup = true;
-      onWarn(enemy, '🦑 Ink!');
+      onWarn(enemy, 'Ink!');
     }
     if (enemy.attackTimer > 0) return;
     enemy.attackTimer = definition.attackInterval;
@@ -604,7 +604,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       const stompDue = (enemy.strikesMade + 1) % telegraph.stompEvery === 0 && toPlayer < telegraph.stompRadius + PLAYER_BODY_RADIUS;
       if (stompDue) {
         enemy.zone = { x: enemy.x, z: enemy.z, radius: telegraph.stompRadius, timer: telegraph.stompWindup, duration: telegraph.stompWindup, stomp: true };
-        onWarn(enemy, '⚠ Stomp!');
+        onWarn(enemy, 'Stomp!');
         return true;
       }
       const centerDistance = enemy.definition.radius * 0.5 + telegraph.lineLength / 2;
@@ -621,7 +621,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       if (canPounce) {
         enemy.heading = Math.atan2(player.x - enemy.x, player.z - enemy.z);
         enemy.zone = { x: player.x, z: player.z, radius: telegraph.pounceRadius, timer: telegraph.pounceWindup, duration: telegraph.pounceWindup, pounce: true };
-        onWarn(enemy, '⚠ Pounce!');
+        onWarn(enemy, 'Pounce!');
         return true;
       }
       enemy.zone = { x: enemy.x + Math.sin(enemy.heading) * telegraph.reach, z: enemy.z + Math.cos(enemy.heading) * telegraph.reach, radius: telegraph.radius, timer: enemy.definition.windup, duration: enemy.definition.windup };

@@ -14,10 +14,10 @@ FLOW = r'''
   const d = window.__debug;
   const out = {};
   d.setPaused(false);
-  const goal = document.querySelector('#hud .goal');
-  out.firstGoal = goal.textContent;
-  out.firstGoalIsAction = goal.classList.contains('action');
-  goal.click();
+  const digButton = document.querySelector('#hud .build-open');
+  out.digButtonShown = !document.querySelector('#hud .burrow-buttons').classList.contains('hidden');
+  out.helpersHiddenOnSurface = getComputedStyle(document.querySelector('#hud .helpers-button')).display === 'none';
+  digButton.click();
   out.modeShown = !document.querySelector('#hud .mode-bar').classList.contains('hidden');
   out.wetRefused = d.chooseEntranceSpot(0, 40) === false;
   const spot = window.__findEntranceSpot();
@@ -25,12 +25,14 @@ FLOW = r'''
   out.spotAccepted = d.chooseEntranceSpot(spot.x, spot.z);
   out.digSeconds = window.__step(20, () => d.burrow.exists);
   out.burrowExists = d.burrow.exists;
-  out.goalAfterDig = goal.textContent;
   d.walkToEntrance();
   out.walkSeconds = window.__step(20, () => d.travelOption() === 'enter');
   out.stayedOutsideAfterWalk = !d.isUnderground();
   d.renderScene();
   out.travelButtonShown = !document.querySelector('#hud .travel-button').classList.contains('hidden');
+  const entranceScreen = window.__screenOf(d.burrow.state.entrance.x, d.world.heightAt(d.burrow.state.entrance.x, d.burrow.state.entrance.z), d.burrow.state.entrance.z);
+  const travelBox = document.querySelector('#hud .travel-button').getBoundingClientRect();
+  out.travelAboveEntrance = travelBox.bottom <= entranceScreen.y + 4 && Math.abs((travelBox.left + travelBox.right) / 2 - entranceScreen.x) < 80;
   document.querySelector('#hud .travel-button').click();
   out.enterSeconds = window.__step(2, () => d.isUnderground());
   out.underground = d.isUnderground();
@@ -148,10 +150,10 @@ with sync_playwright() as playwright:
     after = page.evaluate(AFTER_PLACE)
     print(json.dumps(after))
     checks.update({
-        'startsWithDigGoal': flow['firstGoal'] == '🕳️ Dig a burrow' and flow['firstGoalIsAction'] and flow['modeShown'],
+        'startsWithDigButton': flow['digButtonShown'] and flow['helpersHiddenOnSurface'] and flow['modeShown'],
         'wetSpotRefused': flow['wetRefused'],
-        'entranceDug': flow['spotAccepted'] and flow['burrowExists'] and flow['goalAfterDig'].startswith('Workshop:'),
-        'entersOnlyByButton': flow['stayedOutsideAfterWalk'] and flow['travelButtonShown'],
+        'entranceDug': flow['spotAccepted'] and flow['burrowExists'],
+        'entersOnlyByButton': flow['stayedOutsideAfterWalk'] and flow['travelButtonShown'] and flow['travelAboveEntrance'],
         'entersBurrow': flow['underground'] and flow['hudUnderground'] and flow['cameraOnBurrowLayer'] and flow['buildButtonShown'] and abs(flow['playerY'] - 200) < 0.01,
         'digsCell': flow['digStarted'] and flow['cellDug'] and flow['notAdjacentRefused'],
         'buildPanelPlacement': flow['buildPanelOpen'] and flow['placingAfterChoose'] and after['workshopBuilt'] and after['inventoryAfterWorkshop'].get('shellBits') == 0,
@@ -175,14 +177,14 @@ with sync_playwright() as playwright:
     old.on('pageerror', lambda error: errors.append(str(error)))
     old.goto(URL)
     old.wait_for_function('!!window.__debug', timeout=180000)
-    migrated = old.evaluate('''() => { const d = window.__debug; return { entrance: d.burrow.state.entrance, stations: d.burrow.state.stations.map((s) => s.kind), worn: d.gear.wornShell().kind, quality: d.gear.wornShell().quality, underground: d.isUnderground(), goal: document.querySelector('#hud .goal').textContent }; }''')
+    migrated = old.evaluate('''() => { const d = window.__debug; return { entrance: d.burrow.state.entrance, stations: d.burrow.state.stations.map((s) => s.kind), worn: d.gear.wornShell().kind, quality: d.gear.wornShell().quality, underground: d.isUnderground() }; }''')
     print(json.dumps(migrated))
     checks['migratesV3'] = migrated['entrance'] == {'x': 18, 'z': -17} and migrated['stations'] == ['workshop'] and migrated['worn'] == 'turban' and migrated['quality'] == 'fine' and not migrated['underground']
     migration.close()
 
     mobile = browser.new_context(viewport={'width': 412, 'height': 915}, is_mobile=True, has_touch=True, device_scale_factor=2)
     touch = fresh_page(mobile, errors)
-    touch.tap('#hud .goal')
+    touch.tap('#hud .build-open')
     spot = touch.evaluate('() => window.__findEntranceSpot()')
     screen = touch.evaluate(f'() => {{ const d = window.__debug; const near = d.navigation.nearestWalkable({spot["x"]} - 3, {spot["z"]} - 2, 6); Object.assign(d.player, {{ x: near.x, z: near.z }}); d.simulate(1 / 60); d.updateCamera(0, true); d.renderScene(); return window.__screenOf({spot["x"]}, d.world.heightAt({spot["x"]}, {spot["z"]}), {spot["z"]}); }}')
     print(json.dumps({'touchSpot': spot, 'screen': screen}))

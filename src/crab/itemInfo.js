@@ -13,17 +13,19 @@ export function tierClass(definition) {
 }
 
 export function tierBadge(definition) {
-  return definition.trophy ? `👑 T${itemTier(definition)}` : `T${itemTier(definition)}`;
+  return `T${itemTier(definition)}`;
 }
 
 export function tierLine(category, definition) {
   const role = category === 'shell' ? definition.role : 'Claws';
-  return `${definition.trophy ? '👑 Boss trophy · ' : ''}Tier ${itemTier(definition)} · ${role}`;
+  return `${definition.trophy ? 'Boss trophy · ' : ''}Tier ${itemTier(definition)} · ${role}`;
 }
 
 export function itemName(category, item) {
   const definition = definitionOf(category, item.kind);
-  return item.quality && item.quality !== 'fine' ? `${QUALITIES[item.quality].label} ${definition.label.toLowerCase()}` : definition.label;
+  const baseName = item.quality && item.quality !== 'fine' ? `${QUALITIES[item.quality].label} ${definition.label.toLowerCase()}` : definition.label;
+  const modification = modificationOf(category, item);
+  return modification ? `${baseName} + ${modification.label.toLowerCase()}` : baseName;
 }
 
 export function shellDefense(definition, item = {}) {

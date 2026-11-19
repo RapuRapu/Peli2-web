@@ -5,7 +5,7 @@ export function createMoltPanel(root, { progression, onMolt, onClose }) {
   const overlay = element('div', 'workbench molt-panel', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
-  element('div', 'workbench-title', header, '🦀 Molt');
+  element('div', 'workbench-title', header, 'Molt');
   const closeButton = element('button', 'workbench-close', header, '✕');
   closeButton.setAttribute('aria-label', 'Close');
   const body = element('div', 'workbench-body', card);

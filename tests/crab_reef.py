@@ -51,22 +51,19 @@ FLOW = r'''
 async () => {
   const d = window.__debug;
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
-  const goalText = () => { const goal = document.querySelector('#hud .goal'); return goal.classList.contains('hidden') ? null : goal.textContent; };
   const out = {};
   d.setPaused(false);
   Object.assign(d.save.inventory, { shellBits: 8, driftwood: 3, seaLettuce: 3 });
   d.buildWorkshop();
-  out.goalBeforeCraft = goalText();
   d.save.inventory.shellBits = 3;
   d.craftItem('shell', 'snail');
   if (d.isUnderground()) d.exitBurrow();
-  out.goalAfterCraft = goalText();
-  document.querySelector('#hud .goal').click();
-  out.walksAfterChipTap = d.player.path.length > 0 && d.player.gatherTarget && d.player.gatherTarget.type === 'coral';
+  const nearestCoral = d.resources.nodes.filter((node) => node.type === 'coral' && !node.gathered).sort((a, b) => Math.hypot(a.x - d.player.x, a.z - d.player.z) - Math.hypot(b.x - d.player.x, b.z - d.player.z))[0];
+  d.setDestination(nearestCoral.x, nearestCoral.z, nearestCoral);
+  out.walksToCoral = d.player.path.length > 0 && d.player.gatherTarget && d.player.gatherTarget.type === 'coral';
   const target = d.player.gatherTarget;
   out.walkSeconds = +step(180, () => target.gathered).toFixed(1);
   out.reefFound = d.save.reefFound;
-  out.goalAfterReef = goalText();
   out.coralInBag = d.save.inventory.coral || 0;
   const glass = d.resources.nodes.find((n) => n.type === 'seaGlass' && !n.gathered);
   d.enemies.calmAll(1e6, d.simulationTime());
@@ -118,7 +115,7 @@ with sync_playwright() as playwright:
     checks['beachUnchanged'] = terrain['homeItemsOffReef'] == 0 and terrain['shoreCrabsOffReef'] == 0
     flow = page.evaluate(FLOW)
     print(json.dumps(flow))
-    checks['exploreGoal'] = flow['goalAfterCraft'] == '🪸 Explore the reef' and flow['goalBeforeCraft'] != flow['goalAfterCraft'] and flow['walksAfterChipTap'] and flow['reefFound'] and flow['goalAfterReef'] is None
+    checks['findReef'] = flow['walksToCoral'] and flow['reefFound']
     checks['gatherReefItems'] = flow['coralInBag'] == 1 and flow['glassInBag'] == 1 and 'coral' in flow['backpackRows'] and 'seaGlass' in flow['backpackRows']
     checks['tideReturns'] = flow['washedBack'] >= 2 and flow['washedOnReef']
     page.reload()

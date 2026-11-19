@@ -104,7 +104,7 @@ LOGIC = r'''
   d.die();
   step(3);
   out.skillAfterDeath = +d.progression.state.clawSkill.toFixed(3);
-  out.backpackGrowth = (() => { d.openBackpack(); const text = document.querySelector('#hud .growth-summary')?.textContent; d.backpack.close(); return text; })();
+  out.backpackGrowth = (() => { document.querySelector('#hud .level-badge').click(); const text = document.querySelector('#hud .status-panel .status-body')?.textContent; document.querySelector('#hud .status-panel .workbench-close').click(); return text; })();
   if (d.remains.list.length) d.recoverRemains(d.remains.list[0]);
   d.persist();
   return out;
@@ -160,7 +160,7 @@ with sync_playwright() as playwright:
         'moltInBurrowOnly': logic['surfaceMoltRefused'] and logic['moltStarted'] and logic['moltingBlocksTravel'] and logic['stillMoltingAt30'],
         'moltGrowsAndSoftens': logic['molts'] == ['crusher'] and logic['softAfterMolt'] and logic['softDefense'] == 5 and logic['attackGrowth'] > 1 and logic['hardAgain'],
         'clawSkill': 9.5 < logic['skillAfter187'] < 10.5 and logic['skillCap'] == 20 and logic['skillAfterDeath'] == 9.5,
-        'backpackShowsGrowth': bool(logic['backpackGrowth']) and 'Claw skill 9.5/20' in logic['backpackGrowth'],
+        'statusShowsGrowth': bool(logic['backpackGrowth']) and 'Claw skill9.5 / 20' in logic['backpackGrowth'],
     })
 
     page.reload()
@@ -229,7 +229,7 @@ with sync_playwright() as playwright:
         wait_frames(touch)
     molting = touch.evaluate('() => ({ molting: window.__debug.isMolting(), panel: window.__debug.moltPanel.isOpen })')
     print(json.dumps({'button': button_visible, 'panel': panel_open, 'molting': molting}), flush=True)
-    checks['touchMolt'] = bool(button_visible) and 'Molt' in button_visible and panel_open and molting == {'molting': True, 'panel': False}
+    checks['touchMolt'] = bool(button_visible) and button_visible.endswith('1') and panel_open and molting == {'molting': True, 'panel': False}
     mobile.close()
     browser.close()
 

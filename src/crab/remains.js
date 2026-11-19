@@ -82,7 +82,7 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     group.add(mesh, ring);
     group.position.set(record.x, y, record.z);
     scene.add(group);
-    const label = element('div', 'world-label remains-label hidden', labelParent, '💀 Remains');
+    const label = element('div', 'world-label remains-label hidden', labelParent, 'Remains');
     return { ...record, y, group, ring, label, gearGlowLookOfShell, gearGlowUniforms };
   }
 

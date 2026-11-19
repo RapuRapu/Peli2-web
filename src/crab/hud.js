@@ -8,22 +8,32 @@ function element(tag, className, parent, text) {
   return node;
 }
 
+const SETTINGS_ICON_SVG = '<svg viewBox="0 0 24 24"><path fill="#fff8e8" fill-rule="evenodd" d="M10.3 1.5h3.4l.5 2.8 1.9.8 2.3-1.6 2.4 2.4-1.6 2.3.8 1.9 2.8.5v3.4l-2.8.5-.8 1.9 1.6 2.3-2.4 2.4-2.3-1.6-1.9.8-.5 2.8h-3.4l-.5-2.8-1.9-.8-2.3 1.6-2.4-2.4 1.6-2.3-.8-1.9-2.8-.5v-3.4l2.8-.5.8-1.9-1.6-2.3 2.4-2.4 2.3 1.6 1.9-.8zM12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6z"/></svg>';
+const TRAVEL_EDGE_PIXELS = 70;
+const TRAVEL_TOP_PIXELS = 130;
+
 export function createHud(activeQualityName) {
   const root = element('div', '', document.body);
   root.id = 'hud';
 
   const topLeft = element('div', 'top-left', root);
   const pauseButton = element('button', 'pause-button', topLeft);
-  pauseButton.setAttribute('aria-label', 'Pause');
-  pauseButton.innerHTML = '<svg viewBox="0 0 14 16"><rect x="1" y="1" width="4" height="14" rx="1" fill="#fff8e8"/><rect x="9" y="1" width="4" height="14" rx="1" fill="#fff8e8"/></svg>';
+  pauseButton.setAttribute('aria-label', 'Settings');
+  pauseButton.innerHTML = SETTINGS_ICON_SVG;
   const bagButton = element('button', 'bag-button', topLeft, '🎒');
   bagButton.setAttribute('aria-label', 'Backpack');
   const bagDot = element('span', 'bag-dot hidden', bagButton);
-  const goal = element('div', 'chip goal', topLeft);
   const burrowButtons = element('div', 'burrow-buttons hidden', root);
-  const moltButton = element('button', 'build-button molt-button hidden', burrowButtons, '🦀 Molt');
-  const helpersButton = element('button', 'build-button helpers-button', burrowButtons, '🦀 Helpers');
-  const buildButton = element('button', 'build-button build-open', burrowButtons, '🏗️ Build');
+  const iconButton = (className, icon, label) => {
+    const button = element('button', `build-button icon-button ${className}`, burrowButtons, icon);
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    return button;
+  };
+  const moltButton = iconButton('molt-button hidden', '🦞', 'Molt');
+  const moltCount = element('span', 'button-count', moltButton);
+  const helpersButton = iconButton('helpers-button', '🦀', 'Helpers');
+  const buildButton = iconButton('build-open', '🔨', 'Build');
   const travelButton = element('button', 'travel-button hidden', root);
   const modeBar = element('div', 'mode-bar hidden', root);
   const modeText = element('span', 'mode-text', modeBar);
@@ -31,7 +41,8 @@ export function createHud(activeQualityName) {
   const sceneFade = element('div', 'scene-fade', root);
 
   const vitals = element('div', 'vitals', root);
-  const levelBadge = element('div', 'level-badge', vitals, 'Lv 1');
+  const levelBadge = element('button', 'level-badge', vitals, 'Lv 1');
+  levelBadge.setAttribute('aria-label', 'Status');
   const bars = element('div', 'vital-bars', vitals);
   const healthTrack = element('div', 'health-track', bars);
   const healthFill = element('div', 'health-fill', healthTrack);
@@ -49,12 +60,11 @@ export function createHud(activeQualityName) {
   const tideFill = element('div', 'tide-fill', element('div', 'tide-gauge', tide));
 
   const toastBox = element('div', 'toast', root);
-  const hint = element('div', 'hint hidden', root);
 
   const pauseMenu = element('div', 'pause-menu', root);
   const pauseCard = element('div', 'pause-card', pauseMenu);
-  element('div', 'pause-title', pauseCard, 'Paused');
-  const resumeButton = element('button', 'resume', pauseCard, 'Resume');
+  element('div', 'pause-title', pauseCard, 'Settings');
+  const resumeButton = element('button', 'resume', pauseCard, 'Back to game');
   element('div', 'pause-note', pauseCard, 'Graphics (reloads the game)');
   const qualityRow = element('div', 'quality-row', pauseCard);
   const qualityButtons = Object.entries(QUALITY_LEVELS).map(([name, level]) => {
@@ -77,7 +87,7 @@ export function createHud(activeQualityName) {
   let pauseListener = () => {};
   let resetListener = () => {};
   let qualityListener = () => {};
-  let goalListener = () => {};
+  let statusListener = () => {};
   let bagListener = () => {};
   let volumeListener = () => {};
   let buildListener = () => {};
@@ -96,9 +106,7 @@ export function createHud(activeQualityName) {
   moltButton.addEventListener('click', () => moltListener());
   modeCancel.addEventListener('click', () => modeCancelListener());
   travelButton.addEventListener('click', () => travelListener());
-  goal.addEventListener('click', () => {
-    if (goal.classList.contains('action')) goalListener();
-  });
+  levelBadge.addEventListener('click', () => statusListener());
   resumeButton.addEventListener('click', () => pauseListener(false));
   resetButton.addEventListener('click', () => {
     if (!resetArmed) {
@@ -119,14 +127,15 @@ export function createHud(activeQualityName) {
     setVolumes(values) {
       for (const [key, input] of Object.entries(volumeInputs)) input.value = values[key];
     },
-    onGoalTap: (listener) => { goalListener = listener; },
+    onStatus: (listener) => { statusListener = listener; },
     onBag: (listener) => { bagListener = listener; },
     onBuild: (listener) => { buildListener = listener; },
     onHelpers: (listener) => { helpersListener = listener; },
     onMolt: (listener) => { moltListener = listener; },
-    setMoltButton(text) {
-      moltButton.classList.toggle('hidden', !text);
-      if (text && moltButton.textContent !== text) moltButton.textContent = text;
+    setMoltButton(available) {
+      moltButton.classList.toggle('hidden', !available);
+      const countText = available ? String(available) : '';
+      if (moltCount.textContent !== countText) moltCount.textContent = countText;
     },
     onTravel: (listener) => { travelListener = listener; },
     setTravel(option) {
@@ -134,15 +143,22 @@ export function createHud(activeQualityName) {
       travelShown = option;
       travelButton.classList.toggle('hidden', !option);
       root.classList.toggle('travel-shown', Boolean(option));
-      if (option) travelButton.textContent = option === 'enter' ? '⬇ Enter burrow' : '⬆ Go outside';
+      if (option) travelButton.textContent = option === 'enter' ? 'Enter burrow' : 'Go outside';
+    },
+    placeTravel(screenX, screenY) {
+      if (!travelShown) return;
+      const x = Math.min(innerWidth - TRAVEL_EDGE_PIXELS, Math.max(TRAVEL_EDGE_PIXELS, screenX));
+      const y = Math.min(innerHeight - TRAVEL_EDGE_PIXELS, Math.max(TRAVEL_TOP_PIXELS, screenY));
+      travelButton.style.transform = `translate(-50%, -100%) translate(${x}px, ${y}px)`;
     },
     bumpTravel() {
       travelButton.classList.remove('bump');
       void travelButton.offsetWidth;
       travelButton.classList.add('bump');
     },
-    setBuildButton(visible) {
+    setBuildButton(visible, { surface = false } = {}) {
       burrowButtons.classList.toggle('hidden', !visible);
+      burrowButtons.classList.toggle('surface', surface);
     },
     setMode(text, onCancel = () => {}) {
       modeBar.classList.toggle('hidden', !text);
@@ -150,7 +166,6 @@ export function createHud(activeQualityName) {
       root.classList.toggle('placing', Boolean(text));
       modeText.textContent = text || '';
       modeCancelListener = onCancel;
-      if (text) hint.classList.add('hidden');
     },
     fade() {
       sceneFade.classList.remove('visible');
@@ -172,18 +187,12 @@ export function createHud(activeQualityName) {
       void bagButton.offsetWidth;
       bagButton.classList.add('bump');
     },
-    setGoal(text, { done = false, action = false } = {}) {
-      goal.classList.toggle('hidden', !text);
-      goal.textContent = text || '';
-      goal.classList.toggle('done', done && !action);
-      goal.classList.toggle('action', action);
-    },
     setBuff(text) {
       buffChip.classList.toggle('hidden', !text);
       if (text && buffChip.textContent !== text) buffChip.textContent = text;
     },
     setTide(label, fraction) {
-      tideLabel.textContent = `🌊 ${label}`;
+      tideLabel.textContent = label;
       tideFill.style.width = `${Math.round(fraction * 100)}%`;
     },
     setVitals(level, health, maxHealth, experience, experienceToNext) {
@@ -215,10 +224,6 @@ export function createHud(activeQualityName) {
       toastBox.classList.add('visible');
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => toastBox.classList.remove('visible'), 2600);
-    },
-    setHint(text) {
-      hint.classList.toggle('hidden', !text);
-      if (text) hint.textContent = text;
     },
     setVisible(visible) {
       root.style.display = visible ? '' : 'none';

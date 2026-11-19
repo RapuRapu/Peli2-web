@@ -92,7 +92,6 @@ with sync_playwright() as playwright:
     goal = page.evaluate(r'''async () => {
       const d = window.__debug; const out = {};
       const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
-      const goalText = () => { const goal = document.querySelector('#hud .goal'); return goal.classList.contains('hidden') ? null : goal.textContent; };
       d.setPaused(false);
       for (const enemy of d.enemies.list) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 });
       Object.assign(d.save.inventory, { shellBits: 8, driftwood: 3, seaLettuce: 3 });
@@ -103,20 +102,19 @@ with sync_playwright() as playwright:
       d.save.reefFound = true;
       Object.assign(d.save.inventory, { coral: 6, seaGlass: 2, shellBits: 6 });
       d.craftItem('shell', 'coral');
-      out.goal = goalText();
-      document.querySelector('#hud .goal').click();
+      const nearest = d.resources.nodes.filter((node) => node.type === 'scrap' && !node.gathered).sort((a, b) => Math.hypot(a.x - d.player.x, a.z - d.player.z) - Math.hypot(b.x - d.player.x, b.z - d.player.z))[0];
+      d.setDestination(nearest.x, nearest.z, nearest);
       const target = d.player.gatherTarget;
       out.walksToScrap = !!target && target.type === 'scrap';
       out.walkSeconds = +step(200, () => d.save.campFound).toFixed(1);
       out.campFound = d.save.campFound;
-      out.goalAfter = goalText();
       step(60, () => target.gathered);
       out.scrapInBag = d.save.inventory.scrap || 0;
       d.persist();
       return out;
     }''')
     print('goal', json.dumps(goal), flush=True)
-    checks['findCampGoal'] = goal['goal'] == '🏴‍☠️ Find the pirate camp' and goal['walksToScrap'] and goal['campFound'] and goal['goalAfter'] is None and goal['scrapInBag'] == 1
+    checks['findCamp'] = goal['walksToScrap'] and goal['campFound'] and goal['scrapInBag'] == 1
 
     page.evaluate("() => __debug.setPaused(true)")
     page.evaluate(HELPERS)

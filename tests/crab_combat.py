@@ -189,7 +189,6 @@ with sync_playwright() as playwright:
         level: d.progression.state.level, experience: d.progression.state.experience,
         fullHealth: d.progression.state.health === d.progression.maxHealth(),
         wokeInBurrow: d.isUnderground(),
-        goal: document.querySelector('#hud .goal').textContent,
         crabCalmed: crab.state !== 'chase',
       };
       d.save.inventory = { driftwood: 2 };
@@ -203,7 +202,7 @@ with sync_playwright() as playwright:
       return { first, second };
     }''')
     first = death['first']
-    checks['death'] = {**death, 'pass': first['remains'] == 1 and first['dropped']['inventory'] == {k: v for k, v in first['carriedBefore'].items() if v} and sorted(first['dropped']['shells']) == ['cone★', 'snail'] and first['dropped']['claws'] == ['shellEdged'] and first['backpackEmpty'] and first['naked'] and first['claws'] == 'bare' and first['defense'] == 0 and first['level'] == 3 and first['experience'] == 17 and first['fullHealth'] and first['wokeInBurrow'] and 'remains' in first['goal'] and death['second']['remains'] == 2 and death['second']['firstKept']}
+    checks['death'] = {**death, 'pass': first['remains'] == 1 and first['dropped']['inventory'] == {k: v for k, v in first['carriedBefore'].items() if v} and sorted(first['dropped']['shells']) == ['cone★', 'snail'] and first['dropped']['claws'] == ['shellEdged'] and first['backpackEmpty'] and first['naked'] and first['claws'] == 'bare' and first['defense'] == 0 and first['level'] == 3 and first['experience'] == 17 and first['fullHealth'] and first['wokeInBurrow'] and death['second']['remains'] == 2 and death['second']['firstKept']}
 
     page.reload()
     page.wait_for_function('!!window.__debug', timeout=180000)

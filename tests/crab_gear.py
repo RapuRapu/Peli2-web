@@ -15,8 +15,7 @@ GATHER_AND_BUILD = r'''
       step(120, () => node.gathered);
     }
   }
-  const goal = document.querySelector('#hud .goal');
-  return { inventory: { ...d.save.inventory }, goalText: goal.textContent, goalIsButton: goal.classList.contains('action') };
+  return { inventory: { ...d.save.inventory } };
 }
 '''
 
@@ -64,17 +63,14 @@ with sync_playwright() as playwright:
 
     gathered = page.evaluate(GATHER_AND_BUILD)
     page.evaluate("() => __debug.digEntranceAt(18, -17)")
-    gathered['goalText'] = page.evaluate("() => document.querySelector('#hud .goal').textContent")
-    gathered['goalIsButton'] = page.evaluate("() => document.querySelector('#hud .goal').classList.contains('action')")
-    checks['goalBecomesButton'] = {**gathered, 'pass': gathered['goalIsButton'] and 'Build the workshop' in gathered['goalText']}
+    checks['gatheredForWorkshop'] = {**gathered, 'pass': gathered['inventory'].get('shellBits', 0) >= 5 and gathered['inventory'].get('driftwood', 0) >= 3 and gathered['inventory'].get('seaLettuce', 0) >= 3}
 
-    page.click('#hud .goal')
-    page.evaluate("() => { const d = __debug; for (let t = 0; t < 20 && !d.isUnderground(); t += 1/60) d.simulate(1/60); d.updateCamera(0, true); }")
-    page.click('#hud .goal')
+    page.evaluate("() => { const d = __debug; d.walkToEntrance({ enter: true }); for (let t = 0; t < 20 && !d.isUnderground(); t += 1/60) d.simulate(1/60); d.updateCamera(0, true); }")
+    page.click('#hud .build-open')
     page.click('#hud .build-panel [data-station="workshop"]')
     cell = page.evaluate("() => { const d = __debug; d.renderScene(); const p = new d.camera.position.constructor(1003, 200, 0).project(d.camera); return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight }; }")
     page.mouse.click(cell['x'], cell['y'])
-    built = page.evaluate("() => { const d = __debug; return { built: d.burrow.hasStation('workshop'), underground: d.isUnderground(), visible: d.workshop.built, inventory: { ...d.save.inventory }, spotBlocked: !d.world.isWalkable(18, -17), goal: document.querySelector('#hud .goal').textContent } }")
+    built = page.evaluate("() => { const d = __debug; return { built: d.burrow.hasStation('workshop'), underground: d.isUnderground(), visible: d.workshop.built, inventory: { ...d.save.inventory }, spotBlocked: !d.world.isWalkable(18, -17) } }")
     checks['buildWorkshop'] = {**built, 'pass': built['built'] and built['underground'] and built['visible'] and built['spotBlocked'] and all(v == 0 for v in built['inventory'].values())}
 
     page.evaluate("() => { const d = __debug; Object.assign(d.player, { x: 997, z: -3 }); d.simulate(1/60); d.updateCamera(0, true); }")
@@ -89,8 +85,8 @@ with sync_playwright() as playwright:
     page.click('#hud .workshop-panel [data-craft="shell:turban"]')
     page.click('#hud .workshop-panel [data-craft="shell:cone"]')
     page.click('#hud .workshop-panel [data-craft="claws:shellEdged"]')
-    crafted = page.evaluate("() => { const d = __debug; return { shells: d.gear.state.shells.map(s => s.kind), claws: d.gear.state.claws.map(c => c.kind), inventory: { ...d.save.inventory }, goalHidden: document.querySelector('#hud .goal').classList.contains('hidden') } }")
-    checks['craft'] = {'buttonsEnabled': disabled_before, **crafted, 'pass': crafted['shells'] == ['snail', 'turban', 'cone'] and crafted['claws'] == ['bare', 'shellEdged'] and crafted['inventory'] == {'shellBits': 6, 'driftwood': 4, 'seaLettuce': 4} and crafted['goalHidden']}
+    crafted = page.evaluate("() => { const d = __debug; return { shells: d.gear.state.shells.map(s => s.kind), claws: d.gear.state.claws.map(c => c.kind), inventory: { ...d.save.inventory } } }")
+    checks['craft'] = {'buttonsEnabled': disabled_before, **crafted, 'pass': crafted['shells'] == ['snail', 'turban', 'cone'] and crafted['claws'] == ['bare', 'shellEdged'] and crafted['inventory'] == {'shellBits': 6, 'driftwood': 4, 'seaLettuce': 4}}
 
     page.evaluate("() => { const inv = __debug.save.inventory; inv.shellBits = 0; __debug.workbenchPanel.render(); }")
     blocked = page.evaluate("() => ({ disabled: document.querySelector('#hud .workshop-panel [data-craft=\"shell:turban\"]').disabled, result: __debug.craftItem('shell', 'turban'), shells: __debug.gear.state.shells.length })")
@@ -129,8 +125,8 @@ with sync_playwright() as playwright:
     page.evaluate("() => window.dispatchEvent(new Event('pagehide'))")
     page.reload()
     page.wait_for_function('!!window.__debug', timeout=180000)
-    restored = page.evaluate("() => { const d = __debug; return { version: d.save.version, built: d.workshop.built && d.burrow.hasStation('workshop'), spotBlocked: !d.world.isWalkable(18, -17), worn: d.gear.wornShell().kind, claws: d.gear.wornClaws().kind, shells: d.gear.state.shells.length, goalHidden: document.querySelector('#hud .goal').classList.contains('hidden') } }")
-    checks['saveRestores'] = {**restored, 'pass': restored == {'version': 4, 'built': True, 'spotBlocked': True, 'worn': 'cone', 'claws': 'shellEdged', 'shells': 3, 'goalHidden': True}}
+    restored = page.evaluate("() => { const d = __debug; return { version: d.save.version, built: d.workshop.built && d.burrow.hasStation('workshop'), spotBlocked: !d.world.isWalkable(18, -17), worn: d.gear.wornShell().kind, claws: d.gear.wornClaws().kind, shells: d.gear.state.shells.length } }")
+    checks['saveRestores'] = {**restored, 'pass': restored == {'version': 4, 'built': True, 'spotBlocked': True, 'worn': 'cone', 'claws': 'shellEdged', 'shells': 3}}
 
     legacy_context = browser.new_context(viewport={'width': 915, 'height': 412})
     legacy_context.add_init_script("localStorage.setItem('seaofcrabs-crab-save', JSON.stringify({ version: 1, x: 20, z: -30, heading: 1, worldTime: 100, inventory: { shellBits: 4, driftwood: 2 }, nodes: null, goalAnnounced: false, hasMoved: true }))")
