@@ -7,7 +7,7 @@ export const SHELLS = {
     attackFactor: 1,
     ability: null,
     cost: { shellBits: 3 },
-    look: { turns: 2.7, spireShare: 0.86, whorlRadius: 0.5, tubeRadius: 0.6, height: 1.25, bandFrequency: 26, light: [0.98, 0.94, 0.86], band: [0.86, 0.3, 0.1], inside: [0.36, 0.22, 0.2] },
+    look: { model: 'snail', turns: 2.7, spireShare: 0.86, whorlRadius: 0.5, tubeRadius: 0.6, height: 1.25, bandFrequency: 26, light: [0.98, 0.94, 0.86], band: [0.86, 0.3, 0.1], inside: [0.36, 0.22, 0.2] },
   },
   turban: {
     label: 'Turban shell',
@@ -17,7 +17,7 @@ export const SHELLS = {
     attackFactor: 1,
     ability: { id: 'brace', label: 'Brace', description: '−30% damage taken while standing still' },
     cost: { shellBits: 10, seaLettuce: 4 },
-    look: { turns: 2.1, spireShare: 0.9, whorlRadius: 0.66, tubeRadius: 0.72, height: 0.78, bandFrequency: 24, light: [0.74, 0.68, 0.5], band: [0.3, 0.36, 0.2], inside: [0.88, 0.86, 0.8] },
+    look: { model: 'turban', turns: 2.1, spireShare: 0.9, whorlRadius: 0.66, tubeRadius: 0.72, height: 0.78, bandFrequency: 24, light: [0.74, 0.68, 0.5], band: [0.3, 0.36, 0.2], inside: [0.88, 0.86, 0.8] },
   },
   cone: {
     label: 'Cone shell',
@@ -27,7 +27,7 @@ export const SHELLS = {
     attackFactor: 1.25,
     ability: { id: 'sting', label: 'Sting', description: 'every 4th hit deals double damage' },
     cost: { shellBits: 8, driftwood: 4 },
-    look: { turns: 3.4, spireShare: 0.92, whorlRadius: 0.24, tubeRadius: 0.5, height: 1.9, bandFrequency: 40, light: [0.96, 0.84, 0.6], band: [0.42, 0.2, 0.08], inside: [0.94, 0.72, 0.62] },
+    look: { model: 'cone', turns: 3.4, spireShare: 0.92, whorlRadius: 0.24, tubeRadius: 0.5, height: 1.9, bandFrequency: 40, light: [0.96, 0.84, 0.6], band: [0.42, 0.2, 0.08], inside: [0.94, 0.72, 0.62] },
   },
   coral: {
     label: 'Coral shell',
@@ -38,7 +38,7 @@ export const SHELLS = {
     attackFactor: 1,
     ability: { id: 'brace', label: 'Brace+ · Spikes', description: '−40% damage taken while standing still; attackers take 3 damage', damageFactor: 0.6, thorns: 3 },
     cost: { coral: 6, seaGlass: 2, shellBits: 6 },
-    look: { turns: 2.3, spireShare: 0.88, whorlRadius: 0.62, tubeRadius: 0.82, height: 0.95, bandFrequency: 30, knobs: 34, light: [0.96, 0.42, 0.4], band: [0.62, 0.12, 0.2], inside: [0.98, 0.88, 0.82] },
+    look: { model: 'coral', turns: 2.3, spireShare: 0.88, whorlRadius: 0.62, tubeRadius: 0.82, height: 0.95, bandFrequency: 30, knobs: 34, light: [0.96, 0.42, 0.4], band: [0.62, 0.12, 0.2], inside: [0.98, 0.88, 0.82] },
   },
   whelk: {
     label: 'Spiral whelk',
@@ -49,7 +49,7 @@ export const SHELLS = {
     attackFactor: 1.35,
     ability: { id: 'sting', label: 'Sting+', description: 'every 3rd hit deals double damage', everyHits: 3 },
     cost: { seaGlass: 4, coral: 3, shellBits: 6 },
-    look: { turns: 4.2, spireShare: 0.94, whorlRadius: 0.32, tubeRadius: 0.56, height: 1.75, bandFrequency: 52, light: [0.86, 0.9, 0.94], band: [0.2, 0.42, 0.62], inside: [0.96, 0.82, 0.72] },
+    look: { model: 'whelk', turns: 4.2, spireShare: 0.94, whorlRadius: 0.32, tubeRadius: 0.56, height: 1.75, bandFrequency: 52, light: [0.86, 0.9, 0.94], band: [0.2, 0.42, 0.62], inside: [0.96, 0.82, 0.72] },
   },
 };
 

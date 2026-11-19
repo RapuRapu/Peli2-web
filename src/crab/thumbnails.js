@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { SHELLS, CLAWS, NAKED, gearGlowLook } from './gear.js';
 import { buildShellGeometry, buildClawPreview, createHermit } from './hermit.js';
+import { shellModelAvailable, buildShellModel, dressShellMaterial } from './hermitAsset.js';
 
 const ITEM_PIXELS = 128;
 const DOLL_PIXELS = 240;
@@ -57,7 +58,14 @@ export function createThumbnails(quality) {
     if (cache.has(key)) return cache.get(key);
     if (!ensureStage()) return null;
     let object;
-    if (category === 'shell') {
+    const model = category === 'shell' && SHELLS[kind].look.model;
+    if (model && shellModelAvailable(model)) {
+      object = buildShellModel(model, dressShellMaterial(model, new THREE.MeshStandardMaterial()));
+      const [shellMesh] = object.children;
+      shellMesh.position.set(0, 0, 0);
+      shellMesh.rotation.set(0.15, 0.2, 0);
+      shellMesh.scale.setScalar(1);
+    } else if (category === 'shell') {
       const built = buildShellGeometry(SHELLS[kind].look);
       object = new THREE.Mesh(built.geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, side: THREE.DoubleSide }));
     } else {
@@ -71,7 +79,7 @@ export function createThumbnails(quality) {
     const image = frame(object, ITEM_PIXELS, new THREE.Vector3(0.9, 0.75, 1.2));
     scene.remove(object);
     object.traverse((part) => {
-      if (part.geometry) part.geometry.dispose();
+      if (part.geometry && !model) part.geometry.dispose();
     });
     cache.set(key, image);
     return image;

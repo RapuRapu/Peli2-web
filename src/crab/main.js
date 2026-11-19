@@ -214,6 +214,8 @@ const POSES = {
   102: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molting: true },
   103: { x: 24, z: -27, distance: 9, tideShare: 0.56, heading: 1.75, molts: ['crusher', 'crusher', 'crusher', 'crusher', 'crusher', 'cutter'], outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork', reinforcement: 'metalPlate' } },
   104: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molts: ['crusher'] },
+  105: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'coral' },
+  106: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'whelk' },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
   69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },

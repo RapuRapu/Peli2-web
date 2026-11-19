@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside, createGearGlowUniforms, updateGearGlowUniforms } from './seaside.js';
 import { buildShellGeometry } from './hermit.js';
+import { shellModelAvailable, buildShellModel, dressShellMaterial } from './hermitAsset.js';
 import { SHELLS, gearGlowLook } from './gear.js';
 import { element } from './workbench.js';
 import { WORLD_LABEL_TOP_PIXELS } from './enemies.js';
@@ -58,7 +59,14 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     const group = new THREE.Group();
     const y = world.heightAt(record.x, record.z);
     let mesh;
-    if (kind) {
+    const model = kind && SHELLS[kind].look.model;
+    if (model && shellModelAvailable(model)) {
+      const modelMaterial = applySeaside(new THREE.MeshStandardMaterial(), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.1, gearGlow: gearGlowUniforms });
+      mesh = buildShellModel(model, dressShellMaterial(model, modelMaterial));
+      mesh.userData.modelMaterial = modelMaterial;
+      mesh.rotation.set(0.35, record.id * 1.7, Math.PI * 0.42);
+      mesh.position.y = 0.42;
+    } else if (kind) {
       const built = buildShellGeometry(SHELLS[kind].look);
       mesh = new THREE.Mesh(built.geometry, gearGlowUniforms ? gearGlowedMaterial(gearGlowUniforms) : material);
       mesh.rotation.set(0.25, record.id * 1.7, Math.PI * 0.46);
@@ -87,8 +95,11 @@ export function createRemains(scene, world, quality, labelParent, saved) {
   function remove(entry) {
     scene.remove(entry.group);
     const mesh = entry.group.children[0];
-    if (mesh.geometry !== bundleGeometry) mesh.geometry.dispose();
-    if (mesh.material !== material) mesh.material.dispose();
+    if (mesh.userData.modelMaterial) mesh.userData.modelMaterial.dispose();
+    else {
+      if (mesh.geometry !== bundleGeometry) mesh.geometry.dispose();
+      if (mesh.material !== material) mesh.material.dispose();
+    }
     entry.label.remove();
     list.splice(list.indexOf(entry), 1);
   }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import crabModelBytes from './assets/crab.glb';
+import shellModelBytes from './assets/shells.glb';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const LEG_NAMES = ['leg_front_L', 'leg_middle_R', 'leg_rear_L', 'leg_front_R', 'leg_middle_L', 'leg_rear_R'];
@@ -14,14 +15,54 @@ const CLAW_SPREAD = 1.3;
 const CLAW_OPEN = 0.35;
 const MODEL_SCALE = 1.2;
 
+export const SHELL_MODEL_FIT = {
+  snail: { scale: 0.8, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
+  turban: { scale: 0.8, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
+  cone: { scale: 1.1, rotation: [-1.25, Math.PI, 0], offset: [0.15, 0.25, -0.55] },
+  coral: { scale: 0.85, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
+  whelk: { scale: 1.05, rotation: [-1.25, Math.PI, 0], offset: [0.15, 0.25, -0.55] },
+};
+
 let loadedCrab = null;
+const shellModels = new Map();
+
+async function parseModel(bytes) {
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return new GLTFLoader().parseAsync(buffer, '');
+}
 
 export async function loadCrabAsset() {
-  const bytes = crabModelBytes;
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const gltf = await new GLTFLoader().parseAsync(buffer, '');
-  loadedCrab = gltf.scene;
+  const [crab, shells] = await Promise.all([parseModel(crabModelBytes), parseModel(shellModelBytes)]);
+  loadedCrab = crab.scene;
+  shells.scene.traverse((node) => {
+    if (node.isMesh && SHELL_MODEL_FIT[node.name]) shellModels.set(node.name, node);
+  });
   return loadedCrab;
+}
+
+export const shellModelAvailable = (kind) => shellModels.has(kind);
+
+export function dressShellMaterial(kind, material) {
+  const source = shellModels.get(kind).material;
+  for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'roughness', 'metalness']) material[key] = source[key];
+  material.normalScale.copy(source.normalScale);
+  material.vertexColors = false;
+  material.color.setRGB(1, 1, 1);
+  material.side = THREE.FrontSide;
+  material.needsUpdate = true;
+  return material;
+}
+
+export function buildShellModel(kind, material) {
+  const fit = SHELL_MODEL_FIT[kind];
+  const holder = new THREE.Group();
+  const mesh = new THREE.Mesh(shellModels.get(kind).geometry, material);
+  mesh.castShadow = true;
+  mesh.scale.setScalar(fit.scale);
+  mesh.rotation.set(...fit.rotation);
+  mesh.position.set(...fit.offset);
+  holder.add(mesh);
+  return holder;
 }
 
 export const crabAssetLoaded = () => loadedCrab !== null;
@@ -59,7 +100,7 @@ function limbChain(bones, name) {
   };
 }
 
-export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial }) {
+export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rearMaterial }) {
   const model = cloneSkinned(loadedCrab);
   model.scale.setScalar(MODEL_SCALE);
   model.updateMatrixWorld(true);
@@ -71,7 +112,7 @@ export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial }) {
       const role = node.material.name.replace('crab_', '');
       meshes[role] = node;
       const original = node.material;
-      const replacement = { body: bodyMaterial, claws: clawMaterial, abdomen: abdomenMaterial }[role];
+      const replacement = { body: bodyMaterial, claws: clawMaterial, abdomen: abdomenMaterial, rear: rearMaterial }[role];
       for (const key of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'roughness', 'metalness']) replacement[key] = original[key];
       replacement.normalScale.copy(original.normalScale);
       replacement.needsUpdate = true;

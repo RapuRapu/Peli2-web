@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside, createGearGlowUniforms, updateGearGlowUniforms, gearGlowColorAt } from './seaside.js';
-import { buildAssetRig, crabAssetLoaded } from './hermitAsset.js';
+import { buildAssetRig, crabAssetLoaded, shellModelAvailable, buildShellModel, dressShellMaterial } from './hermitAsset.js';
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const CARAPACE = linearColor(0.86, 0.3, 0.14);
@@ -375,7 +375,8 @@ export function createHermit(scene, quality, shellLook) {
   const clawGearGlowUniforms = createGearGlowUniforms();
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), wetSurface);
   const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, gearGlow: clawGearGlowUniforms });
-  const abdomenMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial(), wetSurface) : null;
+  const abdomenMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: ASSET_ABDOMEN_TINT }), wetSurface) : null;
+  const rearMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: ASSET_ABDOMEN_TINT }), wetSurface) : null;
   const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, gearGlow: shellGearGlowUniforms });
   const NO_GLOW = { glow: 0, color: [1, 1, 1], pulse: false };
   const gearGlow = { shell: NO_GLOW, claws: NO_GLOW };
@@ -388,7 +389,7 @@ export function createHermit(scene, quality, shellLook) {
   root.add(tilt);
   tilt.add(body);
 
-  const assetRig = useAsset ? buildAssetRig({ bodyMaterial: material, clawMaterial, abdomenMaterial }) : null;
+  const assetRig = useAsset ? buildAssetRig({ bodyMaterial: material, clawMaterial, abdomenMaterial, rearMaterial }) : null;
   const proceduralRig = useAsset ? null : buildProceduralRig(body, material, clawMaterial);
   if (assetRig) body.add(assetRig.object);
 
@@ -396,22 +397,32 @@ export function createHermit(scene, quality, shellLook) {
   shell.castShadow = true;
   const shellPivot = new THREE.Group();
   shell.rotation.set(0, Math.PI, 0);
+  const shellModelPivot = new THREE.Group();
+  const shellModelMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial(), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, gearGlow: shellGearGlowUniforms }) : null;
+  let shellModel = null;
   function setShell(look) {
     const built = buildShellGeometry(look);
     shell.geometry.dispose();
     shell.geometry = built.geometry;
     shell.position.set(built.mouthOffset, 0, 0);
     shellMaterial.roughness = look.soft ? 0.82 : 0.32;
-    if (assetRig) {
-      assetRig.setNaked(Boolean(look.soft));
-      shell.visible = !look.soft;
+    if (!assetRig) return;
+    assetRig.setNaked(Boolean(look.soft));
+    if (shellModel) shellModel.removeFromParent();
+    shellModel = null;
+    if (look.model && shellModelAvailable(look.model)) {
+      shellModel = buildShellModel(look.model, dressShellMaterial(look.model, shellModelMaterial));
+      shellModelPivot.add(shellModel);
     }
+    shell.visible = !look.soft && !shellModel;
   }
   setShell(shellLook);
   shellPivot.add(shell);
   if (assetRig) {
     shellPivot.position.copy(assetRig.abdomenAnchor).add(ASSET_SHELL_OFFSET);
     shellPivot.scale.setScalar(ASSET_SHELL_SCALE);
+    shellModelPivot.position.copy(assetRig.abdomenAnchor);
+    body.add(shellModelPivot);
   } else {
     shellPivot.position.set(0, 0.64, -0.12);
   }
@@ -505,6 +516,7 @@ export function createHermit(scene, quality, shellLook) {
     body.position.y = Math.sin(pose.stride * 2) * 0.03 * moving + Math.sin(pose.idleTime * 1.7) * 0.012;
     shellPivot.rotation.z = 0.1 + Math.sin(pose.stride) * 0.06 * moving;
     shellPivot.rotation.x = SHELL_LEAN_BACK + Math.sin(pose.stride * 2 + 0.6) * 0.03 * moving;
+    shellModelPivot.rotation.set(Math.sin(pose.stride * 2 + 0.6) * 0.03 * moving, 0, Math.sin(pose.stride) * 0.06 * moving);
 
     const idleOpen = 0.16 + 0.08 * Math.sin(pose.idleTime * 0.9);
     const claws = { big: { reach: Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen, spread: 0 }, small: { reach: -Math.sin(pose.stride + 1) * 0.05 * moving, open: idleOpen * 0.8, spread: 0 } };
@@ -545,6 +557,7 @@ export function createHermit(scene, quality, shellLook) {
     material.emissive.copy(flashColor);
     clawMaterial.emissive.copy(flashColor);
     if (abdomenMaterial) abdomenMaterial.emissive.copy(flashColor);
+    if (rearMaterial) rearMaterial.emissive.copy(flashColor);
     const shellGearGlowLook = gearGlow.shell;
     updateGearGlowUniforms(shellGearGlowUniforms, shellGearGlowLook, pose.idleTime);
     updateGearGlowUniforms(clawGearGlowUniforms, gearGlow.claws, pose.idleTime);
@@ -559,6 +572,7 @@ export function createHermit(scene, quality, shellLook) {
     }
     gearGlowParticles.update(strongestLook, pose.idleTime);
     shellMaterial.emissive.copy(flashColor).multiplyScalar(assetRig ? 0.6 : 0.3);
+    if (shellModelMaterial) shellModelMaterial.emissive.copy(shellMaterial.emissive);
   }
 
   function setClawTines(visible) {
@@ -578,6 +592,7 @@ export function createHermit(scene, quality, shellLook) {
 }
 
 const ASSET_SHELL_OFFSET = new THREE.Vector3(0, 0, 0);
+const ASSET_ABDOMEN_TINT = linearColor(0.95, 0.42, 0.28);
 const ASSET_SHELL_SCALE = 1;
 const ASSET_FLASH_COLOR = [0.85, 0.12, 0.05];
 const ASSET_FLASH_PEAK = new THREE.Color(1.1, 0.95, 0.85);

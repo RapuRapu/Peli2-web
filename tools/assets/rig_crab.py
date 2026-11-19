@@ -19,6 +19,9 @@ ABDOMEN_START_Y = 0.24
 ABDOMEN_HALF_WIDTH = 0.24
 SMALL_COMPONENT_LIMIT = 150
 JOINT_BLEND = 0.035
+REAR_START_Y = 0.1
+PALE_MIN = 0.35
+PALE_SPREAD = 0.25
 
 LIMBS = {
     "leg_front_R": {"tip": (-0.65, -0.38), "joints": (0.45, 0.78)},
@@ -241,17 +244,36 @@ def build_material(name):
     return material
 
 
+color_pixels = np.array(base_color_image.pixels[:]).reshape(base_color_image.size[1], base_color_image.size[0], 4)
+uv_layer = low.data.uv_layers.active.data
+
+
+def is_pale_rear(polygon):
+    center_y = np.mean([positions[index][1] for index in polygon.vertices])
+    if center_y < REAR_START_Y:
+        return False
+    u = np.mean([uv_layer[loop].uv[0] for loop in polygon.loop_indices]) % 1
+    v = np.mean([uv_layer[loop].uv[1] for loop in polygon.loop_indices]) % 1
+    red, green, blue = color_pixels[int(v * (color_pixels.shape[0] - 1)), int(u * (color_pixels.shape[1] - 1)), :3]
+    return min(red, green, blue) > PALE_MIN and max(red, green, blue) - min(red, green, blue) < PALE_SPREAD
+
+
 low.data.materials.clear()
-for name in ("crab_body", "crab_claws", "crab_abdomen"):
+for name in ("crab_body", "crab_claws", "crab_abdomen", "crab_rear"):
     low.data.materials.append(build_material(name))
+rear_faces = 0
 for polygon in low.data.polygons:
     corners = list(polygon.vertices)
     if abdomen_mask[corners].sum() * 2 > len(corners):
         polygon.material_index = 2
     elif claw_vertex[corners].all():
         polygon.material_index = 1
+    elif is_pale_rear(polygon):
+        polygon.material_index = 3
+        rear_faces += 1
     else:
         polygon.material_index = 0
+print("rear faces", rear_faces)
 
 armature_data = bpy.data.armatures.new("crab_rig")
 armature = bpy.data.objects.new("crab_rig", armature_data)
