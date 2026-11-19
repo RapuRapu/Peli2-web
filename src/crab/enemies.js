@@ -84,7 +84,7 @@ function painted(geometry, colorAt) {
   return geometry.index ? geometry.toNonIndexed() : geometry;
 }
 
-const barName = (definition) => (definition.boss ? `👑 ${definition.label}${definition.nerves ? ' · nerves' : ''}` : definition.label);
+const barName = (definition) => (definition.boss ? `👑 ${definition.label}` : definition.label);
 const solid = (geometry, color) => painted(geometry, (target) => target.copy(color));
 
 function buildHopperGeometry() {
