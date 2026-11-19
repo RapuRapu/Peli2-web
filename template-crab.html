@@ -263,6 +263,14 @@
   #hud .status-label { opacity: 0.8; }
   #hud .status-value { font-weight: bold; text-align: right; }
   @media (max-height: 500px) { #hud .status-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } #hud .status-panel .workbench-card { width: min(96vw, 720px); } #hud .status-row { font-size: 14px; } }
+  #hud .enemy-bar.name-only .enemy-track { display: none; }
+  #hud .enemy-name.difficulty-trivial { background: rgba(22, 44, 120, 0.92); color: #e8eeff; }
+  #hud .enemy-name.difficulty-easy { background: rgba(52, 116, 220, 0.92); color: #ffffff; }
+  #hud .enemy-name.difficulty-even { background: rgba(244, 240, 230, 0.94); color: #22180e; text-shadow: none; }
+  #hud .enemy-name.difficulty-tough { background: rgba(232, 190, 40, 0.94); color: #2a1a00; text-shadow: none; }
+  #hud .enemy-name.difficulty-hard { background: rgba(236, 124, 30, 0.94); color: #2a1200; text-shadow: none; }
+  #hud .enemy-name.difficulty-deadly { background: rgba(212, 44, 32, 0.94); color: #ffffff; }
+  #hud .enemy-name.difficulty-impossible { background: rgba(104, 12, 12, 0.95); color: #ffd9d4; }
   #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; font: 16px system-ui; color: #fff; background: #1d3440; text-align: center; }
 </style>
 </head>

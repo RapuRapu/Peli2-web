@@ -78,24 +78,24 @@ with sync_playwright() as playwright:
       d.save.bossDefeatedAt = {};
       out.trophyMaterials = Object.fromEntries(Object.entries(trophies).map(([kind, material]) => { d.save.inventory = {}; d.randomSource.next = () => 0.01; const before = gearCount(); d.dropLoot(d.enemies.list.find((e) => e.kind === kind)); d.randomSource.next = Math.random; return [kind, (d.save.inventory[material] || 0) === 2 && (kind === 'cook' || gearCount() === before)]; }));
       out.minibossesNotResting = ['gull', 'giantLobster', 'shipCat'].every((kind) => !(d.save.bossDefeatedAt || {})[kind]);
-      const regions = { beach: { x: 20, z: -20 }, reef: { x: 10, z: 80 }, camp: { x: -84, z: -60 }, hold: { x: 88, z: -68 } };
-      const allowed = { beach: ['shellBits', 'driftwood', 'seaLettuce'], reef: ['coral', 'seaGlass'], camp: ['scrap', 'cloth'], hold: ['fishBone', 'wax'] };
       out.common = {};
-      for (const [region, spot] of Object.entries(regions)) {
+      for (const kind of ['sandHopper', 'shoreCrab', 'octopus', 'rat', 'cockroach']) {
         d.save.inventory = {};
-        const fake = { kind: 'rat', definition: d.enemies.list.find((e) => e.kind === 'rat').definition, x: spot.x, z: spot.z, y: 0, altitude: 0 };
+        const definition = d.enemies.list.find((e) => e.kind === kind).definition;
+        const fake = { kind, definition, x: 20, z: -20, y: 0, altitude: 0 };
         const kills = 4000;
         for (let index = 0; index < kills; index++) d.dropLoot(fake);
         const total = Object.values(d.save.inventory).reduce((sum, value) => sum + value, 0);
-        out.common[region] = { rate: +(total / kills).toFixed(3), regionMatches: d.regionAt(spot.x, spot.z) === region, onlyRegion: Object.keys(d.save.inventory).every((type) => allowed[region].includes(type)) };
+        out.common[kind] = { rate: +(total / kills).toFixed(3), onlyOwnDrops: Object.keys(d.save.inventory).every((type) => definition.drops.includes(type)), allDropsSeen: definition.drops.every((type) => d.save.inventory[type] > 0) };
       }
+      out.shoreCrabNoScrap = !d.enemies.list.find((e) => e.kind === 'shoreCrab').definition.drops.includes('scrap');
       return out;
     }""")
     print('loot', json.dumps(loot), flush=True)
     checks['bossMaterialAlways'] = loot['materialOnly'] == {'apronScrap': 2, 'cleavers': 0} and all(loot['trophyMaterials'].values()) and loot['minibossesNotResting']
     checks['bossItemChance'] = loot['withItem'] == {'apronScrap': 4, 'cleavers': 1}
     checks['restsOneDay'] = 23.9 < loot['restingHours'] <= 24
-    checks['commonDrops'] = all(0.065 < r['rate'] < 0.095 and r['regionMatches'] and r['onlyRegion'] for r in loot['common'].values())
+    checks['commonDrops'] = all(0.32 < r['rate'] < 0.38 and r['onlyOwnDrops'] and r['allDropsSeen'] for r in loot['common'].values()) and loot['shoreCrabNoScrap']
 
     resting = page.evaluate(r"""() => {
       const d = window.__debug; const c = window.__drops; const out = {};

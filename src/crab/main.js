@@ -23,7 +23,7 @@ import { createGear, SHELLS, CLAWS, canAfford, BOSS_TROPHIES, MINIBOSS_MATERIALS
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createStatusPanel } from './statusPanel.js';
-import { createProgression, GATHER_EXPERIENCE, MOLT_KINDS, MOLT_SECONDS, SOFT_SECONDS, SOFT_DEFENSE_FACTOR } from './progression.js';
+import { createProgression, experienceForKill, difficultyOf, GATHER_EXPERIENCE, MOLT_KINDS, MOLT_SECONDS, SOFT_SECONDS, SOFT_DEFENSE_FACTOR } from './progression.js';
 import { createMoltPanel } from './moltPanel.js';
 import { createEnemies, ENEMY_KINDS } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
@@ -90,8 +90,7 @@ const BODY_DRYING_SECONDS = 30;
 const PLAYER_ATTACK_REACH = 1.25;
 const PLAYER_ATTACK_INTERVAL = 0.9;
 const BOSS_REST_MS = 24 * 3600000;
-const COMMON_DROP_CHANCE = 0.08;
-const REGION_MATERIALS = { beach: ['shellBits', 'driftwood', 'seaLettuce'], reef: ['coral', 'seaGlass'], camp: ['scrap', 'cloth'], hold: ['fishBone', 'wax'] };
+const COMMON_DROP_CHANCE = 0.35;
 let wallClockOffsetMs = 0;
 const wallClock = () => Date.now() + wallClockOffsetMs;
 const PLAYER_FIRST_STRIKE_SECONDS = 0.3;
@@ -1432,7 +1431,7 @@ function regionAt(x, z) {
 
 function giveMaterial(type, amount, enemy) {
   save.inventory[type] = (save.inventory[type] || 0) + amount;
-  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.55, enemy.z, `+${amount} ${RESOURCE_TYPES[type].icon}`, 'experience');
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.55, enemy.z, `+${amount} ${RESOURCE_TYPES[type].label}`, 'experience');
   refreshHud(type);
 }
 
@@ -1442,8 +1441,8 @@ function dropLoot(enemy) {
     save.bossDefeatedAt = { ...(save.bossDefeatedAt || {}), [enemy.kind]: wallClock() };
     giveMaterial(trophy.material, BOSS_MATERIAL_DROP, enemy);
     const pearls = enemy.definition.pearlCount || 0;
-    const message = [`${RESOURCE_TYPES[trophy.material].icon} ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[trophy.material].label.toLowerCase()}s`];
-    if (pearls) message.push(`· 🦪 ${pearls}`);
+    const message = [`${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[trophy.material].label.toLowerCase()}s`];
+    if (pearls) message.push(`· ${pearls} pearls`);
     if (random() < BOSS_ITEM_CHANCE) {
       gear.grant(trophy.category, trophy.kind);
       hud.setBagDot(true);
@@ -1459,19 +1458,18 @@ function dropLoot(enemy) {
   if (minibossMaterial) {
     giveMaterial(minibossMaterial, BOSS_MATERIAL_DROP, enemy);
     const pearls = enemy.definition.pearlCount || 0;
-    hud.toast(`${enemy.definition.label} dropped ${RESOURCE_TYPES[minibossMaterial].icon} ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[minibossMaterial].label.toLowerCase()}s${pearls ? ` · 🦪 ${pearls}` : ''} · back in 15 min`);
+    hud.toast(`${enemy.definition.label} dropped ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[minibossMaterial].label.toLowerCase()}s${pearls ? ` · ${pearls} pearls` : ''} · back in 15 min`);
     return;
   }
-  if (random() < COMMON_DROP_CHANCE) {
-    const options = REGION_MATERIALS[regionAt(enemy.x, enemy.z)];
-    giveMaterial(options[Math.floor(random() * options.length)], 1, enemy);
-  }
+  const drops = enemy.definition.drops || [];
+  if (drops.length && random() < COMMON_DROP_CHANCE) giveMaterial(drops[Math.floor(random() * drops.length)], 1, enemy);
 }
 
 function enemyKilled(enemy) {
   if (player.combatTarget === enemy) player.combatTarget = null;
-  const levelsGained = progression.gainExperience(enemy.definition.experience);
-  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${enemy.definition.experience} XP`, 'experience');
+  const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, progression.state.level);
+  const levelsGained = progression.gainExperience(experience);
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${experience} XP`, 'experience');
   if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
     const pearls = enemy.definition.pearlCount || 1;
     save.inventory.pearls = (save.inventory.pearls || 0) + pearls;
@@ -1920,7 +1918,7 @@ function renderScene() {
   }
   spotFeedback.visible = spotFeedback.visible && simulationTime < spotFeedbackUntil && !underground;
   spotFeedback.scale.setScalar(1 + 0.08 * Math.sin(simulationTime * 5));
-  enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null);
+  enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null, { x: player.x, z: player.z, level: progression.state.level });
   remains.update(simulationTime, camera, player);
   hud.setVitals(progression.state.level, progression.state.health, progression.maxHealth(), progression.state.experience, progression.experienceToNext());
   const farZoomShare = THREE.MathUtils.smoothstep(cameraDistance, ...FAR_ZOOM_RING_DISTANCES);
@@ -2371,7 +2369,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, salvageItem, startMovingStructure, dismantleStructure, moveStationTo, moveRackTo, isRecipeDiscovered, placement, cancelPlacement, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   setRendering: (enabled) => { rendersFrames = enabled; },
   isPaused: () => paused,

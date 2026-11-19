@@ -110,6 +110,8 @@ with sync_playwright() as playwright:
       r.step(4);
       out.morayStaysHome = Math.hypot(moray.x - den.x, moray.z - den.z) < 0.01;
       r.place(den.x + 12, den.z); r.step(2);
+      out.morayStillWatchingInGrace = moray.state === 'chase';
+      r.step(2);
       out.morayGivesUp = moray.state === 'idle';
 
       const octopus = r.setup('octopus', 10, 'turban', 6, 'shellEdged', 6, false);
@@ -151,7 +153,7 @@ with sync_playwright() as playwright:
       return out;
     }''')
     print('behaviour', json.dumps(behaviour), flush=True)
-    checks['morayLurks'] = behaviour['morayIgnoresFar'] and behaviour['morayStrikesNear'] and behaviour['morayRetreats'] and behaviour['morayStaysHome'] and behaviour['morayGivesUp']
+    checks['morayLurks'] = behaviour['morayIgnoresFar'] and behaviour['morayStrikesNear'] and behaviour['morayRetreats'] and behaviour['morayStaysHome'] and behaviour['morayStillWatchingInGrace'] and behaviour['morayGivesUp']
     checks['octopusInk'] = behaviour['inkAfterThirdAttack'] and behaviour['inkCloudShown'] and 0.4 <= behaviour['inkSlowRatio'] <= 0.6
     checks['mantisDoubleStrike'] = behaviour['mantisDoubleStrikeGap'] is not None and behaviour['mantisDoubleStrikeGap'] < 0.4
     checks['lobsterTelegraphAndTerritory'] = behaviour['lobsterIgnoresOutsideTerritory'] and behaviour['lobsterTelegraphs'] and behaviour['dodgeAvoidsDamage']

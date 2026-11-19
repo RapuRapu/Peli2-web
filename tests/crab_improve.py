@@ -88,12 +88,15 @@ LOGIC = r'''
   d.progression.setLevel(10);
   d.progression.state.molts = ['crusher', 'crusher', 'crusher'];
   out.moltsAtTen = d.progression.moltsAvailable();
-  d.progression.gainExperience(1499);
-  out.moltsAt1499 = d.progression.moltsAvailable();
-  d.progression.gainExperience(1);
-  out.moltsAt1500 = d.progression.moltsAvailable();
-  d.progression.state.capExperience = 1e6;
-  out.moltsCapped = d.progression.moltsEarned();
+  d.progression.setLevel(12);
+  out.moltsAtTwelve = d.progression.moltsAvailable();
+  d.progression.setLevel(23);
+  out.moltsAt23 = d.progression.moltsEarned();
+  d.progression.setLevel(50);
+  out.moltsAtCap = d.progression.moltsEarned();
+  out.levelCap = (() => { d.progression.setLevel(99); return d.progression.state.level; })();
+  d.progression.setLevel(10);
+  d.progression.state.molts = ['crusher', 'crusher', 'crusher'];
 
   d.progression.state.clawSkill = 0;
   for (let hit = 0; hit < 187; hit++) d.progression.practiceClaws();
@@ -156,7 +159,7 @@ with sync_playwright() as playwright:
         'reinforcement': logic['masterworkDefense'] == 9 and logic['platedDefense'] == 11 and logic['platedSpeed'] == round(0.88 * 0.95, 3),
         'spikesReplacePlate': logic['replaceRefusedSame'] and logic['spikesThorns'] == 3 and logic['spikesDefense'] == 9,
         'bindings': logic['masterworkClawAttack'] == 9 and logic['wireAttack'] == 10 and abs(logic['threadInterval'] - 0.9) < 1e-9 and logic['kelpHeal'] == 1,
-        'moltSchedule': logic['moltsAtLevelOne'] == 0 and logic['moltsAtLevelThree'] == 1 and logic['moltsAtTen'] == 0 and logic['moltsAt1499'] == 0 and logic['moltsAt1500'] == 1 and logic['moltsCapped'] == 8,
+        'moltSchedule': logic['moltsAtLevelOne'] == 0 and logic['moltsAtLevelThree'] == 1 and logic['moltsAtTen'] == 0 and logic['moltsAtTwelve'] == 1 and logic['moltsAt23'] == 7 and logic['moltsAtCap'] == 8 and logic['levelCap'] == 50,
         'moltInBurrowOnly': logic['surfaceMoltRefused'] and logic['moltStarted'] and logic['moltingBlocksTravel'] and logic['stillMoltingAt30'],
         'moltGrowsAndSoftens': logic['molts'] == ['crusher'] and logic['softAfterMolt'] and logic['softDefense'] == 5 and logic['attackGrowth'] > 1 and logic['hardAgain'],
         'clawSkill': 9.5 < logic['skillAfter187'] < 10.5 and logic['skillCap'] == 20 and logic['skillAfterDeath'] == 9.5,

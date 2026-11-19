@@ -1,10 +1,10 @@
 export const BASE_HEALTH = 30;
 export const HEALTH_PER_LEVEL = 8;
 export const ATTACK_PER_LEVEL = 1;
-export const MAX_LEVEL = 10;
+export const MAX_LEVEL = 50;
 export const GATHER_EXPERIENCE = 2;
 
-export const MOLT_LEVELS = [3, 6, 9];
+export const MOLT_LEVELS = [3, 6, 9, 12, 15, 18, 21, 24];
 export const EXPERIENCE_PER_EXTRA_MOLT = 1500;
 export const MAX_MOLTS = 8;
 export const MOLT_SECONDS = 60;
@@ -20,6 +20,33 @@ export const CLAW_SKILL_DAMAGE_PER_LEVEL = 0.01;
 export const CLAW_SKILL_PER_HIT = 0.12;
 export const CLAW_SKILL_SLOWDOWN = 0.25;
 export const CLAW_SKILL_DEATH_SHARE = 0.95;
+
+export const DIFFICULTY_TIERS = [
+  { name: 'trivial', below: -5 },
+  { name: 'easy', below: -2 },
+  { name: 'even', below: 3 },
+  { name: 'tough', below: 5 },
+  { name: 'hard', below: 7 },
+  { name: 'deadly', below: 9 },
+  { name: 'impossible', below: Infinity },
+];
+const BLUE_EXPERIENCE_SHARE = 0.5;
+const TRIVIAL_EXPERIENCE_SHARE = 0.1;
+const TRIVIAL_EXPERIENCE_DECAY = 0.8;
+const TRIVIAL_LEVEL_DIFFERENCE = -6;
+
+export function difficultyOf(enemyLevel, playerLevel) {
+  const difference = enemyLevel - playerLevel;
+  return DIFFICULTY_TIERS.find((tier) => difference < tier.below).name;
+}
+
+export function experienceForKill(baseExperience, enemyLevel, playerLevel) {
+  const difference = enemyLevel - playerLevel;
+  let share = 1;
+  if (difference <= TRIVIAL_LEVEL_DIFFERENCE) share = TRIVIAL_EXPERIENCE_SHARE * TRIVIAL_EXPERIENCE_DECAY ** (TRIVIAL_LEVEL_DIFFERENCE - difference);
+  else if (difference <= -3) share = BLUE_EXPERIENCE_SHARE;
+  return Math.max(1, Math.round(baseExperience * share));
+}
 
 export function experienceForLevel(level) {
   return Math.round(20 * Math.pow(level, 1.6));
