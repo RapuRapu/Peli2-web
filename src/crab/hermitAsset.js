@@ -19,7 +19,7 @@ export const SHELL_MODEL_FIT = {
   snail: { scale: 0.8, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
   turban: { scale: 0.8, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
   cone: { scale: 1.1, rotation: [-1.25, Math.PI, 0], offset: [0.15, 0.25, -0.55] },
-  coral: { scale: 0.85, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
+  coral: { scale: 0.85, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.15, -0.22] },
   whelk: { scale: 1.05, rotation: [-1.25, Math.PI, 0], offset: [0.15, 0.25, -0.55] },
 };
 
@@ -48,7 +48,7 @@ export function dressShellMaterial(kind, material) {
   material.normalScale.copy(source.normalScale);
   material.vertexColors = false;
   material.color.setRGB(1, 1, 1);
-  material.side = THREE.FrontSide;
+  material.side = THREE.DoubleSide;
   material.needsUpdate = true;
   return material;
 }
