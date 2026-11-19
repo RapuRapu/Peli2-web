@@ -373,6 +373,7 @@ export function createHermit(scene, quality, shellLook) {
   const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
   const shellGearGlowUniforms = createGearGlowUniforms();
   const clawGearGlowUniforms = createGearGlowUniforms();
+  const weaponGearGlowUniforms = createGearGlowUniforms();
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), wetSurface);
   const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, gearGlow: clawGearGlowUniforms });
   const abdomenMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: ASSET_ABDOMEN_TINT }), wetSurface) : null;
@@ -561,7 +562,8 @@ export function createHermit(scene, quality, shellLook) {
     if (rearMaterial) rearMaterial.emissive.copy(flashColor);
     const shellGearGlowLook = gearGlow.shell;
     updateGearGlowUniforms(shellGearGlowUniforms, shellGearGlowLook, pose.idleTime);
-    updateGearGlowUniforms(clawGearGlowUniforms, gearGlow.claws, pose.idleTime);
+    updateGearGlowUniforms(clawGearGlowUniforms, wornWeapon ? NO_GLOW : gearGlow.claws, pose.idleTime);
+    updateGearGlowUniforms(weaponGearGlowUniforms, gearGlow.claws, pose.idleTime);
     const strongestLook = gearGlow.shell.glow >= gearGlow.claws.glow ? gearGlow.shell : gearGlow.claws;
     groundGlow.mesh.visible = Boolean(strongestLook.groundGlow);
     if (strongestLook.groundGlow) {
@@ -590,7 +592,7 @@ export function createHermit(scene, quality, shellLook) {
   function setClawWeapon(kind) {
     if (!assetRig) return;
     wornWeapon = kind && weaponModelAvailable(kind) ? kind : null;
-    if (wornWeapon && !weaponMaterials.has(kind)) weaponMaterials.set(kind, dressWeaponMaterial(kind, applySeaside(new THREE.MeshStandardMaterial(), { ...wetSurface, gearGlow: clawGearGlowUniforms })));
+    if (wornWeapon && !weaponMaterials.has(kind)) weaponMaterials.set(kind, dressWeaponMaterial(kind, applySeaside(new THREE.MeshStandardMaterial(), { ...wetSurface, gearGlow: weaponGearGlowUniforms })));
     assetRig.setClawWeapon(wornWeapon, wornWeapon ? weaponMaterials.get(wornWeapon) : null);
   }
 
