@@ -57,6 +57,8 @@ const COOK_FLEE_SPEED = 12;
 const COOK_FLEE_SECONDS = 9;
 const COOK_STRIDE_UNITS = 11;
 const COOK_CHOP_TWIST = 0.15;
+const COOK_WALKING_SHARE = 0.25;
+const COOK_STUCK_SECONDS = 2;
 const COOK_FLEE_ANIMATION_RATE = 1.15;
 const LOBSTER_SCALE = 1.35;
 const LOBSTER_CLAW_SCALE = 1.4;
@@ -626,6 +628,8 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     const reach = strikeReach(enemy);
     const lurker = definition.temperament === 'lurker';
     let moving = false;
+    const startX = enemy.x;
+    const startZ = enemy.z;
     enemy.retreat = Math.max(0, enemy.retreat - deltaTime);
     if (enemy.leap) {
       enemy.leap.time = Math.min(1, enemy.leap.time + deltaTime / LEAP_SECONDS);
@@ -694,7 +698,16 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     if (moving && enemy.moveHeading !== undefined) turnToward(enemy, enemy.state === 'chase' && enemy.kind !== 'shoreCrab' ? Math.atan2(player.x - enemy.x, player.z - enemy.z) : walkingHeading(enemy), deltaTime, 6);
     enemy.motion += ((moving ? 1 : 0) - enemy.motion) * Math.min(1, deltaTime * 8);
     if (definition.speed > 0 && player.alive) keepOffPlayer(enemy, player);
+    if (enemy.entry.stations) followActualMovement(enemy, startX, startZ, deltaTime);
     enemy.y = world.heightAt(enemy.x, enemy.z);
+  }
+
+  function followActualMovement(enemy, startX, startZ, deltaTime) {
+    const actualSpeed = deltaTime > 0 ? Math.hypot(enemy.x - startX, enemy.z - startZ) / deltaTime : 0;
+    const walking = actualSpeed > enemy.definition.speed * COOK_WALKING_SHARE;
+    enemy.moveSpeed = actualSpeed;
+    enemy.motion += ((walking ? 1 : 0) - enemy.motion) * Math.min(1, deltaTime * 8);
+    enemy.stuckSeconds = walking || enemy.activityTimer > 0 || enemy.state !== 'idle' ? 0 : (enemy.stuckSeconds || 0) + deltaTime;
   }
 
   function patrol(enemy, deltaTime) {
@@ -712,7 +725,8 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     }
     enemy.moveSpeed = enemy.definition.speed * COOK_PATROL_SHARE;
     const moving = moveToward(enemy, station.x, station.z, enemy.moveSpeed, deltaTime);
-    if (!moving || Math.hypot(station.x - enemy.x, station.z - enemy.z) < 0.6) {
+    if (!moving || Math.hypot(station.x - enemy.x, station.z - enemy.z) < 0.6 || (enemy.stuckSeconds || 0) > COOK_STUCK_SECONDS) {
+      enemy.stuckSeconds = 0;
       const [shortest, longest] = COOK_ACTIVITY_SECONDS;
       enemy.activityTimer = shortest + random() * (longest - shortest);
       enemy.path = [];
@@ -724,9 +738,11 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     const exit = enemy.entry.exit;
     enemy.fleeTime += deltaTime;
     enemy.moveSpeed = COOK_FLEE_SPEED;
+    const startX = enemy.x;
+    const startZ = enemy.z;
     const moving = moveToward(enemy, exit.x, exit.z, COOK_FLEE_SPEED, deltaTime);
     if (moving && enemy.moveHeading !== undefined) turnToward(enemy, enemy.moveHeading, deltaTime, 6);
-    enemy.motion = moving ? 1 : 0;
+    enemy.motion = Math.hypot(enemy.x - startX, enemy.z - startZ) > 0 ? 1 : 0;
     enemy.y = world.heightAt(enemy.x, enemy.z);
     return Math.hypot(exit.x - enemy.x, exit.z - enemy.z) < 2 || enemy.fleeTime > COOK_FLEE_SECONDS || !moving;
   }
@@ -1053,7 +1069,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   }
 
   function cookAnimation(enemy, time) {
-    if (enemy.state === 'dying') return { mode: 'run', rate: COOK_FLEE_ANIMATION_RATE };
+    if (enemy.state === 'dying') return enemy.motion > 0.5 ? { mode: 'run', rate: COOK_FLEE_ANIMATION_RATE } : { mode: 'stand' };
     const zone = enemy.zone;
     if (zone && zone.shape === 'line') return { mode: 'slam', phase: 1 - zone.timer / zone.duration };
     if (zone && zone.stomp) return { mode: 'stomp', phase: 1 - zone.timer / zone.duration };
