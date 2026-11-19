@@ -3,7 +3,7 @@ import { createPerformanceMonitor } from '../performance.js';
 import { QUALITY_LEVELS, chosenQualityName, storeQualityName } from './quality.js';
 import { seaUniforms, SEA_COMMON_GLSL, lighting, cutawayUniforms } from './seaside.js';
 import { createNoiseTexture, createWaveGradientTexture } from './textures.js';
-import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES, REEF_ENEMIES, CAMP_ENEMIES, CAMP, isInCamp, HOLD_ENEMIES, HOLD, isInHold } from './world.js';
+import { createWorld, TIDE_MIDDLE, TIDE_AMPLITUDE, TIDE_PERIOD_SECONDS, HOME_BEACH_ENEMIES, REEF_ENEMIES, CAMP_ENEMIES, CAMP, isInCamp, HOLD_ENEMIES, HOLD, isInHold, PLAY_HALF_SIZE } from './world.js';
 import { createPipeline } from './pipeline.js';
 import { createWater } from './water.js';
 import { createProps } from './props.js';
@@ -29,11 +29,13 @@ import { createEnemies, ENEMY_KINDS } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
 import { createAudio } from './audio.js';
-import { createBurrow, loadBurrowModels, createEmptyBurrow, BURROW_GRID, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, SHAFT_ACCESS_ROW_STEP, cellCenter } from './burrow.js';
+import { createBurrow, loadBurrowModels, createEmptyBurrow, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, SHAFT_ACCESS_ROW_STEP, cellCenter } from './burrow.js';
 import { createThumbnails } from './thumbnails.js';
 import { createBuildPanel, createStoragePanel, createHelpersPanel, createRackPanel } from './burrowPanels.js';
 import { createRack, RACK_BATCH, RACK_DRY_SECONDS, RACK_REACH, RACK_BLOCK_RADIUS } from './rack.js';
-import { createHelpers, HELPER_LIMIT, HELPER_COST, HELPER_JOBS } from './helpers.js';
+import { createHelpers, HELPER_LIMIT } from './helpers.js';
+import { createFog } from './fog.js';
+import { createMapView } from './mapView.js';
 
 const searchParameters = new URLSearchParams(location.search);
 const screenshotPose = searchParameters.has('pose') ? Number(searchParameters.get('pose')) : null;
@@ -42,7 +44,7 @@ const qualityName = chosenQualityName(searchParameters);
 const quality = QUALITY_LEVELS[qualityName];
 
 const SAVE_KEY = 'seaofcrabs-crab-save';
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 const CLAW_GROWTH_PER_MOLT = 0.05;
 const AUTOSAVE_INTERVAL_SECONDS = 5;
 const FIXED_STEP = 1 / 60;
@@ -67,6 +69,8 @@ const TRAVEL_REACH_SURFACE = ENTRANCE_REACH + 0.6;
 const STARTING_TIDE_TIME = TIDE_PERIOD_SECONDS * 0.56;
 const WET_SAND_DRYING_RATE = 0.006;
 const HOME_SPOT = { x: 13, z: -21 };
+const STARTING_REVEAL_RADIUS = 34;
+const STARTING_BEACH_REVEAL_RADIUS = 70;
 const WORKSHOP_SPOT = { x: 18, z: -17 };
 const FIRST_GOAL = { shellBits: 5, driftwood: 3, seaLettuce: 3 };
 const REEF_VIEW_THRESHOLD_Z = 42;
@@ -120,6 +124,7 @@ const ENTRANCE_CONFIRM_RADIUS = 2.2;
 const ENTRANCE_CLEARANCE = 3;
 const ENTRANCE_HIGH_TIDE_MARGIN = 0.35;
 const DEFAULT_WORKSHOP_CELL = { column: 6, row: 5 };
+const LEGACY_HELPER_CELL = { column: 4, row: 6 };
 const DEFAULT_STORAGE_CELL = { column: 4, row: 5 };
 const BURROW_BACKGROUND = new THREE.Color(0.05, 0.035, 0.025);
 const BURROW_FOG_DENSITY = 0.026;
@@ -350,6 +355,8 @@ const holdProps = createHoldProps(scene, world, quality);
 const life = createLife(scene, world, quality);
 
 const pipeline = createPipeline(renderer, quality);
+const fog = createFog({ halfSize: PLAY_HALF_SIZE, saved: save.fog });
+pipeline.attachFog(fog.uniforms);
 const water = createWater(createWaveGradientTexture(), pipeline.overlayUniforms, quality.rippleCapacity);
 pipeline.overlayScene.add(water.mesh);
 
@@ -374,6 +381,7 @@ function applyWornLook() {
 applyWornLook();
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
 const hud = createHud(qualityName);
+const mapView = createMapView(hud.root, { world, fog, halfSize: PLAY_HALF_SIZE, waterLevel: TIDE_MIDDLE + TIDE_AMPLITUDE });
 const tracks = createTracks(scene, world);
 const ripples = createRipples(water.uniforms);
 const workshop = createWorkbenchModel(scene, world, quality, WORKSHOP_SPOT, hud.root);
@@ -462,8 +470,8 @@ const storagePanel = createStoragePanel(hud.root, {
     soundAt('craft');
     hud.toast(`${label} salvaged — +${materialsText(refund)}`);
   },
-  onMove: () => startMovingStructure('storage'),
-  onDismantle: () => dismantleStructure('storage'),
+  onMove: (station) => startMovingStructure(station || 'storage'),
+  onDismantle: (station) => dismantleStructure(station || 'storage'),
   onClose: () => storagePanel.close(),
 });
 const rack = createRack(scene, world, quality, hud.root, save.rack);
@@ -494,6 +502,38 @@ const rackPanel = createRackPanel(hud.root, {
   onDismantle: () => dismantleStructure('dryingRack'),
   onClose: () => rackPanel.close(),
 });
+const STRANDED_FREE_SPOTS = [
+  { id: 'beachPool', x: 34, z: -4 },
+  { id: 'beachDriftwood', x: -16, z: -30 },
+  { id: 'beachDunes', x: 48, z: -38 },
+];
+const STRANDED_GUARD_KINDS = ['gull', 'giantLobster', 'shipCat'];
+const STRANDED_PICK_RADIUS_PIXELS = 60;
+const RESCUE_REACH = 2.6;
+
+function strandedHelperSpots() {
+  const spots = [];
+  for (const spot of STRANDED_FREE_SPOTS) {
+    const free = navigation.nearestWalkable(spot.x, spot.z, 14) || spot;
+    spots.push({ id: spot.id, x: free.x, z: free.z, heading: spots.length * 2.2, guardKind: null });
+  }
+  for (const guardKind of STRANDED_GUARD_KINDS) {
+    const guard = enemies.list.find((enemy) => enemy.kind === guardKind);
+    const home = guard && (guard.home || { x: guard.x, z: guard.z });
+    if (!home) continue;
+    const free = navigation.nearestWalkable(home.x + 3, home.z + 2.5, 10);
+    if (free) spots.push({ id: `guarded-${guardKind}`, x: free.x, z: free.z, heading: spots.length * 2.2, guardKind });
+  }
+  return spots;
+}
+
+function boxOf(stationId) {
+  const station = burrow.state.stations.find((candidate) => candidate.id === stationId);
+  if (!station) return null;
+  if (station.kind === 'storage') return storage;
+  return station.box || null;
+}
+
 const helpers = createHelpers(scene, {
   world,
   navigation,
@@ -502,45 +542,88 @@ const helpers = createHelpers(scene, {
   quality,
   saved: save.helpers,
   rack,
-  storage,
-  onDeposit: (type, amount) => {
-    storage.inventory[type] = (storage.inventory[type] || 0) + amount;
+  burrow,
+  boxOf,
+  strandedSpots: strandedHelperSpots(),
+  onDeposit: (nest, type, amount) => {
+    const box = (nest && nest.box) || storage;
+    box.inventory[type] = (box.inventory[type] || 0) + amount;
     if (storagePanel.isOpen) storagePanel.render();
   },
   onLost: (helper, enemy) => {
-    hud.toast(`A helper was caught by a ${enemy.definition.label.toLowerCase()}`);
+    hud.toast(`A ${enemy.definition.label.toLowerCase()} knocked out a helper — it ran home to its nest`);
+    if (helpersPanel.isOpen) helpersPanel.render();
     persist();
   },
   onSound: (name, helper) => {
-    if (!underground) soundAt(name, helper.x, helper.z, 0.45);
+    if (helper.inside === underground) soundAt(name, helper.x, helper.z, 0.45);
   },
 });
 const helpersPanel = createHelpersPanel(hud.root, {
   helpers,
-  inventory: () => save.inventory,
   limit: HELPER_LIMIT,
-  cost: HELPER_COST,
-  jobs: HELPER_JOBS,
-  requirement: () => (burrow.hasStation('storage') ? null : 'Build a storage first — helpers bring their finds there.'),
-  onRecruit: recruitHelper,
-  onJob: (id, job) => {
-    helpers.setJob(id, job);
-    helpersPanel.render();
+  jobOptions: helperJobOptions,
+  boxOptions: () => burrow.state.stations.filter((station) => station.kind === 'storage' || station.kind === 'helperNest').map((station) => ({ id: station.id, label: stationName(station) })),
+  onJob: (id, job, carryOrder) => {
+    helpers.setJob(id, job, carryOrder);
     persist();
   },
   onClose: () => helpersPanel.close(),
 });
 
-function recruitHelper(job = 'shellBits') {
-  if (!burrow.hasStation('storage') || helpers.list.length >= HELPER_LIMIT || !canAfford(HELPER_COST, save.inventory)) return null;
-  for (const [type, amount] of Object.entries(HELPER_COST)) save.inventory[type] -= amount;
-  const helper = helpers.recruit(job);
+function helperJobOptions() {
+  const known = noteDiscoveries();
+  const gatherable = Object.entries(RESOURCE_TYPES).filter(([type, definition]) => definition.count > 0 && (known.has(type) || ALWAYS_KNOWN_MATERIALS.has(type))).map(([type, definition]) => ({ value: type, label: `Gather ${definition.label.toLowerCase()}` }));
+  return [{ value: '', label: 'No job · rest in the nest' }, ...gatherable, { value: 'rack', label: 'Tend the drying rack' }, { value: 'carry', label: 'Carry between boxes' }];
+}
+
+function stationName(station) {
+  const sameKind = burrow.state.stations.filter((candidate) => candidate.kind === station.kind);
+  const number = sameKind.length > 1 ? ` ${sameKind.indexOf(station) + 1}` : '';
+  return `${STATION_KINDS[station.kind].label}${number}`;
+}
+
+function rescueHelperAt(spot) {
+  const guard = spot.guardKind && enemies.list.find((enemy) => enemy.kind === spot.guardKind && enemies.alive(enemy));
+  if (guard) {
+    hud.toast(`The ${guard.definition.label.toLowerCase()} guards this helper — defeat it first`);
+    return null;
+  }
+  if (!burrow.exists || !helpers.freeNest()) {
+    hud.toast('Build a helper nest in your burrow first — then come back for this crab');
+    return null;
+  }
+  const helper = helpers.rescue(spot);
+  if (!helper) return null;
   soundAt('recoverRemains');
-  hud.toast('A helper joined your burrow');
-  if (helpersPanel.isOpen) helpersPanel.render();
+  hud.toast('A helper crab joined your nest — give it a job from Helpers');
   refreshHud(null);
   persist();
   return helper;
+}
+
+function walkToStranded(spot) {
+  if (Math.hypot(spot.x - player.x, spot.z - player.z) <= RESCUE_REACH) {
+    stopWalking();
+    return rescueHelperAt(spot);
+  }
+  const stand = navigation.nearestWalkable(spot.x - 1.4, spot.z - 1.2, 6) || spot;
+  if (!setDestination(stand.x, stand.z)) return false;
+  player.walkGoal = { strandedSpot: spot };
+  return true;
+}
+
+function adoptHomelessHelpers() {
+  if (!burrow.exists || !helpers.list.some((helper) => !burrow.state.stations.some((station) => station.id === helper.nestId))) return;
+  let nest = burrow.state.stations.find((station) => station.kind === 'helperNest');
+  if (!nest) {
+    const cells = burrow.freeCells().sort((first, second) => Math.hypot(first.column - LEGACY_HELPER_CELL.column, first.row - LEGACY_HELPER_CELL.row) - Math.hypot(second.column - LEGACY_HELPER_CELL.column, second.row - LEGACY_HELPER_CELL.row));
+    if (!cells.length) return;
+    nest = burrow.addStation('helperNest', cells[0].column, cells[0].row, workshop);
+  }
+  helpers.adopt(nest);
+  for (const [index, spot] of STRANDED_FREE_SPOTS.entries()) if (index < helpers.list.length) helpers.markRescued(spot.id);
+  save.burrow = burrow.serialize();
 }
 
 const workbenchPanel = createWorkbenchPanel(hud.root, {
@@ -634,7 +717,7 @@ function cameraDistanceFor(isUnderground) {
   return isUnderground ? cameraDistances.burrow ?? framedBurrowCameraDistance() : cameraDistances.surface;
 }
 
-const player = { wellFedUntil: save.wellFedSeconds || 0, softUntil: save.softSeconds || 0, moltTimer: save.moltSeconds || 0, moltKind: save.moltKind || null, x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
+const player = { restedUntil: save.restedSeconds || 0, sleeping: null, wellFedUntil: save.wellFedSeconds || 0, softUntil: save.softSeconds || 0, moltTimer: save.moltSeconds || 0, moltKind: save.moltKind || null, x: save.x, z: save.z, y: 0, heading: save.heading, speed: 0, path: [], pathIndex: 0, gatherTarget: null, gatherProgress: 0, headingToWorkshop: false, groundNormal: new THREE.Vector3(0, 1, 0), size: 1, waterDepth: 0, wetness: save.wetness, wetHeight: save.wetHeight, alive: true, dyingTimer: 0, heldNode: null, combatTarget: null, attackTimer: 0, combatRepathTimer: 0, hitCount: 0, lastCombatTime: -100 };
 const startPoint = (underground ? burrow.space.nearestWalkable(player.x, player.z) : navigation.nearestWalkable(player.x, player.z, 40)) || HOME_SPOT;
 player.x = startPoint.x;
 player.z = startPoint.z;
@@ -677,7 +760,7 @@ let startingOver = false;
 function persist() {
   if (isScreenshotMode || startingOver) return;
   noteDiscoveries();
-  Object.assign(save, { x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, cameraDistances: { ...cameraDistances, [underground ? 'burrow' : 'surface']: cameraDistance }, helpers: helpers.serialize(), rack: rack.serialize(), wellFedSeconds: Math.max(0, (player.wellFedUntil || 0) - simulationTime), softSeconds: Math.max(0, (player.softUntil || 0) - simulationTime), moltSeconds: Math.max(0, player.moltTimer || 0), moltKind: player.moltKind || null });
+  Object.assign(save, { fog: fog.serialize(), x: player.x, z: player.z, heading: player.heading, nodes: resources.serialize(), wetness: player.wetness, wetHeight: player.wetHeight, gear: gear.serialize(), progression: progression.serialize(), remains: remains.serialize(), burrow: burrow.serialize(), storage, underground, cameraDistances: { ...cameraDistances, [underground ? 'burrow' : 'surface']: cameraDistance }, helpers: helpers.serialize(), rack: rack.serialize(), wellFedSeconds: Math.max(0, (player.wellFedUntil || 0) - simulationTime), restedSeconds: Math.max(0, (player.restedUntil || 0) - simulationTime), softSeconds: Math.max(0, (player.softUntil || 0) - simulationTime), moltSeconds: Math.max(0, player.moltTimer || 0), moltKind: player.moltKind || null });
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   } catch {
@@ -701,8 +784,7 @@ function refreshHud(bumpedType) {
 }
 
 function blockEntrance() {
-  const { x, z } = burrow.state.entrance;
-  world.blockCircle(x, z, ENTRANCE_BLOCK_RADIUS);
+  for (const point of burrow.travelPoints()) world.blockCircle(point.surface.x, point.surface.z, ENTRANCE_BLOCK_RADIUS);
   if (!underground && !world.isWalkable(player.x, player.z)) {
     const free = navigation.nearestWalkable(player.x, player.z, 10);
     if (free) Object.assign(player, { x: free.x, z: free.z });
@@ -752,6 +834,7 @@ function cancelPlacement() {
   placement.moving = null;
   placement.rack = false;
   burrow.showPlacementCells(false);
+  mapView.hide();
   hud.setMode(null);
   refreshHud(null);
 }
@@ -797,11 +880,16 @@ function chooseEntranceSpot(x, z) {
 
 function buildStation(kind, column, row) {
   const definition = STATION_KINDS[kind];
-  if (!definition || burrow.hasStation(kind) || !canAfford(definition.cost, save.inventory)) return false;
+  if (!definition || (!definition.multiple && burrow.hasStation(kind)) || !canAfford(definition.cost, save.inventory)) return false;
   if (!burrow.freeCells().some((cell) => cell.column === column && cell.row === row)) return false;
+  if (kind === 'exit' && exitCellProblem(column, row)) return false;
   for (const [type, amount] of Object.entries(definition.cost)) save.inventory[type] -= amount;
-  burrow.addStation(kind, column, row, workshop);
+  const station = burrow.addStation(kind, column, row, workshop);
   if (kind === 'workshop') workshop.build();
+  if (kind === 'exit') {
+    exitBlockedCells.set(station.id, world.blockCircle(station.surface.x, station.surface.z, ENTRANCE_BLOCK_RADIUS));
+    fog.reveal(station.surface.x, station.surface.z, 8);
+  }
   save.burrow = burrow.serialize();
   const spot = burrow.stationSpot({ column, row });
   if (underground && !burrow.space.isWalkable(player.x, player.z)) {
@@ -809,7 +897,7 @@ function buildStation(kind, column, row) {
     if (free) Object.assign(player, { x: free.x, z: free.z });
   }
   soundAt('craft');
-  hud.toast(kind === 'workshop' ? 'Workshop built — tap it to craft' : `${definition.label} built — tap it to open`);
+  hud.toast({ workshop: 'Workshop built — tap it to craft', exit: 'Exit dug — walk to it to go up', crabBed: 'Crab bed built — tap it to sleep' }[kind] || `${definition.label} built — tap it to open`);
   refreshHud(null);
   persist();
   return true;
@@ -868,8 +956,41 @@ function chooseStation(kind) {
     return;
   }
   placement.station = kind;
+  if (kind === 'exit') {
+    const allowed = burrow.freeCells().filter((cell) => !exitCellProblem(cell.column, cell.row));
+    burrow.showPlacementCells(true, (cell) => allowed.some((candidate) => candidate.column === cell.column && candidate.row === cell.row));
+    mapView.show(exitMapMarkers(allowed));
+    hud.setMode(allowed.length ? 'Tap a glowing spot — the map shows where the exit comes up' : 'Dig tunnels toward explored dry sand first', cancelPlacement);
+    return;
+  }
   burrow.showPlacementCells(true);
   hud.setMode(`Tap a glowing spot to place the ${STATION_KINDS[kind].label.toLowerCase()}`, cancelPlacement);
+}
+
+const BOSS_EXIT_CLEARANCE = 24;
+const EXIT_SPACING = 7;
+const exitBlockedCells = new Map();
+
+function exitCellProblem(column, row) {
+  const surface = burrow.surfacePointOf(column, row);
+  if (!surface || Math.abs(surface.x) > PLAY_HALF_SIZE - 4 || Math.abs(surface.z) > PLAY_HALF_SIZE - 4) return 'outside';
+  if (!fog.isRevealed(surface.x, surface.z)) return 'unexplored';
+  if (isInHold(surface.x, surface.z)) return 'boss';
+  for (const enemy of enemies.list) {
+    if (!enemy.definition.boss && !MINIBOSS_MATERIALS[enemy.kind]) continue;
+    const home = enemy.home || enemy;
+    if (Math.hypot(home.x - surface.x, home.z - surface.z) < BOSS_EXIT_CLEARANCE) return 'boss';
+  }
+  for (const point of burrow.travelPoints()) if (Math.hypot(point.surface.x - surface.x, point.surface.z - surface.z) < EXIT_SPACING) return 'crowded';
+  return entranceSpotProblem(surface.x, surface.z);
+}
+
+function exitMapMarkers(allowedCells) {
+  return {
+    player: underground ? null : { x: player.x, z: player.z },
+    entrances: burrow.travelPoints().map((point) => point.surface),
+    candidates: allowedCells.map((cell) => burrow.surfacePointOf(cell.column, cell.row)),
+  };
 }
 
 function buildWorkshop() {
@@ -927,14 +1048,28 @@ function setUnderground(value) {
   if (!value) burrow.showPlacementCells(false);
 }
 
-function enterBurrow() {
+function mainTravelPoint() {
+  return burrow.travelPoints()[0];
+}
+
+function nearestTravelPoint() {
+  let best = null;
+  for (const point of burrow.travelPoints()) {
+    const spot = underground ? point.below : point.surface;
+    const distance = Math.hypot(spot.x - player.x, spot.z - player.z);
+    if (!best || distance < best.distance) best = { point, distance };
+  }
+  return best;
+}
+
+function enterBurrow(point = mainTravelPoint()) {
   if (!burrow.exists) return false;
   closePanels();
   stopWalking();
   player.gatherTarget = null;
   player.combatTarget = null;
   setUnderground(true);
-  const arrival = burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 3.2 * SHAFT_ACCESS_ROW_STEP);
+  const arrival = point.station ? burrow.space.nearestWalkable(point.below.x, point.below.z - 1.6) : burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 3.2 * SHAFT_ACCESS_ROW_STEP);
   Object.assign(player, { x: arrival.x, z: arrival.z, y: BURROW_ORIGIN.y, speed: 0, heading: 0 });
   hud.fade();
   updateCamera(0, true);
@@ -943,13 +1078,14 @@ function enterBurrow() {
   return true;
 }
 
-function exitBurrow() {
+function exitBurrow(point = mainTravelPoint()) {
   if (!underground) return false;
   closePanels();
   cancelPlacement();
   stopWalking();
   setUnderground(false);
-  const { x, z } = burrow.state.entrance;
+  fog.reveal(point.surface.x, point.surface.z);
+  const { x, z } = point.surface;
   const outside = navigation.nearestWalkable(x - 2.2, z - 1.6, 10) || HOME_SPOT;
   Object.assign(player, { x: outside.x, z: outside.z, y: world.heightAt(outside.x, outside.z), speed: 0, heading: Math.PI + 0.4 });
   hud.fade();
@@ -959,11 +1095,11 @@ function exitBurrow() {
   return true;
 }
 
-function walkToEntrance({ enter = false } = {}) {
+function walkToEntrance({ enter = false, point = mainTravelPoint() } = {}) {
   if (!burrow.exists || underground) return false;
-  const { x, z } = burrow.state.entrance;
+  const { x, z } = point.surface;
   if (Math.hypot(x - player.x, z - player.z) <= ENTRANCE_REACH + 0.3) {
-    if (enter) return enterBurrow();
+    if (enter) return enterBurrow(point);
     stopWalking();
     hud.bumpTravel();
     return true;
@@ -982,25 +1118,27 @@ const travelProjection = new THREE.Vector3();
 function travelOption() {
   if (!burrow.exists || isPlacing() || player.dyingTimer > 0 || isMolting()) return null;
   if (player.pathIndex < player.path.length || player.digTarget) return null;
-  if (underground) return Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH ? 'exit' : null;
-  return Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= TRAVEL_REACH_SURFACE ? 'enter' : null;
+  const nearest = nearestTravelPoint();
+  if (!nearest) return null;
+  if (underground) return nearest.distance <= ENTRANCE_REACH ? 'exit' : null;
+  return nearest.distance <= TRAVEL_REACH_SURFACE ? 'enter' : null;
 }
 
 function travel() {
   const option = travelOption();
-  if (option === 'enter') return enterBurrow();
-  if (option === 'exit') return exitBurrow();
+  if (option === 'enter') return enterBurrow(nearestTravelPoint().point);
+  if (option === 'exit') return exitBurrow(nearestTravelPoint().point);
   return false;
 }
 
-function walkToShaft() {
+function walkToShaft(point = mainTravelPoint()) {
   if (!underground) return false;
-  if (Math.hypot(burrow.shaftCenter.x - player.x, burrow.shaftCenter.z - player.z) <= ENTRANCE_REACH) {
+  if (Math.hypot(point.below.x - player.x, point.below.z - player.z) <= ENTRANCE_REACH) {
     stopWalking();
     hud.bumpTravel();
     return true;
   }
-  return setDestination(burrow.shaftCenter.x, burrow.shaftCenter.z);
+  return setDestination(point.below.x, point.below.z);
 }
 
 function walkToStation(station) {
@@ -1019,7 +1157,10 @@ function openStation(station) {
   const spot = burrow.stationSpot(station);
   turnToward(Math.atan2(spot.x - player.x, spot.z - player.z), 1);
   if (station.kind === 'workshop') workbenchPanel.open();
-  else storagePanel.open();
+  else if (station.kind === 'exit') hud.bumpTravel();
+  else if (station.kind === 'crabBed') startSleeping(station);
+  else if (station.kind === 'helperNest') storagePanel.open(station.box, { station, title: stationName(station) });
+  else storagePanel.open(storage, { station, title: 'Storage' });
 }
 
 function startDigCell(column, row) {
@@ -1159,7 +1300,8 @@ function closeStructurePanels() {
   for (const panel of [workbenchPanel, storagePanel, rackPanel]) if (panel.isOpen) panel.close();
 }
 
-function startMovingStructure(kind) {
+function startMovingStructure(target) {
+  const kind = typeof target === 'string' ? target : target.kind;
   closeStructurePanels();
   stopWalking();
   const label = STATION_KINDS[kind].label.toLowerCase();
@@ -1168,7 +1310,7 @@ function startMovingStructure(kind) {
     hud.setMode(`Tap open sand near your burrow entrance to move the ${label}`, cancelPlacement);
     return;
   }
-  placement.moving = burrow.stationOf(kind);
+  placement.moving = typeof target === 'string' ? burrow.stationOf(kind) : target;
   burrow.showPlacementCells(true);
   hud.setMode(`Tap a glowing spot to move the ${label}`, cancelPlacement);
 }
@@ -1183,7 +1325,7 @@ function moveStationTo(column, row) {
     if (free) Object.assign(player, { x: free.x, z: free.z });
   }
   soundAt('craft');
-  hud.toast(`${STATION_KINDS[station.kind].icon} ${STATION_KINDS[station.kind].label} moved`);
+  hud.toast(`${STATION_KINDS[station.kind].label} moved`);
   persist();
   return true;
 }
@@ -1221,18 +1363,24 @@ function moveRackTo(x, z) {
   return true;
 }
 
-function storageIsEmpty() {
-  return !storage.shells.length && !storage.claws.length && !Object.values(storage.inventory).some((amount) => amount > 0);
+function boxIsEmpty(box) {
+  return !box.shells.length && !box.claws.length && !Object.values(box.inventory).some((amount) => amount > 0);
 }
 
-function dismantleStructure(kind) {
+function dismantleStructure(target) {
+  const kind = typeof target === 'string' ? target : target.kind;
+  const targetStation = typeof target === 'string' ? (kind === 'dryingRack' ? null : burrow.stationOf(kind)) : target;
   const definition = STATION_KINDS[kind];
-  if (kind === 'storage' && !storageIsEmpty()) {
+  if (kind === 'storage' && !boxIsEmpty(storage)) {
     hud.toast('Empty the storage first');
     return false;
   }
-  if (kind === 'storage' && helpers.list.length) {
-    hud.toast('Your helpers bring their finds here — the storage has to stay');
+  if (kind === 'helperNest' && helpers.list.some((helper) => helper.nestId === targetStation.id)) {
+    hud.toast('Helpers live in this nest — it has to stay');
+    return false;
+  }
+  if (kind === 'helperNest' && !boxIsEmpty(targetStation.box)) {
+    hud.toast('Empty the nest box first');
     return false;
   }
   const refund = { ...definition.cost };
@@ -1246,7 +1394,7 @@ function dismantleStructure(kind) {
     rackBlockedCells = [];
     rack.remove();
   } else {
-    const station = burrow.stationOf(kind);
+    const station = targetStation;
     if (!station) return false;
     if (player.walkGoal === station) stopWalking();
     burrow.removeStation(station);
@@ -1589,7 +1737,7 @@ function updatePlayer(deltaTime) {
   }
   const waterDepth = space().waterLevelAt(player.x, player.z, tideState.seaLevel) - player.y;
   const inkSlow = simulationTime < (player.inkedUntil || 0) ? player.inkSpeedFactor : 1;
-  const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * playerStats().speedFactor * inkSlow;
+  const topSpeed = (waterDepth > 0.7 ? WADE_SPEED : WALK_SPEED) * playerStats().speedFactor * inkSlow * (isRested() ? RESTED_SPEED_FACTOR : 1);
   let targetSpeed = 0;
   const steering = keyboardDirection();
   const combatTarget = player.combatTarget && enemies.alive(player.combatTarget) ? player.combatTarget : null;
@@ -1650,10 +1798,12 @@ function updatePlayer(deltaTime) {
   if (player.walkGoal && arrived) {
     const goal = player.walkGoal;
     player.walkGoal = null;
-    if (goal === 'enterBurrow' && !underground && Math.hypot(burrow.state.entrance.x - player.x, burrow.state.entrance.z - player.z) <= TRAVEL_REACH_SURFACE) enterBurrow();
+    if (goal === 'enterBurrow' && !underground && travelOption() === 'enter') enterBurrow(nearestTravelPoint().point);
     else if (goal === 'rack' && !underground && Math.hypot(rack.state.x - player.x, rack.state.z - player.z) <= RACK_REACH + 0.8) {
       stopWalking();
       rackPanel.open();
+    } else if (goal && goal.strandedSpot && !underground) {
+      if (Math.hypot(goal.strandedSpot.x - player.x, goal.strandedSpot.z - player.z) <= RESCUE_REACH + 1) rescueHelperAt(goal.strandedSpot);
     } else if (typeof goal === 'object' && underground) {
       const spot = burrow.stationSpot(goal);
       if (Math.hypot(spot.x - player.x, spot.z - player.z) <= STATION_REACH) openStation(goal);
@@ -1671,7 +1821,7 @@ function updatePlayer(deltaTime) {
       turnToward(Math.atan2(dig.x - player.x, dig.z - player.z), deltaTime);
       dig.progress += deltaTime;
       const total = dig.kind === 'entrance' ? ENTRANCE_DIG_SECONDS : burrow.digSeconds;
-      if (dig.kind === 'cell') burrow.setDigProgress(dig.row * BURROW_GRID + dig.column, Math.min(1, dig.progress / total));
+      if (dig.kind === 'cell') burrow.setDigProgress(burrow.cellIndex(dig.column, dig.row), Math.min(1, dig.progress / total));
       player.digSoundTimer = (player.digSoundTimer || 0) - deltaTime;
       if (player.digSoundTimer <= 0) {
         player.digSoundTimer = 0.45;
@@ -1772,8 +1922,40 @@ function updateBodyWetness(deltaTime) {
 }
 
 function updateHealth(deltaTime) {
+  if (player.sleeping) {
+    progression.state.health = Math.min(progression.maxHealth(), progression.state.health + (progression.maxHealth() / SLEEP_FULL_HEAL_SECONDS) * deltaTime);
+    if (progression.state.health >= progression.maxHealth()) wakeUp(true);
+    return;
+  }
   const fed = isWellFed();
-  if (fed || simulationTime - player.lastCombatTime > HEALTH_REGEN_DELAY_SECONDS) progression.state.health = Math.min(progression.maxHealth(), progression.state.health + HEALTH_REGEN_PER_SECOND * (fed ? WELL_FED_REGEN_FACTOR : 1) * deltaTime);
+  const regenFactor = (fed ? WELL_FED_REGEN_FACTOR : 1) * (isRested() ? RESTED_REGEN_FACTOR : 1);
+  if (fed || simulationTime - player.lastCombatTime > HEALTH_REGEN_DELAY_SECONDS) progression.state.health = Math.min(progression.maxHealth(), progression.state.health + HEALTH_REGEN_PER_SECOND * regenFactor * deltaTime);
+}
+
+const SLEEP_FULL_HEAL_SECONDS = 10;
+const RESTED_SECONDS = 900;
+const RESTED_REGEN_FACTOR = 2;
+const RESTED_SPEED_FACTOR = 1.1;
+const isRested = () => simulationTime < (player.restedUntil || 0);
+
+function startSleeping(station) {
+  if (player.combatTarget || isMolting()) return false;
+  stopWalking();
+  player.sleeping = station;
+  hud.setMode('Sleeping — HP comes back fast', () => wakeUp(false));
+  soundAt('recoverRemains', player.x, player.z, 0.4);
+  return true;
+}
+
+function wakeUp(rested) {
+  if (!player.sleeping) return;
+  player.sleeping = null;
+  hud.setMode(null);
+  if (rested) {
+    player.restedUntil = simulationTime + RESTED_SECONDS;
+    hud.toast('You wake up rested — faster healing and +10% speed for 15 min');
+  }
+  persist();
 }
 
 function simulate(deltaTime) {
@@ -1782,10 +1964,11 @@ function simulate(deltaTime) {
   seaUniforms.uTime.value = simulationTime;
   updateTide(deltaTime);
   updatePlayer(deltaTime);
+  if (!underground) fog.follow(player.x, player.z);
   if (underground) Object.assign(surfaceProbe, { x: burrow.state.entrance.x, z: burrow.state.entrance.z });
   enemies.update(deltaTime, simulationTime, underground ? surfaceProbe : player);
   rack.update(deltaTime);
-  helpers.update(deltaTime, simulationTime, burrow.state.entrance);
+  helpers.update(deltaTime);
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   noticeReef();
@@ -1905,20 +2088,20 @@ function renderScene() {
   rack.render(simulationTime, camera, !underground);
   campProps.update(simulationTime);
   holdProps.update(simulationTime);
-  const buffs = [isMolting() ? `Molting · ${Math.ceil(player.moltTimer)} s` : null, isSoft() ? `Soft skin · 🛡 −50% · ${Math.ceil(player.softUntil - simulationTime)} s` : null, isWellFed() ? `Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null, simulationTime < (player.inkedUntil || 0) ? `Inked · ${Math.ceil(player.inkedUntil - simulationTime)} s` : null].filter(Boolean);
+  const buffs = [isMolting() ? `Molting · ${Math.ceil(player.moltTimer)} s` : null, isSoft() ? `Soft skin · 🛡 −50% · ${Math.ceil(player.softUntil - simulationTime)} s` : null, isWellFed() ? `Well fed · ${Math.ceil(player.wellFedUntil - simulationTime)} s` : null, simulationTime < (player.inkedUntil || 0) ? `Inked · ${Math.ceil(player.inkedUntil - simulationTime)} s` : null, isRested() ? `Rested · ${Math.ceil((player.restedUntil - simulationTime) / 60)} min` : null].filter(Boolean);
   hud.setBuff(buffs.length ? buffs.join('  ') : null);
   if (rackPanel.isOpen && !rackPanel.isPressed && Math.floor(simulationTime) !== Math.floor(simulationTime - 1 / 60)) rackPanel.render();
-  if (helpersPanel.isOpen && Math.floor(simulationTime * 2) !== Math.floor((simulationTime - 1 / 60) * 2)) helpersPanel.render();
+  if (helpersPanel.isOpen && Math.floor(simulationTime * 2) !== Math.floor((simulationTime - 1 / 60) * 2)) helpersPanel.refresh();
   const travelShown = travelOption();
   hud.setTravel(travelShown);
   if (travelShown) {
-    const anchor = burrow.travelPoint(underground);
+    const anchor = burrow.travelLabelPoint(nearestTravelPoint().point, underground);
     travelProjection.set(anchor.x, anchor.y, anchor.z).project(camera);
     hud.placeTravel((travelProjection.x * 0.5 + 0.5) * innerWidth, (-travelProjection.y * 0.5 + 0.5) * innerHeight);
   }
   spotFeedback.visible = spotFeedback.visible && simulationTime < spotFeedbackUntil && !underground;
   spotFeedback.scale.setScalar(1 + 0.08 * Math.sin(simulationTime * 5));
-  enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null, { x: player.x, z: player.z, level: progression.state.level });
+  enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null, { x: player.x, z: player.z, level: progression.state.level, isRevealed: fog.isRevealed });
   remains.update(simulationTime, camera, player);
   hud.setVitals(progression.state.level, progression.state.health, progression.maxHealth(), progression.state.experience, progression.experienceToNext());
   const farZoomShare = THREE.MathUtils.smoothstep(cameraDistance, ...FAR_ZOOM_RING_DISTANCES);
@@ -1927,6 +2110,8 @@ function renderScene() {
   const dangerShare = enemies.list.some((enemy) => enemy.zone || (enemy.state === 'chase' && enemy.health > 0 && Math.hypot(enemy.x - player.x, enemy.z - player.z) < PLAYER_RING_DANGER_DISTANCE)) ? 0.8 : 0;
   playerRing.material.opacity = Math.max(farZoomShare * 0.75, dangerShare);
   playerRing.visible = false;
+  fog.upload();
+  pipeline.setFogEnabled(!underground);
   if (rendersFrames) pipeline.render(scene, camera, { focusDistance: camera.position.distanceTo(playerFocusPoint.set(player.x, player.y + 0.6, player.z)), time: simulationTime });
   hud.setTide(tideLabel(), (seaLevelAt(save.worldTime) - TIDE_MIDDLE) / TIDE_AMPLITUDE / 2 + 0.5);
 }
@@ -1993,8 +2178,9 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
       walkToStation(station);
       return;
     }
-    if (burrow.shaftUnder(clientX, clientY, camera)) {
-      walkToShaft();
+    const shaftPoint = burrow.shaftUnder(clientX, clientY, camera);
+    if (shaftPoint) {
+      walkToShaft(shaftPoint);
       return;
     }
   }
@@ -2009,6 +2195,10 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
 }
 
 function handleTap(clientX, clientY, isNewTouch) {
+  if (player.sleeping) {
+    if (isNewTouch) wakeUp(false);
+    return;
+  }
   if (paused || anyPanelOpen() || player.dyingTimer > 0 || isMolting()) return;
   if (underground) {
     handleBurrowTap(clientX, clientY, isNewTouch);
@@ -2030,11 +2220,18 @@ function handleTap(clientX, clientY, isNewTouch) {
     walkToRack();
     return;
   }
-  if (isNewTouch && burrow.entranceUnder(clientX, clientY, camera, ENTRANCE_PICK_RADIUS_PIXELS)) {
-    walkToEntrance();
+  const entrancePoint = isNewTouch ? burrow.entranceUnder(clientX, clientY, camera, ENTRANCE_PICK_RADIUS_PIXELS) : null;
+  if (entrancePoint) {
+    walkToEntrance({ point: entrancePoint });
     return;
   }
-  const enemy = isNewTouch ? enemies.pick(clientX, clientY, camera) : null;
+  const strandedSpot = isNewTouch ? helpers.strandedUnder(clientX, clientY, camera, STRANDED_PICK_RADIUS_PIXELS) : null;
+  if (strandedSpot && fog.isRevealed(strandedSpot.x, strandedSpot.z)) {
+    walkToStranded(strandedSpot);
+    return;
+  }
+  const pickedEnemy = isNewTouch ? enemies.pick(clientX, clientY, camera) : null;
+  const enemy = pickedEnemy && fog.isRevealed(pickedEnemy.x, pickedEnemy.z) ? pickedEnemy : null;
   if (enemy) {
     engage(enemy);
     return;
@@ -2183,6 +2380,19 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pagehide', persist);
 
 if (burrow.exists) blockEntrance();
+if (!save.fog) revealStartingFog();
+adoptHomelessHelpers();
+
+function revealStartingFog() {
+  const regionsVisited = new Set(['beach']);
+  if (save.reefFound) regionsVisited.add('reef');
+  if (save.campFound) regionsVisited.add('camp');
+  if (save.holdFound) regionsVisited.add('hold');
+  const returningPlayer = save.hasMoved || burrow.exists;
+  if (returningPlayer) fog.revealWhere((x, z) => regionsVisited.has(regionAt(x, z)) && Math.hypot(x - HOME_SPOT.x, z - HOME_SPOT.z) < (regionAt(x, z) === 'beach' ? STARTING_BEACH_REVEAL_RADIUS : Infinity));
+  fog.reveal(HOME_SPOT.x, HOME_SPOT.z, STARTING_REVEAL_RADIUS);
+  if (burrow.exists) fog.reveal(burrow.state.entrance.x, burrow.state.entrance.z, STARTING_REVEAL_RADIUS);
+}
 setUnderground(underground);
 cameraDistance = cameraDistanceFor(underground);
 refreshHud(null);
@@ -2263,9 +2473,14 @@ if (isScreenshotMode) {
     rack.state.ready = pose.rack.ready;
   }
   if (pose.wellFed) player.wellFedUntil = simulationTime + 64;
-  for (const job of pose.helpers || []) {
-    Object.assign(save.inventory, HELPER_COST);
-    recruitHelper(job);
+  if (pose.helpers && !helpers.freeNest()) {
+    const cell = burrow.freeCells().find((candidate) => candidate.column === LEGACY_HELPER_CELL.column && candidate.row === LEGACY_HELPER_CELL.row) || burrow.freeCells()[0];
+    Object.assign(save.inventory, STATION_KINDS.helperNest.cost);
+    buildStation('helperNest', cell.column, cell.row);
+  }
+  for (const [index, job] of (pose.helpers || []).entries()) {
+    const helper = helpers.rescue(helpers.strandedVisible()[0] || { id: `pose-${index}` });
+    if (helper) helpers.setJob(helper.id, job);
   }
   if (pose.helpersResting) for (const helper of helpers.list) helper.restTimer = 600;
   for (let step = 0; step < (pose.simulateSeconds || 0) / FIXED_STEP; step++) simulate(FIXED_STEP);
@@ -2369,7 +2584,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, salvageItem, startMovingStructure, dismantleStructure, moveStationTo, moveRackTo, isRecipeDiscovered, placement, cancelPlacement, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, startSleeping, wakeUp, isRested, mapView, fog, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   setRendering: (enabled) => { rendersFrames = enabled; },
   isPaused: () => paused,

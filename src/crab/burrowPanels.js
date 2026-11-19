@@ -9,7 +9,7 @@ function createPanelShell(root, className, title, onClose) {
   const overlay = element('div', `workbench ${className}`, root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
-  element('div', 'workbench-title', header, title);
+  const titleNode = element('div', 'workbench-title', header, title);
   const closeButton = element('button', 'workbench-close', header, '✕');
   closeButton.setAttribute('aria-label', 'Close');
   const body = element('div', 'workbench-body', card);
@@ -20,6 +20,9 @@ function createPanelShell(root, className, title, onClose) {
   return {
     overlay,
     body,
+    setTitle: (text) => {
+      titleNode.textContent = text;
+    },
     get isOpen() {
       return overlay.classList.contains('visible');
     },
@@ -48,10 +51,10 @@ export function createBuildPanel(root, { inventory, hasStation, onChoose, onClos
     shell.body.replaceChildren();
     element('div', 'summary', shell.body, 'Pick a station, then tap a glowing spot in your burrow.');
     for (const [kind, definition] of Object.entries(STATION_KINDS)) {
-      const built = hasStation(kind);
+      const built = !definition.multiple && hasStation(kind);
       const row = element('div', 'item', shell.body);
       const text = element('div', 'item-text', row);
-      element('div', 'item-name', text, `${definition.icon} ${definition.label}`);
+      element('div', 'item-name', text, definition.label);
       element('div', 'item-ability', text, definition.description);
       const cost = element('div', 'cost', text);
       for (const [index, part] of costText(definition.cost, inventory()).entries()) element('span', part.includes('have') ? 'cost-item short' : 'cost-item', cost, part).dataset.index = String(index);
@@ -75,9 +78,12 @@ export function createBuildPanel(root, { inventory, hasStation, onChoose, onClos
   };
 }
 
-export function createStoragePanel(root, { gear, inventory, storage, thumbnails, onChange, onSalvage, onMove, onDismantle, onClose }) {
+export function createStoragePanel(root, { gear, inventory, storage: defaultStorage, thumbnails, onChange, onSalvage, onMove, onDismantle, onClose }) {
   const shell = createPanelShell(root, 'storage-panel', 'Storage', onClose);
   let selected = null;
+  let storage = defaultStorage;
+  let currentStation = null;
+  let boxLabel = 'Storage';
 
   function moveMaterial(type, toStorage) {
     const from = toStorage ? inventory() : storage.inventory;
@@ -166,12 +172,12 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
 
   function render() {
     shell.body.replaceChildren();
-    element('div', 'summary', shell.body, 'Stored things stay safe here when you are defeated.');
+    element('div', 'summary', shell.body, storage === defaultStorage ? 'Stored things stay safe here when you are defeated.' : 'Your helpers bring their finds to this nest box. Things here stay safe when you are defeated.');
     const storeAllButton = element('button', 'item-action store-all', shell.body, 'Store all · worn gear stays on you');
     storeAllButton.addEventListener('click', storeAll);
     const sides = element('div', 'storage-sides', shell.body);
     renderSide(sides, 'Backpack', 'backpack', backpackEntries());
-    renderSide(sides, 'Storage', 'storage', storageEntries());
+    renderSide(sides, boxLabel, 'storage', storageEntries());
     const entry = selected ? entryFor(selected.key, selected.zone) : null;
     if (!entry) selected = null;
     const actions = [];
@@ -184,7 +190,7 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
       if (salvageButton) actions.push(salvageButton);
     }
     renderDetails(shell.body, entry, actions, 'Tap an item to see it. Double-tap to move it to the other side.');
-    renderStructureActions(shell.body, { label: 'storage', onMove, onDismantle });
+    renderStructureActions(shell.body, { label: boxLabel.toLowerCase(), onMove: () => onMove(currentStation), onDismantle: () => onDismantle(currentStation) });
   }
 
   attachSlotGestures(shell.overlay, {
@@ -200,10 +206,17 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
     get isOpen() {
       return shell.isOpen;
     },
-    open() {
+    open(box = defaultStorage, { station = null, title = 'Storage' } = {}) {
+      storage = box;
+      currentStation = station;
+      boxLabel = title;
+      shell.setTitle(title);
       selected = null;
       render();
       shell.show();
+    },
+    get box() {
+      return storage;
     },
     close: () => shell.hide(),
     select(key, zone) {
@@ -215,51 +228,77 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
   };
 }
 
-const JOB_LABELS = { shellBits: 'Shell bits', driftwood: 'Driftwood', seaLettuce: 'Sea lettuce', rack: 'Tend rack', driedKelp: 'Dried kelp' };
 function helperStatus(helper) {
-  const job = JOB_LABELS[helper.job];
-  if (helper.state === 'resting') return helper.job === 'rack' ? 'Resting · tends the rack when there is sea lettuce in storage or dried kelp to bring' : 'Resting in the burrow';
+  const carried = helper.carrying ? (RESOURCE_TYPES[helper.carrying] || {}).label || helper.carrying : null;
+  if (helper.state === 'resting') return helper.job ? 'Resting in the nest' : 'Resting in the nest · no job';
   if (helper.state === 'toRack') return helper.carrying ? 'Taking sea lettuce to the drying rack' : 'Fetching dried kelp from the drying rack';
-  if (helper.state === 'outbound') return `Heading out for ${job}`;
-  if (helper.state === 'gathering') return `Gathering ${job}`;
-  if (helper.state === 'returning') return helper.carrying ? `⬅ Carrying ${JOB_LABELS[helper.carrying]} home` : '⬅ Coming home';
+  if (helper.state === 'outbound') return `Heading out for ${(RESOURCE_TYPES[helper.job] || {}).label || helper.job}`;
+  if (helper.state === 'gathering') return `Gathering ${(RESOURCE_TYPES[helper.job] || {}).label || helper.job}`;
+  if (helper.state === 'returning') return carried ? `Carrying ${carried} home` : 'Coming home';
   if (helper.state === 'fleeing') return 'Fleeing home!';
+  if (helper.state === 'toSource') return 'Walking to the box to pick up';
+  if (helper.state === 'toTarget') return carried ? `Carrying ${carried}` : 'Carrying';
+  if (helper.state === 'toNest') return 'Walking back to the nest';
   return helper.state;
 }
 
-export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs, requirement, onRecruit, onJob, onClose }) {
+function addSelect(parent, label, options, value, onChange) {
+  const wrapper = element('label', 'job-select', parent);
+  element('span', 'job-label', wrapper, label);
+  const select = element('select', '', wrapper);
+  for (const option of options) {
+    const node = element('option', '', select, option.label);
+    node.value = String(option.value);
+  }
+  select.value = String(value ?? '');
+  select.addEventListener('change', () => onChange(select.value));
+  return select;
+}
+
+export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOptions, onJob, onClose }) {
   const shell = createPanelShell(root, 'helpers-panel', 'Helpers', onClose);
+  const statusLines = new Map();
+
+  function changeJob(helper, job, carryOrder) {
+    onJob(helper.id, job || null, carryOrder);
+    render();
+  }
+
+  function renderCarry(parent, helper) {
+    const boxes = boxOptions();
+    const order = helper.carryOrder || { fromId: boxes[0] && boxes[0].id, toId: boxes[1] && boxes[1].id, material: null };
+    const materials = [{ value: '', label: 'Anything' }, ...Object.entries(RESOURCE_TYPES).map(([type, definition]) => ({ value: type, label: definition.label }))];
+    const update = (patch) => changeJob(helper, 'carry', { ...order, ...patch });
+    addSelect(parent, 'From', boxes.map((box) => ({ value: box.id, label: box.label })), order.fromId, (value) => update({ fromId: Number(value) }));
+    addSelect(parent, 'To', boxes.map((box) => ({ value: box.id, label: box.label })), order.toId, (value) => update({ toId: Number(value) }));
+    addSelect(parent, 'What', materials, order.material || '', (value) => update({ material: value || null }));
+    if (!helper.carryOrder) onJob(helper.id, 'carry', order);
+    if (boxes.length < 2) element('div', 'item-ability danger', parent, 'Needs two boxes: a storage or helper nests.');
+  }
 
   function render() {
     shell.body.replaceChildren();
-    element('div', 'summary', shell.body, `Helpers gather on the beach and bring everything to your storage. ${helpers.list.length}/${limit} helpers.`);
-    const missing = requirement();
-    const recruitRow = element('div', 'item', shell.body);
-    const recruitText = element('div', 'item-text', recruitRow);
-    element('div', 'item-name', recruitText, 'Recruit a helper crab');
-    if (missing) element('div', 'item-ability', recruitText, missing);
-    const costLine = element('div', 'cost', recruitText);
-    for (const [type, amount] of Object.entries(cost)) {
-      const have = inventory()[type] || 0;
-      element('span', have >= amount ? 'cost-item' : 'cost-item short', costLine, `${RESOURCE_TYPES[type].icon} ${amount} ${RESOURCE_TYPES[type].label}${have >= amount ? ' ✓' : ` (have ${have})`}`);
-    }
-    const recruitButton = element('button', 'item-action', recruitRow, 'Recruit');
-    recruitButton.dataset.recruit = '1';
-    recruitButton.disabled = Boolean(missing) || helpers.list.length >= limit || !canAfford(cost, inventory());
-    recruitButton.addEventListener('click', () => onRecruit());
+    statusLines.clear();
+    element('div', 'summary', shell.body, `${helpers.list.length}/${limit} helpers. Stranded helper crabs wait out in the world — find them, then give them a job here.`);
+    if (!helpers.list.length) element('div', 'placeholder', shell.body, 'No helpers yet. Build a helper nest, then look for stranded crabs on the beach.');
     for (const [index, helper] of helpers.list.entries()) {
       const row = element('div', 'item helper-row', shell.body);
       row.dataset.helper = String(helper.id);
       const text = element('div', 'item-text', row);
-      element('div', 'item-name', text, `Helper ${index + 1} · ❤ ${Math.max(0, Math.ceil(helper.health))}/${helpers.maxHealth}`);
-      element('div', helper.state === 'fleeing' ? 'item-ability danger' : 'item-stats', text, helperStatus(helper));
+      element('div', 'item-name', text, `Helper ${index + 1} · ${Math.max(0, Math.ceil(helper.health))}/${helpers.maxHealth} HP`);
+      statusLines.set(helper, element('div', helper.state === 'fleeing' ? 'item-ability danger' : 'item-stats', text, helperStatus(helper)));
       const jobRow = element('div', 'job-row', text);
-      element('span', 'job-label', jobRow, 'Job:');
-      for (const job of jobs) {
-        const button = element('button', job === helper.job ? 'job-button active' : 'job-button', jobRow, JOB_LABELS[job]);
-        button.dataset.job = job;
-        button.addEventListener('click', () => onJob(helper.id, job));
-      }
+      const select = addSelect(jobRow, 'Job', jobOptions(), helper.job || '', (value) => changeJob(helper, value, null));
+      select.dataset.job = String(helper.id);
+      if (helper.job === 'carry') renderCarry(jobRow, helper);
+    }
+  }
+
+  function refresh() {
+    for (const [helper, line] of statusLines) {
+      const status = helperStatus(helper);
+      if (line.textContent !== status) line.textContent = status;
+      line.className = helper.state === 'fleeing' ? 'item-ability danger' : 'item-stats';
     }
   }
 
@@ -273,6 +312,7 @@ export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs
     },
     close: () => shell.hide(),
     render,
+    refresh,
   };
 }
 

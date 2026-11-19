@@ -70,15 +70,19 @@ FLOW = r'''
   out.hits = d.player.hitCount;
   step(10, () => hopper.state === 'dying' || hopper.state === 'dead');
 
-  Object.assign(d.save.inventory, { seaLettuce: 5 });
-  d.storage.inventory.seaLettuce = 6;
-  d.storage.inventory.driedKelp = 0;
+  Object.assign(d.save.inventory, { seaLettuce: 5, driftwood: 4 });
+  const nestCell = d.burrow.freeCells().find((c) => !(c.column === 6 && c.row === 5));
+  d.buildStation('helperNest', nestCell.column, nestCell.row);
+  const nest = d.burrow.state.stations.find((s) => s.kind === 'helperNest');
+  nest.box.inventory.seaLettuce = 6;
+  nest.box.inventory.driedKelp = 0;
   d.rack.state.slots = [null, null, null];
   d.rack.state.ready = 0;
-  const helper = d.recruitHelper('rack');
+  const helper = d.rescueHelperAt(d.helpers.strandedVisible()[0]);
+  if (helper) d.helpers.setJob(helper.id, 'rack');
   out.rackHelper = Boolean(helper);
   step(150);
-  out.helperResult = { storageLettuce: d.storage.inventory.seaLettuce, storageKelp: d.storage.inventory.driedKelp || 0, rack: { slots: d.rack.state.slots.map((s) => s === null ? null : +s.toFixed(2)), ready: d.rack.state.ready } };
+  out.helperResult = { storageLettuce: nest.box.inventory.seaLettuce, storageKelp: nest.box.inventory.driedKelp || 0, rack: { slots: d.rack.state.slots.map((s) => s === null ? null : +s.toFixed(2)), ready: d.rack.state.ready } };
   d.player.wellFedUntil = d.save.worldTime;
   d.persist();
   return out;

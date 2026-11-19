@@ -1288,7 +1288,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       const flyingHigh = enemy.definition.flies && enemy.altitude > 6;
       const inFight = alive(enemy) && (enemy.health < enemy.definition.health || engaged(enemy) || enemy.id === playerTargetId) && !flyingHigh;
       const nearViewer = alive(enemy) && !flyingHigh && Math.hypot(enemy.x - viewer.x, enemy.z - viewer.z) < NAME_VISIBLE_DISTANCE;
-      const barVisible = inFight || nearViewer || Boolean(restText);
+      const barVisible = (inFight || nearViewer || Boolean(restText)) && viewer.isRevealed(enemy.x, enemy.z);
       if (restText) labelPoint.set(enemy.home.x, world.heightAt(enemy.home.x, enemy.home.z) + Math.min(enemy.definition.barHeight, 6), enemy.home.z).project(camera);
       else if (barVisible) labelPoint.set(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z).project(camera);
       const onScreen = barVisible && labelPoint.z < 1;

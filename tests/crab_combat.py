@@ -94,9 +94,9 @@ with sync_playwright() as playwright:
       c.step(3);
       const crabAggro = crab.state === 'chase' && d.progression.state.health < d.progression.maxHealth();
       const autoRetaliate = d.player.combatTarget === crab;
-      const escape = d.navigation.nearestWalkable(spot.x + 30, spot.z - 25, 10);
+      const escape = d.navigation.nearestWalkable(spot.x + 48, spot.z - 32, 10);
       d.setDestination(escape.x, escape.z);
-      c.step(12);
+      c.step(18);
       const crabGaveUp = crab.state === 'return' || crab.state === 'idle';
       const healthAfterEscape = d.progression.state.health;
       c.step(8);
@@ -150,8 +150,8 @@ with sync_playwright() as playwright:
       const before = { health: d.progression.maxHealth(), attack: d.playerStats().attack };
       d.progression.gainExperience(20);
       const after = { level: d.progression.state.level, health: d.progression.maxHealth(), attack: d.playerStats().attack };
-      d.progression.gainExperience(100000);
-      return { before, after, capped: d.progression.state.level, pass: before.health === 30 && before.attack === 4 && after.level === 2 && after.health === 38 && after.attack === 5 && d.progression.state.level === 10 };
+      d.progression.gainExperience(1e7);
+      return { before, after, capped: d.progression.state.level, pass: before.health === 30 && before.attack === 4 && after.level === 2 && after.health === 38 && after.attack === 5 && d.progression.state.level === 50 };
     }''')
     checks['levels'] = progression
 
@@ -219,7 +219,7 @@ with sync_playwright() as playwright:
       __combat.step(15, () => d.remains.list.length < before);
       return { remains: d.remains.list.length, worn: d.gear.wornShell() && `${d.gear.wornShell().kind}${d.gear.wornShell().quality === 'masterwork' ? '★' : ''}`, claws: d.gear.wornClaws().kind, inventory: { ...d.save.inventory }, defense: d.playerStats().defense };
     }''')
-    checks['saveAndRecoverByTap'] = {'reloaded': reloaded, 'tap': tap, 'recovered': recovered, 'pass': reloaded == {'version': 5, 'remains': 2, 'naked': True, 'level': 3} and recovered['remains'] == 1 and recovered['worn'] == 'cone★' and recovered['claws'] == 'shellEdged' and recovered['inventory'].get('shellBits') == 4 and recovered['inventory'].get('pearls') == 1 and recovered['defense'] == 4}
+    checks['saveAndRecoverByTap'] = {'reloaded': reloaded, 'tap': tap, 'recovered': recovered, 'pass': reloaded == {'version': 6, 'remains': 2, 'naked': True, 'level': 3} and recovered['remains'] == 1 and recovered['worn'] == 'cone★' and recovered['claws'] == 'shellEdged' and recovered['inventory'].get('shellBits') == 4 and recovered['inventory'].get('pearls') == 1 and recovered['defense'] == 4}
 
     page.evaluate("() => { const d = __debug; const c = __combat; const spot = c.place(30, -40); const hopper = c.spawnNear('sandHopper', spot, 5); d.setPaused(false); d.updateCamera(0, true); d.renderScene(); window.__hopper = hopper; }")
     enemy_tap = page.evaluate("() => { const d = __debug; const e = window.__hopper; const p = new d.camera.position.constructor(e.x, e.y + e.definition.radius * 0.8, e.z).project(d.camera); return { x: (p.x * 0.5 + 0.5) * innerWidth, y: (-p.y * 0.5 + 0.5) * innerHeight }; }")

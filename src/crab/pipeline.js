@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FOG_GLSL } from './fog.js';
 
 const FULLSCREEN_VERTEX_GLSL = /* glsl */ `
 varying vec2 vUv;
@@ -87,6 +88,10 @@ void main() {
 `;
 
 const FINAL_FRAGMENT_GLSL = /* glsl */ `
+${FOG_GLSL}
+uniform sampler2D tFinalDepth;
+uniform mat4 uFinalInverseViewProjection;
+uniform float uFogEnabled;
 uniform sampler2D tSource;
 uniform sampler2D tBlurred;
 uniform sampler2D tBloom;
@@ -119,6 +124,11 @@ void main() {
   color = mix(vec3(luminance), color, 1.12);
   color = mix(color, color * color * (3.0 - 2.0 * color), 0.25);
   color *= mix(vec3(0.96, 0.98, 1.06), vec3(1.05, 1.0, 0.93), smoothstep(0.1, 0.7, luminance));
+  if (uFogEnabled > 0.5) {
+    float depth = texture2D(tFinalDepth, vUv).r;
+    vec4 world = uFinalInverseViewProjection * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    color = applyFog(color, world.xz / world.w, uTime);
+  }
   float grain = fract(sin(dot(gl_FragCoord.xy + fract(uTime) * 61.0, vec2(12.9898, 78.233))) * 43758.5453);
   gl_FragColor = vec4(toDisplay(clamp(color, 0.0, 1.0)) + (grain - 0.5) / 255.0, 1.0);
 }
@@ -164,6 +174,12 @@ export function createPipeline(renderer, quality) {
     uExposure: { value: 0.82 },
     uDepthOfField: { value: quality.depthOfField ? 1 : 0 },
     uTime: { value: 0 },
+    tFinalDepth: { value: sceneTarget.depthTexture },
+    uFinalInverseViewProjection: { value: new THREE.Matrix4() },
+    uFogEnabled: { value: 0 },
+    tFog: { value: null },
+    uFogHalfSize: { value: 1 },
+    uFogTexel: { value: 1 },
   });
 
   const drawingSize = new THREE.Vector2();
@@ -226,8 +242,17 @@ export function createPipeline(renderer, quality) {
     renderer.autoClear = true;
 
     finalMaterial.uniforms.uTime.value = time;
+    finalMaterial.uniforms.uFinalInverseViewProjection.value.copy(overlayUniforms.uInverseViewProjection.value);
     runPass(finalMaterial, null);
   }
 
-  return { render, resize, overlayScene, overlayUniforms, finalMaterial, sceneTarget };
+  function attachFog(fogUniforms) {
+    for (const [name, uniform] of Object.entries(fogUniforms)) finalMaterial.uniforms[name].value = uniform.value;
+  }
+
+  function setFogEnabled(enabled) {
+    finalMaterial.uniforms.uFogEnabled.value = enabled && finalMaterial.uniforms.tFog.value ? 1 : 0;
+  }
+
+  return { render, resize, overlayScene, overlayUniforms, finalMaterial, sceneTarget, attachFog, setFogEnabled };
 }

@@ -8,15 +8,22 @@ import { parseModel } from './rig.js';
 import burrowPropBytes from './assets/burrowProps.glb';
 
 export const BURROW_ORIGIN = { x: 1000, y: 200, z: 0 };
-export const BURROW_GRID = 11;
+export const BURROW_SPAN = 31;
+export const BURROW_CELL_MIN = -10;
+export const BURROW_CELL_MAX = BURROW_CELL_MIN + BURROW_SPAN - 1;
 export const BURROW_CELL = 3;
+export const SURFACE_UNITS_PER_CELL = 8.5;
 export const BURROW_LAYER = 1;
 export const ENTRANCE_REACH = 2.6;
 export const ENTRANCE_BLOCK_RADIUS = 1.3;
 export const SHAFT_CELL = { column: 5, row: 7 };
 export const SHAFT_ACCESS_ROW_STEP = -1;
 export const STATION_REACH = 2.9;
-const CENTER = Math.floor(BURROW_GRID / 2);
+const CENTER = 5;
+const LEGACY_GRID = 11;
+const SAND_CHUNK_CELLS = 5;
+const DETAIL_MARGIN_CELLS = 2;
+const OPEN_DISTANCE_REACH = 4;
 const WALL_HEIGHT = 1.05;
 const BORDER_RING = 2;
 const PLAYER_CLEARANCE = 0.55;
@@ -69,6 +76,9 @@ function buildPropModel(name, width, material) {
 export const STATION_KINDS = {
   workshop: { label: 'Workshop', icon: '🔨', cost: { shellBits: 5, driftwood: 3, seaLettuce: 3 }, description: 'Craft shells and claws, improve your gear.' },
   storage: { label: 'Storage', icon: '📦', cost: { driftwood: 4 }, description: 'Keeps materials and gear safe — stored things stay here when you are defeated.' },
+  helperNest: { label: 'Helper nest', icon: '🦀', cost: { driftwood: 4, seaLettuce: 2 }, description: 'Home for 3 helper crabs. They sleep here and bring their finds to the nest box.', multiple: true },
+  crabBed: { label: 'Crab bed', icon: '🛏️', cost: { seaLettuce: 4, driftwood: 2 }, description: 'Sleep to heal fast. You wake up rested: faster healing and +10% speed for 15 min.' },
+  exit: { label: 'Exit', icon: '⬆', cost: { driftwood: 2 }, description: 'A tunnel up to the surface. Only to explored dry sand, and not near bosses.', multiple: true },
   dryingRack: { label: 'Drying rack', icon: '🍂', cost: { driftwood: 4, shellBits: 2 }, description: 'Built in the sun beside your burrow entrance. Dries 3 sea lettuce into 1 dried kelp in 60 s.', surface: true },
 };
 
@@ -79,9 +89,10 @@ const DUG_FLOOR_COLOR = linearColor(0.82, 0.69, 0.5);
 const MOUND_COLOR = linearColor(0.86, 0.73, 0.52);
 const HOLE_COLOR = linearColor(0.08, 0.05, 0.03);
 
-const cellIndex = (column, row) => row * BURROW_GRID + column;
-const cellColumn = (index) => index % BURROW_GRID;
-const cellRow = (index) => Math.floor(index / BURROW_GRID);
+export const cellIndex = (column, row) => (row - BURROW_CELL_MIN) * BURROW_SPAN + (column - BURROW_CELL_MIN);
+const cellColumn = (index) => (index % BURROW_SPAN) + BURROW_CELL_MIN;
+const cellRow = (index) => Math.floor(index / BURROW_SPAN) + BURROW_CELL_MIN;
+const insideGrid = (column, row) => column >= BURROW_CELL_MIN && row >= BURROW_CELL_MIN && column <= BURROW_CELL_MAX && row <= BURROW_CELL_MAX;
 
 export function cellCenter(column, row) {
   return { x: BURROW_ORIGIN.x + (column - CENTER) * BURROW_CELL, z: BURROW_ORIGIN.z + (row - CENTER) * BURROW_CELL };
@@ -90,13 +101,19 @@ export function cellCenter(column, row) {
 function cellOf(x, z) {
   const column = Math.round((x - BURROW_ORIGIN.x) / BURROW_CELL) + CENTER;
   const row = Math.round((z - BURROW_ORIGIN.z) / BURROW_CELL) + CENTER;
-  return { column, row, inside: column >= 0 && row >= 0 && column < BURROW_GRID && row < BURROW_GRID };
+  return { column, row, inside: insideGrid(column, row) };
 }
 
 export function createEmptyBurrow() {
   const dug = [cellIndex(SHAFT_CELL.column, SHAFT_CELL.row)];
   for (let row = CENTER - 1; row <= CENTER + 1; row++) for (let column = CENTER - 1; column <= CENTER + 1; column++) dug.push(cellIndex(column, row));
-  return { entrance: null, dug, stations: [] };
+  return { entrance: null, dug, stations: [], grid: BURROW_SPAN };
+}
+
+function migrateLegacyGrid(state) {
+  if (state.grid === BURROW_SPAN) return;
+  state.dug = state.dug.map((index) => cellIndex(index % LEGACY_GRID, Math.floor(index / LEGACY_GRID)));
+  state.grid = BURROW_SPAN;
 }
 
 function colorize(geometry, colorAt) {
@@ -113,8 +130,8 @@ function colorize(geometry, colorAt) {
 
 function buildFloorGeometry() {
   const noise = createNoise2D(57);
-  const size = BURROW_GRID * BURROW_CELL + 12;
-  const geometry = new THREE.PlaneGeometry(size, size, 66, 66).rotateX(-Math.PI / 2);
+  const size = BURROW_SPAN * BURROW_CELL + 12;
+  const geometry = new THREE.PlaneGeometry(size, size, 160, 160).rotateX(-Math.PI / 2).translate((BURROW_CELL_MIN + BURROW_SPAN / 2 - 0.5 - CENTER) * BURROW_CELL, 0, (BURROW_CELL_MIN + BURROW_SPAN / 2 - 0.5 - CENTER) * BURROW_CELL);
   return colorize(geometry, (color, x, y, z) => {
     const speckle = 0.5 + 0.5 * noise(x * 0.8, z * 0.8);
     color.copy(DUG_FLOOR_COLOR).multiplyScalar(0.86 + 0.14 * speckle);
@@ -221,12 +238,45 @@ const BLUR_TAPS = (() => {
   return taps;
 })();
 
-function buildSandSurface() {
-  const cells = BURROW_GRID + BORDER_RING * 2;
-  const size = cells * BURROW_CELL;
-  const geometry = new THREE.PlaneGeometry(size, size, cells * SAND_SAMPLES_PER_CELL, cells * SAND_SAMPLES_PER_CELL).rotateX(-Math.PI / 2).deleteAttribute('uv');
+function buildSandChunkGeometry(firstColumn, firstRow, detailed) {
+  const size = SAND_CHUNK_CELLS * BURROW_CELL;
+  const segments = detailed ? SAND_CHUNK_CELLS * SAND_SAMPLES_PER_CELL : SAND_CHUNK_CELLS;
+  const centerX = (firstColumn + (SAND_CHUNK_CELLS - 1) / 2 - CENTER) * BURROW_CELL;
+  const centerZ = (firstRow + (SAND_CHUNK_CELLS - 1) / 2 - CENTER) * BURROW_CELL;
+  const geometry = new THREE.PlaneGeometry(size, size, segments, segments).rotateX(-Math.PI / 2).translate(centerX, 0, centerZ).deleteAttribute('uv');
   geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
   return geometry;
+}
+
+function buildNestGeometry() {
+  const nestColor = linearColor(0.42, 0.5, 0.24);
+  const nestDark = linearColor(0.26, 0.3, 0.14);
+  const plank = linearColor(0.55, 0.38, 0.22);
+  const parts = [];
+  const bowl = new THREE.TorusGeometry(0.95, 0.32, 8, 22).rotateX(Math.PI / 2).scale(1, 0.6, 1).translate(-0.35, 0.18, 0);
+  parts.push(colorize(bowl, (color, x, y, z) => color.copy(nestDark).lerp(nestColor, 0.5 + 0.5 * Math.sin(x * 9 + z * 7))));
+  parts.push(colorize(new THREE.CircleGeometry(0.85, 18).rotateX(-Math.PI / 2).translate(-0.35, 0.06, 0), (color) => color.copy(nestDark)));
+  parts.push(colorize(new THREE.BoxGeometry(0.8, 0.55, 0.8).translate(0.95, 0.28, -0.35), (color, x, y) => color.copy(plank).multiplyScalar(0.75 + 0.25 * Math.round(y * 6 % 1))));
+  parts.push(colorize(new THREE.BoxGeometry(0.88, 0.08, 0.88).translate(0.95, 0.58, -0.35), (color) => color.copy(plank).multiplyScalar(1.1)));
+  return mergeGeometries(parts.map((geometry) => {
+    geometry.deleteAttribute('uv');
+    return geometry;
+  }));
+}
+
+function buildBedGeometry() {
+  const kelp = linearColor(0.36, 0.42, 0.18);
+  const kelpLight = linearColor(0.55, 0.6, 0.3);
+  const parts = [];
+  for (let strand = 0; strand < 6; strand++) {
+    const offset = (strand - 2.5) * 0.28;
+    parts.push(colorize(new THREE.CapsuleGeometry(0.15, 1.7, 3, 8).rotateX(Math.PI / 2).scale(1, 0.45, 1).translate(offset, 0.12 + (strand % 2) * 0.03, 0), (color, x, y, z) => color.copy(kelp).lerp(kelpLight, 0.4 + 0.3 * Math.sin(z * 5 + strand))));
+  }
+  parts.push(colorize(new THREE.SphereGeometry(0.42, 12, 8).scale(1.2, 0.45, 0.8).translate(0, 0.25, -0.75), (color) => color.copy(kelpLight)));
+  return mergeGeometries(parts.map((geometry) => {
+    geometry.deleteAttribute('uv');
+    return geometry;
+  }));
 }
 
 function setLayers(object, layers) {
@@ -238,27 +288,38 @@ function setLayers(object, layers) {
 
 export function createBurrow(scene, world, quality, labelParent, saved) {
   const state = saved ? structuredClone(saved) : createEmptyBurrow();
+  migrateLegacyGrid(state);
+  let nextStationId = state.stations.reduce((highest, station) => Math.max(highest, station.id || 0), 0) + 1;
+  for (const station of state.stations) if (!station.id) station.id = nextStationId++;
   const dugCells = new Set(state.dug);
   dugCells.add(cellIndex(SHAFT_CELL.column, SHAFT_CELL.row));
   dugCells.add(cellIndex(SHAFT_CELL.column, SHAFT_CELL.row + SHAFT_ACCESS_ROW_STEP));
   state.dug = [...dugCells];
 
-  const entranceGroup = new THREE.Group();
-  const entranceModel = buildPropModel('burrow_entrance', ENTRANCE_MODEL_WIDTH, applySeaside(new THREE.MeshStandardMaterial({ roughness: 0.95 }), { chromaticCaustics: quality.chromaticCaustics }));
-  if (entranceModel) {
-    entranceGroup.add(entranceModel);
-    const holeShade = new THREE.Mesh(new THREE.CircleGeometry(ENTRANCE_MODEL_WIDTH * ENTRANCE_HOLE_SHARE, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x050302, map: softSpotTexture(), transparent: true, depthWrite: false }));
-    holeShade.position.y = ENTRANCE_HOLE_HEIGHT;
-    holeShade.renderOrder = 2;
-    entranceGroup.add(holeShade);
+  const entranceMaterial = applySeaside(new THREE.MeshStandardMaterial({ roughness: 0.95 }), { chromaticCaustics: quality.chromaticCaustics });
+  const moundMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, side: THREE.DoubleSide }), { surface: 'sand', chromaticCaustics: quality.chromaticCaustics });
+  const holeShadeMaterial = new THREE.MeshBasicMaterial({ color: 0x050302, map: softSpotTexture(), transparent: true, depthWrite: false });
+
+  function buildEntranceVisual(width) {
+    const group = new THREE.Group();
+    const model = buildPropModel('burrow_entrance', width, entranceMaterial);
+    if (model) {
+      group.add(model);
+      const holeShade = new THREE.Mesh(new THREE.CircleGeometry(width * ENTRANCE_HOLE_SHARE, 24).rotateX(-Math.PI / 2), holeShadeMaterial);
+      holeShade.position.y = ENTRANCE_HOLE_HEIGHT * (width / ENTRANCE_MODEL_WIDTH);
+      holeShade.renderOrder = 2;
+      group.add(holeShade);
+    } else {
+      const mound = new THREE.Mesh(buildMoundGeometry(), moundMaterial);
+      mound.receiveShadow = true;
+      mound.castShadow = true;
+      mound.scale.setScalar(width / ENTRANCE_MODEL_WIDTH);
+      group.add(mound);
+    }
+    return group;
   }
-  else {
-    const entranceMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, side: THREE.DoubleSide }), { surface: 'sand', chromaticCaustics: quality.chromaticCaustics });
-    const mound = new THREE.Mesh(buildMoundGeometry(), entranceMaterial);
-    mound.receiveShadow = true;
-    mound.castShadow = true;
-    entranceGroup.add(mound);
-  }
+
+  const entranceGroup = buildEntranceVisual(ENTRANCE_MODEL_WIDTH);
   entranceGroup.visible = false;
   scene.add(entranceGroup);
   const entranceLabel = element('div', 'world-label surface-label entrance-label hidden', labelParent, 'Burrow');
@@ -270,11 +331,18 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   floor.receiveShadow = true;
   interior.add(floor);
   const sandMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94 });
-  const sandGeometry = buildSandSurface();
-  const sand = new THREE.Mesh(sandGeometry, sandMaterial);
-  sand.castShadow = true;
-  sand.receiveShadow = true;
-  interior.add(sand);
+  const sandChunks = [];
+  for (let firstRow = BURROW_CELL_MIN - BORDER_RING; firstRow <= BURROW_CELL_MAX + BORDER_RING; firstRow += SAND_CHUNK_CELLS) {
+    for (let firstColumn = BURROW_CELL_MIN - BORDER_RING; firstColumn <= BURROW_CELL_MAX + BORDER_RING; firstColumn += SAND_CHUNK_CELLS) {
+      const mesh = new THREE.Mesh(new THREE.BufferGeometry(), sandMaterial);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      interior.add(mesh);
+      sandChunks.push({ firstColumn, firstRow, mesh, detailed: null });
+    }
+  }
+  const nestGeometry = buildNestGeometry();
+  const bedGeometry = buildBedGeometry();
   const chunkMaterial = new THREE.MeshStandardMaterial({ color: WALL_COLOR, roughness: 0.95, transparent: true });
   const chunkGeometry = new THREE.IcosahedronGeometry(0.3, 1);
   const chunks = new THREE.InstancedMesh(chunkGeometry, chunkMaterial, DIG_CHUNK_STEPS * CHUNKS_PER_STEP * 2);
@@ -299,13 +367,14 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   const storageMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
   const storageGeometry = buildStorageGeometry();
   const highlightMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 2.2, 0.8), transparent: true, opacity: 0.5, depthWrite: false });
-  const highlights = new THREE.InstancedMesh(new RoundedBoxGeometry(2.2, 0.04, 2.2, 2, 0.4), highlightMaterial, BURROW_GRID * BURROW_GRID);
+  const highlights = new THREE.InstancedMesh(new RoundedBoxGeometry(2.2, 0.04, 2.2, 2, 0.4), highlightMaterial, BURROW_SPAN * BURROW_SPAN);
   highlights.count = 0;
   highlights.renderOrder = 6;
   interior.add(highlights);
   scene.add(interior);
   const exitLabel = element('div', 'world-label burrow-label exit-label hidden', labelParent, 'Exit');
   const stationMeshes = new Map();
+  const surfaceMeshes = new Map();
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
   const digging = { cell: -1, progress: 0 };
@@ -313,18 +382,22 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   const sandNoise = createNoise2D(91);
 
   const exitKeep = new Set(EXIT_KEEP_CELLS.map(([column, row]) => cellIndex(SHAFT_CELL.column + column, SHAFT_CELL.row + row)));
-  const isDug = (column, row) => column >= 0 && row >= 0 && column < BURROW_GRID && row < BURROW_GRID && dugCells.has(cellIndex(column, row));
+  const isDug = (column, row) => insideGrid(column, row) && dugCells.has(cellIndex(column, row));
   const stationAt = (column, row) => state.stations.find((station) => station.column === column && station.row === row) || null;
 
   function openDistance(column, row) {
-    let best = Infinity;
-    for (const index of dugCells) best = Math.min(best, Math.hypot(cellColumn(index) - column, cellRow(index) - row));
+    let best = OPEN_DISTANCE_REACH;
+    for (let stepRow = -OPEN_DISTANCE_REACH; stepRow <= OPEN_DISTANCE_REACH; stepRow++) {
+      for (let stepColumn = -OPEN_DISTANCE_REACH; stepColumn <= OPEN_DISTANCE_REACH; stepColumn++) {
+        if (isDug(column + stepColumn, row + stepRow)) best = Math.min(best, Math.hypot(stepColumn, stepRow));
+      }
+    }
     return best;
   }
 
   function solidity(column, row) {
     if (isDug(column, row)) return 0;
-    if (cellIndex(column, row) === digging.cell && column >= 0 && row >= 0 && column < BURROW_GRID && row < BURROW_GRID) return 1 - Math.floor(digging.progress * DIG_CHUNK_STEPS) / DIG_CHUNK_STEPS;
+    if (insideGrid(column, row) && cellIndex(column, row) === digging.cell) return 1 - Math.floor(digging.progress * DIG_CHUNK_STEPS) / DIG_CHUNK_STEPS;
     return 1;
   }
 
@@ -357,7 +430,36 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     return THREE.MathUtils.smoothstep(filled, 0.38, 0.98) * (WALL_HEIGHT + exitRise) * (1 + 0.1 * sandNoise(x * 0.45, z * 0.45));
   }
 
-  function rebuildWalls() {
+  function chunkNeedsDetail(chunk) {
+    const shaftDistance = Math.max(Math.abs(SHAFT_CELL.column - (chunk.firstColumn + 2)), Math.abs(SHAFT_CELL.row - (chunk.firstRow + 2)));
+    if (shaftDistance <= SAND_CHUNK_CELLS) return true;
+    for (let row = chunk.firstRow - DETAIL_MARGIN_CELLS; row < chunk.firstRow + SAND_CHUNK_CELLS + DETAIL_MARGIN_CELLS; row++) {
+      for (let column = chunk.firstColumn - DETAIL_MARGIN_CELLS; column < chunk.firstColumn + SAND_CHUNK_CELLS + DETAIL_MARGIN_CELLS; column++) {
+        if (isDug(column, row) || (insideGrid(column, row) && cellIndex(column, row) === digging.cell)) return true;
+      }
+    }
+    return false;
+  }
+
+  function rebuildWalls(nearColumn = null, nearRow = null) {
+    for (const chunk of sandChunks) {
+      if (nearColumn !== null) {
+        const reachColumn = nearColumn < chunk.firstColumn - DETAIL_MARGIN_CELLS - 1 || nearColumn > chunk.firstColumn + SAND_CHUNK_CELLS + DETAIL_MARGIN_CELLS;
+        const reachRow = nearRow < chunk.firstRow - DETAIL_MARGIN_CELLS - 1 || nearRow > chunk.firstRow + SAND_CHUNK_CELLS + DETAIL_MARGIN_CELLS;
+        if (reachColumn || reachRow) continue;
+      }
+      rebuildChunk(chunk);
+    }
+  }
+
+  function rebuildChunk(chunk) {
+    const detailed = chunkNeedsDetail(chunk);
+    if (detailed !== chunk.detailed) {
+      chunk.mesh.geometry.dispose();
+      chunk.mesh.geometry = buildSandChunkGeometry(chunk.firstColumn, chunk.firstRow, detailed);
+      chunk.detailed = detailed;
+    }
+    const sandGeometry = chunk.mesh.geometry;
     const positions = sandGeometry.attributes.position;
     const colors = sandGeometry.attributes.color;
     const color = new THREE.Color();
@@ -427,16 +529,41 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
       stationMeshes.set(station, workshopModel.group);
       return;
     }
-    const mesh = new THREE.Mesh(storageGeometry, storageMaterial);
+    if (station.kind === 'exit') {
+      addExitMeshes(station);
+      return;
+    }
+    const geometry = { helperNest: nestGeometry, crabBed: bedGeometry }[station.kind] || storageGeometry;
+    const mesh = new THREE.Mesh(geometry, storageMaterial);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.position.set(spot.x - BURROW_ORIGIN.x, 0, spot.z - BURROW_ORIGIN.z);
-    mesh.rotation.y = 0.35;
+    mesh.rotation.y = station.kind === 'crabBed' ? 0.6 : 0.35;
     interior.add(mesh);
     setLayers(mesh, [BURROW_LAYER]);
-    const label = element('div', 'world-label burrow-label station-label hidden', labelParent, 'Storage');
     stationMeshes.set(station, mesh);
-    station.label = label;
+  }
+
+  function addExitMeshes(station) {
+    const spot = stationSpot(station);
+    const below = new THREE.Group();
+    const model = buildPropModel('burrow_exit', EXIT_MODEL_WIDTH * 0.85, new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }));
+    if (model) {
+      model.rotation.y = Math.PI;
+      model.position.y -= EXIT_MODEL_SINK * 0.6;
+      below.add(model);
+    }
+    const pool = shaft.pool.clone();
+    pool.position.set(0, 0, 0);
+    below.add(pool);
+    below.position.set(spot.x - BURROW_ORIGIN.x, 0, spot.z - BURROW_ORIGIN.z);
+    interior.add(below);
+    setLayers(below, [BURROW_LAYER]);
+    const above = buildEntranceVisual(ENTRANCE_MODEL_WIDTH * 0.8);
+    above.position.set(station.surface.x, world.heightAt(station.surface.x, station.surface.z), station.surface.z);
+    scene.add(above);
+    stationMeshes.set(station, below);
+    surfaceMeshes.set(station, above);
   }
 
   function walkableCellAt(x, z) {
@@ -538,18 +665,20 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   };
 
   function canDig(column, row) {
-    if (column < 0 || row < 0 || column >= BURROW_GRID || row >= BURROW_GRID || isDug(column, row) || exitKeep.has(cellIndex(column, row))) return false;
+    if (!insideGrid(column, row) || isDug(column, row) || exitKeep.has(cellIndex(column, row))) return false;
     return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([stepColumn, stepRow]) => isDug(column + stepColumn, row + stepRow));
   }
 
   function setDigProgress(index, progress) {
     const step = Math.floor(progress * DIG_CHUNK_STEPS);
     const previousStep = digging.cell === index ? Math.floor(digging.progress * DIG_CHUNK_STEPS) : 0;
+    const previousCell = digging.cell;
     digging.cell = index;
     digging.progress = progress;
     if (step === previousStep && progress > 0) return;
     if (step > previousStep) burstChunks(cellColumn(index), cellRow(index));
-    rebuildWalls();
+    const focus = index >= 0 ? index : previousCell;
+    if (focus >= 0) rebuildWalls(cellColumn(focus), cellRow(focus));
   }
 
   function finishDig(column, row) {
@@ -558,7 +687,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     state.dug = [...dugCells];
     digging.cell = -1;
     digging.progress = 0;
-    rebuildWalls();
+    rebuildWalls(column, row);
   }
 
   function setEntrance(x, z, y) {
@@ -592,12 +721,21 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   }
 
   function entranceUnder(clientX, clientY, camera, radiusPixels = PICK_RADIUS_PIXELS) {
-    if (!state.entrance) return false;
-    return screenDistance(state.entrance.x, entranceGroup.position.y + 0.4, state.entrance.z, clientX, clientY, camera) < radiusPixels;
+    let best = null;
+    for (const point of travelPoints()) {
+      const distance = screenDistance(point.surface.x, world.heightAt(point.surface.x, point.surface.z) + 0.4, point.surface.z, clientX, clientY, camera);
+      if (distance < radiusPixels && (!best || distance < best.distance)) best = { point, distance };
+    }
+    return best ? best.point : null;
   }
 
   function shaftUnder(clientX, clientY, camera) {
-    return screenDistance(shaftCenter.x, BURROW_ORIGIN.y + 0.5, shaftCenter.z, clientX, clientY, camera) < PICK_RADIUS_PIXELS;
+    let best = null;
+    for (const point of travelPoints()) {
+      const distance = screenDistance(point.below.x, BURROW_ORIGIN.y + 0.5, point.below.z, clientX, clientY, camera);
+      if (distance < PICK_RADIUS_PIXELS && (!best || distance < best.distance)) best = { point, distance };
+    }
+    return best ? best.point : null;
   }
 
   function stationUnder(clientX, clientY, camera) {
@@ -614,10 +752,10 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     return [...dugCells].map((index) => ({ column: cellColumn(index), row: cellRow(index) })).filter(({ column, row }) => !stationAt(column, row) && !(column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row + SHAFT_ACCESS_ROW_STEP)));
   }
 
-  function showPlacementCells(visible) {
+  function showPlacementCells(visible, allowed = () => true) {
     highlights.count = 0;
     if (!visible) return;
-    for (const { column, row } of freeCells()) {
+    for (const { column, row } of freeCells().filter(allowed)) {
       const center = cellCenter(column, row);
       transform.position.set(center.x - BURROW_ORIGIN.x, 0.1, center.z - BURROW_ORIGIN.z);
       transform.rotation.set(0, 0, 0);
@@ -628,8 +766,22 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     highlights.instanceMatrix.needsUpdate = true;
   }
 
-  function addStation(kind, column, row, workshopModel) {
-    const station = { kind, column, row };
+  function surfacePointOf(column, row) {
+    if (!state.entrance) return null;
+    return { x: state.entrance.x + (column - SHAFT_CELL.column) * SURFACE_UNITS_PER_CELL, z: state.entrance.z + (row - SHAFT_CELL.row) * SURFACE_UNITS_PER_CELL };
+  }
+
+  function travelPoints() {
+    const points = [];
+    if (state.entrance) points.push({ station: null, below: { x: shaftCenter.x, z: shaftCenter.z }, surface: { x: state.entrance.x, z: state.entrance.z } });
+    for (const station of state.stations) if (station.kind === 'exit') points.push({ station, below: stationSpot(station), surface: station.surface });
+    return points;
+  }
+
+  function addStation(kind, column, row, workshopModel, extra = {}) {
+    const station = { kind, column, row, id: nextStationId++, ...extra };
+    if (kind === 'helperNest') station.box = { inventory: {}, shells: [], claws: [] };
+    if (kind === 'exit') station.surface = surfacePointOf(column, row);
     state.stations.push(station);
     addStationMesh(station, workshopModel);
     return station;
@@ -640,13 +792,21 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     station.row = row;
     const spot = stationSpot(station);
     if (station.kind === 'workshop') workshopModel.place(spot, BURROW_ORIGIN.y);
-    else stationMeshes.get(station).position.set(spot.x - BURROW_ORIGIN.x, 0, spot.z - BURROW_ORIGIN.z);
+    else if (station.kind === 'exit') {
+      removeStation(station);
+      station.surface = surfacePointOf(column, row);
+      state.stations.push(station);
+      addExitMeshes(station);
+    } else stationMeshes.get(station).position.set(spot.x - BURROW_ORIGIN.x, 0, spot.z - BURROW_ORIGIN.z);
   }
 
   function removeStation(station) {
     const mesh = stationMeshes.get(station);
     if (mesh && station.kind !== 'workshop') mesh.removeFromParent();
     stationMeshes.delete(station);
+    const surfaceMesh = surfaceMeshes.get(station);
+    if (surfaceMesh) surfaceMesh.removeFromParent();
+    surfaceMeshes.delete(station);
     if (station.label) station.label.remove();
     state.stations.splice(state.stations.indexOf(station), 1);
   }
@@ -666,9 +826,9 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     if (show) label.style.transform = `translate(-50%, -100%) translate(${(projected.x * 0.5 + 0.5) * innerWidth}px, ${(-projected.y * 0.5 + 0.5) * innerHeight}px)`;
   }
 
-  function travelPoint(underground) {
-    if (underground) return { x: shaftCenter.x, y: BURROW_ORIGIN.y + 1.4, z: shaftCenter.z - 0.6 };
-    return { x: state.entrance.x, y: entranceGroup.position.y + 2.4, z: state.entrance.z };
+  function travelLabelPoint(point, underground) {
+    if (underground) return { x: point.below.x, y: BURROW_ORIGIN.y + 1.4, z: point.below.z - 0.6 };
+    return { x: point.surface.x, y: world.heightAt(point.surface.x, point.surface.z) + 2.4, z: point.surface.z };
   }
 
   function update(time, camera, underground) {
@@ -721,10 +881,13 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     hasStation,
     stationOf,
     update,
-    travelPoint,
+    travelLabelPoint,
+    travelPoints,
+    surfacePointOf,
+    cellIndex,
     get exists() {
       return Boolean(state.entrance);
     },
-    serialize: () => ({ entrance: state.entrance, dug: [...dugCells], stations: state.stations.map(({ kind, column, row }) => ({ kind, column, row })) }),
+    serialize: () => ({ entrance: state.entrance, dug: [...dugCells], grid: BURROW_SPAN, stations: state.stations.map(({ label, ...station }) => structuredClone(station)) }),
   };
 }

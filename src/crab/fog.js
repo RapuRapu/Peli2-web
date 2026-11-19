@@ -1,0 +1,135 @@
+import * as THREE from 'three';
+
+export const FOG_RESOLUTION = 256;
+export const FOG_REVEAL_RADIUS = 20;
+const REVEAL_STEP_DISTANCE = 1;
+const REVEALED = 255;
+
+export const FOG_GLSL = /* glsl */ `
+uniform sampler2D tFog;
+uniform float uFogHalfSize;
+uniform float uFogTexel;
+float fogHash(vec2 point) {
+  return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453);
+}
+float fogNoise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  local = local * local * (3.0 - 2.0 * local);
+  float bottom = mix(fogHash(cell), fogHash(cell + vec2(1.0, 0.0)), local.x);
+  float top = mix(fogHash(cell + vec2(0.0, 1.0)), fogHash(cell + vec2(1.0, 1.0)), local.x);
+  return mix(bottom, top, local.y);
+}
+float fogRevealAt(vec2 worldXZ) {
+  vec2 uv = worldXZ / (2.0 * uFogHalfSize) + 0.5;
+  float total = 0.0;
+  for (int stepX = -2; stepX <= 2; stepX++) {
+    for (int stepY = -2; stepY <= 2; stepY++) {
+      total += texture2D(tFog, uv + vec2(float(stepX), float(stepY)) * uFogTexel * 1.6).r;
+    }
+  }
+  return total / 25.0;
+}
+vec3 applyFog(vec3 color, vec2 worldXZ, float time) {
+  float revealed = fogRevealAt(worldXZ);
+  float swirl = fogNoise(worldXZ * 0.12 + vec2(time * 0.05, -time * 0.03)) * 0.6 + fogNoise(worldXZ * 0.31 - vec2(time * 0.04, 0.0)) * 0.4;
+  float shaped = revealed + (swirl - 0.5) * 0.35;
+  float mist = 1.0 - smoothstep(0.62, 1.0, shaped);
+  float darkness = 1.0 - smoothstep(0.08, 0.55, shaped);
+  vec3 mistColor = vec3(0.58, 0.62, 0.66) * (0.85 + 0.3 * swirl);
+  color = mix(color, mistColor, mist * 0.72);
+  return mix(color, vec3(0.0), darkness);
+}
+`;
+
+export function createFog({ halfSize, saved }) {
+  const data = new Uint8Array(FOG_RESOLUTION * FOG_RESOLUTION);
+  const texture = new THREE.DataTexture(data, FOG_RESOLUTION, FOG_RESOLUTION, THREE.RedFormat, THREE.UnsignedByteType);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.needsUpdate = true;
+  const unitsPerTexel = (halfSize * 2) / FOG_RESOLUTION;
+  let lastReveal = null;
+  let changed = false;
+
+  const texelOf = (worldCoordinate) => Math.floor((worldCoordinate + halfSize) / unitsPerTexel);
+
+  if (saved) unpack(saved);
+
+  function unpack(encoded) {
+    const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+    for (let index = 0; index < data.length; index++) data[index] = bytes[index >> 3] & (1 << (index & 7)) ? REVEALED : 0;
+  }
+
+  function serialize() {
+    const bytes = new Uint8Array(data.length / 8);
+    for (let index = 0; index < data.length; index++) if (data[index]) bytes[index >> 3] |= 1 << (index & 7);
+    let text = '';
+    for (const byte of bytes) text += String.fromCharCode(byte);
+    return btoa(text);
+  }
+
+  function reveal(x, z, radius = FOG_REVEAL_RADIUS) {
+    const radiusTexels = radius / unitsPerTexel;
+    const centerColumn = (x + halfSize) / unitsPerTexel;
+    const centerRow = (z + halfSize) / unitsPerTexel;
+    for (let row = Math.max(0, Math.floor(centerRow - radiusTexels)); row <= Math.min(FOG_RESOLUTION - 1, Math.ceil(centerRow + radiusTexels)); row++) {
+      for (let column = Math.max(0, Math.floor(centerColumn - radiusTexels)); column <= Math.min(FOG_RESOLUTION - 1, Math.ceil(centerColumn + radiusTexels)); column++) {
+        if (Math.hypot(column + 0.5 - centerColumn, row + 0.5 - centerRow) > radiusTexels) continue;
+        const index = row * FOG_RESOLUTION + column;
+        if (data[index] !== REVEALED) {
+          data[index] = REVEALED;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  function revealWhere(predicate) {
+    for (let row = 0; row < FOG_RESOLUTION; row++) {
+      for (let column = 0; column < FOG_RESOLUTION; column++) {
+        const x = (column + 0.5) * unitsPerTexel - halfSize;
+        const z = (row + 0.5) * unitsPerTexel - halfSize;
+        if (predicate(x, z)) data[row * FOG_RESOLUTION + column] = REVEALED;
+      }
+    }
+    changed = true;
+  }
+
+  function follow(x, z) {
+    if (lastReveal && Math.hypot(x - lastReveal.x, z - lastReveal.z) < REVEAL_STEP_DISTANCE) return;
+    lastReveal = { x, z };
+    reveal(x, z);
+  }
+
+  function isRevealed(x, z) {
+    const column = texelOf(x);
+    const row = texelOf(z);
+    if (column < 0 || row < 0 || column >= FOG_RESOLUTION || row >= FOG_RESOLUTION) return false;
+    return data[row * FOG_RESOLUTION + column] === REVEALED;
+  }
+
+  function upload() {
+    if (!changed) return;
+    texture.needsUpdate = true;
+    changed = false;
+  }
+
+  return {
+    texture,
+    uniforms: { tFog: { value: texture }, uFogHalfSize: { value: halfSize }, uFogTexel: { value: 1 / FOG_RESOLUTION } },
+    reveal,
+    revealWhere,
+    follow,
+    isRevealed,
+    upload,
+    serialize,
+    get revealedShare() {
+      let count = 0;
+      for (const value of data) if (value) count++;
+      return count / data.length;
+    },
+  };
+}
