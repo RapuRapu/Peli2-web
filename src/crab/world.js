@@ -551,12 +551,22 @@ export function createWorld(quality) {
   }
 
   function blockCircle(x, z, radius) {
+    const blocked = [];
     for (let row = Math.floor(z - radius + WORLD_SIZE / 2); row <= Math.ceil(z + radius + WORLD_SIZE / 2); row++) {
       for (let column = Math.floor(x - radius + WORLD_SIZE / 2); column <= Math.ceil(x + radius + WORLD_SIZE / 2); column++) {
         if (column < 0 || row < 0 || column >= WORLD_SIZE || row >= WORLD_SIZE) continue;
-        if (Math.hypot(column + 0.5 - WORLD_SIZE / 2 - x, row + 0.5 - WORLD_SIZE / 2 - z) < radius) walkable[row * WORLD_SIZE + column] = 0;
+        const index = row * WORLD_SIZE + column;
+        if (walkable[index] === 1 && Math.hypot(column + 0.5 - WORLD_SIZE / 2 - x, row + 0.5 - WORLD_SIZE / 2 - z) < radius) {
+          walkable[index] = 0;
+          blocked.push(index);
+        }
       }
     }
+    return blocked;
+  }
+
+  function unblockCells(blocked) {
+    for (const index of blocked) walkable[index] = 1;
   }
 
   function randomSpot(random, accept, attempts = 400) {
@@ -570,7 +580,7 @@ export function createWorld(quality) {
     return null;
   }
 
-  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, campProps: CAMP_PROPS, holdProps: HOLD_PROPS, isInHold, isInCamp, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle };
+  return { ground, heightAt: collisionField.sample, retained, pools: retained.pools, boulders, logs, reefProps, morayDens, campProps: CAMP_PROPS, holdProps: HOLD_PROPS, isInHold, isInCamp, terrainMesh, walkable, isWalkable, isOnReef, waterLevelAt, randomSpot, createRandom, blockCircle, unblockCells };
 }
 
 const GULL_TERRITORY_EDGE_Z = -92;

@@ -1,9 +1,9 @@
 import { CLAWS } from './gear.js';
 import { element, percent } from './workbench.js';
-import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures } from './inventoryView.js';
+import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures, salvageAction } from './inventoryView.js';
 import { itemName, itemStatsText, definitionOf, shellDefense, clawAttack } from './itemInfo.js';
 
-export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, growthText, thumbnails, onWear, onUnequip, onEat, onClose }) {
+export function createBackpackPanel(root, { gear, inventory, combatStats, maxHealth, growthText, thumbnails, onWear, onUnequip, onEat, onSalvage, onClose }) {
   const overlay = element('div', 'workbench backpack', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -54,7 +54,11 @@ export function createBackpackPanel(root, { gear, inventory, combatStats, maxHea
     if (!entry) return [];
     if (entry.kind === 'material') return entry.type === 'driedKelp' ? [{ label: 'Eat · 2× regen 90 s', data: { eat: 'driedKelp' }, run: () => onEat() }] : [];
     if (entry.worn) return entry.category === 'shell' || CLAWS[entry.item.kind].cost ? [{ label: 'Take off', secondary: true, data: { unequip: entry.category }, run: () => unequipEntry(entry) }] : [];
-    return [{ label: 'Wear', data: { wear: String(entry.item.id) }, run: () => wearEntry(entry) }];
+    const salvage = salvageAction(entry, () => {
+      selectedKey = null;
+      onSalvage(entry.item.id);
+    });
+    return [{ label: 'Wear', data: { wear: String(entry.item.id) }, run: () => wearEntry(entry) }, ...(salvage ? [salvage] : [])];
   }
 
   function renderEquipSlot(parent, category) {

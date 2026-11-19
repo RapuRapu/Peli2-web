@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 FULL_SUITE = [
     'crab_combat', 'crab_gear', 'crab_hold', 'crab_camp', 'crab_reef', 'crab_water', 'crab_helpers',
     'crab_improve', 'crab_audio', 'crab_burrow', 'crab_drops', 'crab_travel', 'crab_reef_combat',
-    'crab_inventory', 'crab_rack', 'crab_ui', 'crab_playthrough',
+    'crab_inventory', 'crab_rack', 'crab_ui', 'crab_playthrough', 'crab_structures',
 ]
 LOG_FOLDER = '/tmp/suite'
 WORKERS = int(os.environ.get('SUITE_WORKERS', '2'))

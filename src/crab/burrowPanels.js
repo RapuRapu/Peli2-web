@@ -1,8 +1,9 @@
-import { CLAWS, canAfford } from './gear.js';
+import { CLAWS, canAfford, salvageReturn } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { STATION_KINDS } from './burrow.js';
 import { element } from './workbench.js';
-import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures } from './inventoryView.js';
+import { materialEntries, gearEntries, renderSlot, renderDetails, attachSlotGestures, salvageAction, renderStructureActions } from './inventoryView.js';
+import { definitionOf } from './itemInfo.js';
 
 function createPanelShell(root, className, title, onClose) {
   const overlay = element('div', `workbench ${className}`, root);
@@ -74,7 +75,7 @@ export function createBuildPanel(root, { inventory, hasStation, onChoose, onClos
   };
 }
 
-export function createStoragePanel(root, { gear, inventory, storage, thumbnails, onChange, onClose }) {
+export function createStoragePanel(root, { gear, inventory, storage, thumbnails, onChange, onSalvage, onMove, onDismantle, onClose }) {
   const shell = createPanelShell(root, 'storage-panel', '📦 Storage', onClose);
   let selected = null;
 
@@ -122,6 +123,24 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
     onChange();
   }
 
+  function salvageStored(entry) {
+    const list = entry.category === 'shell' ? storage.shells : storage.claws;
+    const refund = salvageReturn(entry.item.kind, definitionOf(entry.category, entry.item.kind));
+    const index = list.indexOf(entry.item);
+    if (!refund || index < 0) return;
+    list.splice(index, 1);
+    for (const [type, amount] of Object.entries(refund)) storage.inventory[type] = (storage.inventory[type] || 0) + amount;
+    return refund;
+  }
+
+  function salvage(entry, zone) {
+    const refund = zone === 'storage' ? salvageStored(entry) : gear.salvage(entry.item.id, inventory());
+    if (!refund) return;
+    selected = null;
+    onSalvage(refund, definitionOf(entry.category, entry.item.kind).label);
+    onChange();
+  }
+
   const backpackEntries = () => [...gearEntries(gear.state.shells.filter((item) => item.id !== gear.state.wornShellId), gear.state.claws.filter((item) => item.id !== gear.state.wornClawsId)), ...materialEntries(inventory())];
   const storageEntries = () => [...gearEntries(storage.shells, storage.claws), ...materialEntries(storage.inventory)];
 
@@ -160,8 +179,12 @@ export function createStoragePanel(root, { gear, inventory, storage, thumbnails,
       const toStorage = selected.zone === 'backpack';
       const data = entry.kind === 'material' ? { [toStorage ? 'store' : 'take']: entry.type } : { [toStorage ? 'storeItem' : 'takeItem']: String(entry.item.id) };
       actions.push({ label: toStorage ? '⬇ Store' : '⬆ Take', secondary: !toStorage, data, run: () => move(entry, selected.zone) });
+      const zone = selected.zone;
+      const salvageButton = entry.kind === 'gear' ? salvageAction(entry, () => salvage(entry, zone)) : null;
+      if (salvageButton) actions.push(salvageButton);
     }
     renderDetails(shell.body, entry, actions, 'Tap an item to see it. Double-tap to move it to the other side.');
+    renderStructureActions(shell.body, { label: 'storage', onMove, onDismantle });
   }
 
   attachSlotGestures(shell.overlay, {
@@ -253,7 +276,7 @@ export function createHelpersPanel(root, { helpers, inventory, limit, cost, jobs
   };
 }
 
-export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLoad, onCollect, onClose }) {
+export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLoad, onCollect, onMove, onDismantle, onClose }) {
   const shell = createPanelShell(root, 'rack-panel', '🍂 Drying rack', onClose);
 
   function render() {
@@ -290,9 +313,17 @@ export function createRackPanel(root, { rack, inventory, batch, drySeconds, onLo
     collectButton.dataset.rackCollect = '1';
     collectButton.disabled = state.ready === 0;
     collectButton.addEventListener('click', () => onCollect());
+    renderStructureActions(shell.body, { label: 'drying rack', onMove, onDismantle });
   }
 
+  let pressed = false;
+  shell.overlay.addEventListener('pointerdown', () => { pressed = true; });
+  for (const name of ['pointerup', 'pointercancel']) window.addEventListener(name, () => { pressed = false; });
+
   return {
+    get isPressed() {
+      return pressed;
+    },
     get isOpen() {
       return shell.isOpen;
     },

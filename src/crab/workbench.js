@@ -5,6 +5,7 @@ import { createNoise2D } from '../noise.js';
 import { SHELLS, CLAWS, canAfford, QUALITIES, TOOL_TIERS, BINDINGS, REINFORCEMENTS, qualityForTools, refineCost } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { tierClass, tierBadge, itemName, itemStatsText, modificationOf } from './itemInfo.js';
+import { renderStructureActions } from './inventoryView.js';
 
 export const WORKSHOP_REACH = 2.9;
 export const WORKSHOP_BLOCK_RADIUS = 1.7;
@@ -104,6 +105,11 @@ export function createWorkbenchModel(scene, world, quality, spot, labelParent) {
     build() {
       group.visible = true;
     },
+    remove() {
+      group.visible = false;
+      marker.visible = false;
+      label.classList.add('hidden');
+    },
     update(time, highlighted, camera, labelShown = marker.visible) {
       marker.visible = group.visible && highlighted;
       labelPoint.set(spot.x, group.position.y + 2.2, spot.z).project(camera);
@@ -140,7 +146,7 @@ function costRow(cost, inventory, parent) {
   }
 }
 
-export function createWorkbenchPanel(root, { gear, inventory, onCraft, onUpgradeTools, onRefine, onModify, onClose }) {
+export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCraft, onUpgradeTools, onRefine, onModify, onMove, onDismantle, onClose }) {
   const overlay = element('div', 'workbench workshop-panel', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -162,7 +168,9 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onUpgrade
       ...Object.entries(SHELLS).filter(([, definition]) => definition.cost).map(([kind, definition]) => ({ category: 'shell', kind, definition })),
       ...Object.entries(CLAWS).filter(([, definition]) => definition.cost).map(([kind, definition]) => ({ category: 'claws', kind, definition })),
     ];
-    for (const { category, kind, definition } of entries) {
+    const known = entries.filter(({ category, kind, definition }) => isDiscovered(category, kind, definition));
+    const hidden = entries.length - known.length;
+    for (const { category, kind, definition } of known) {
       const row = element('div', `item ${tierClass(definition)}`, body);
       const text = element('div', 'item-text', row);
       element('div', 'item-name', text, `${category === 'shell' ? `${definition.label} · ${definition.role}` : definition.label} · ${tierBadge(definition)}`);
@@ -179,6 +187,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onUpgrade
       button.disabled = !canAfford(definition.cost, inventory());
       button.addEventListener('click', () => onCraft(category, kind));
     }
+    if (hidden) element('div', 'placeholder undiscovered', body, `❔ ${hidden} more ${hidden === 1 ? 'recipe' : 'recipes'} to discover — find new materials out in the world.`);
   }
 
   function renderResult() {
@@ -282,6 +291,7 @@ export function createWorkbenchPanel(root, { gear, inventory, onCraft, onUpgrade
     for (const button of tabButtons) button.classList.toggle('active', button.dataset.tab === activeTab);
     if (activeTab === 'Craft') renderCraft();
     else renderImprove();
+    renderStructureActions(body, { label: 'workshop', onMove, onDismantle });
   }
 
   for (const button of tabButtons) {

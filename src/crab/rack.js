@@ -107,6 +107,23 @@ export function createRack(scene, world, quality, labelParent, saved) {
 
   const stateRef = { current: state };
 
+  function moveTo(x, z) {
+    const current = stateRef.current;
+    if (!current) return false;
+    current.x = x;
+    current.z = z;
+    place();
+    return true;
+  }
+
+  function remove() {
+    const removed = stateRef.current;
+    stateRef.current = null;
+    group.visible = false;
+    label.classList.add('hidden');
+    return removed;
+  }
+
   function freeSlots() {
     return stateRef.current ? stateRef.current.slots.filter((slot) => slot === null).length : 0;
   }
@@ -197,6 +214,8 @@ export function createRack(scene, world, quality, labelParent, saved) {
       return Boolean(stateRef.current);
     },
     build,
+    moveTo,
+    remove,
     freeSlots,
     load,
     collect,

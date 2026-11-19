@@ -635,6 +635,22 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     return station;
   }
 
+  function moveStation(station, column, row, workshopModel) {
+    station.column = column;
+    station.row = row;
+    const spot = stationSpot(station);
+    if (station.kind === 'workshop') workshopModel.place(spot, BURROW_ORIGIN.y);
+    else stationMeshes.get(station).position.set(spot.x - BURROW_ORIGIN.x, 0, spot.z - BURROW_ORIGIN.z);
+  }
+
+  function removeStation(station) {
+    const mesh = stationMeshes.get(station);
+    if (mesh && station.kind !== 'workshop') mesh.removeFromParent();
+    stationMeshes.delete(station);
+    if (station.label) station.label.remove();
+    state.stations.splice(state.stations.indexOf(station), 1);
+  }
+
   function hasStation(kind) {
     return state.stations.some((station) => station.kind === kind);
   }
@@ -694,6 +710,8 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     freeCells,
     showPlacementCells,
     addStation,
+    moveStation,
+    removeStation,
     attachStations,
     hasStation,
     stationOf,

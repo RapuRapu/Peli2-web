@@ -159,6 +159,14 @@ export function normalizeItem(item) {
   return item;
 }
 
+const SALVAGE_ONLY = { cleaver: ['scrap'] };
+
+export function salvageReturn(kind, definition) {
+  if (!definition || !definition.cost) return null;
+  const kept = SALVAGE_ONLY[kind] || Object.keys(definition.cost);
+  return Object.fromEntries(kept.map((type) => [type, Math.max(1, Math.floor(definition.cost[type] / 2))]));
+}
+
 export function canAfford(cost, inventory) {
   return Object.entries(cost).every(([type, amount]) => (inventory[type] || 0) >= amount);
 }
@@ -222,6 +230,17 @@ export function createGear(saved) {
     const claws = state.claws.find((item) => item.id === id);
     if (claws) return { category: 'claws', item: claws, definition: CLAWS[claws.kind] };
     return null;
+  }
+
+  function salvage(id, inventory) {
+    const found = findItem(id);
+    if (!found || id === state.wornShellId || id === state.wornClawsId) return null;
+    const refund = salvageReturn(found.item.kind, found.definition);
+    if (!refund) return null;
+    const list = found.category === 'shell' ? state.shells : state.claws;
+    list.splice(list.indexOf(found.item), 1);
+    for (const [type, amount] of Object.entries(refund)) inventory[type] = (inventory[type] || 0) + amount;
+    return refund;
   }
 
   function improvableItems() {
@@ -327,6 +346,7 @@ export function createGear(saved) {
     wear,
     unequip,
     findItem,
+    salvage,
     improvableItems,
     upgradeTools,
     refineTarget,

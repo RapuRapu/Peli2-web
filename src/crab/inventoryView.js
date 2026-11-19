@@ -1,4 +1,4 @@
-import { CLAWS } from './gear.js';
+import { CLAWS, salvageReturn } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { element } from './workbench.js';
 import { definitionOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, qualityBadge, masterworkGlowCss } from './itemInfo.js';
@@ -76,7 +76,8 @@ export function renderDetails(parent, entry, actions, hint = 'Tap an item to see
   for (const action of actions) {
     const button = element('button', `item-action${action.secondary ? ' take' : ''}`, buttons, action.label);
     for (const [name, value] of Object.entries(action.data || {})) button.dataset[name] = value;
-    button.addEventListener('click', action.run);
+    if (action.confirm) confirmOnSecondTap(button, action.label, action.confirm, action.run, `${action.confirm}:${JSON.stringify(action.data || {})}`);
+    else button.addEventListener('click', action.run);
   }
   return details;
 }
@@ -113,4 +114,48 @@ export function attachSlotGestures(container, { entryFor, onSelect, onActivate }
   container.addEventListener('pointercancel', () => {
     press = null;
   });
+}
+
+const CONFIRM_SECONDS = 3;
+const armedUntilByKey = new Map();
+
+export function confirmOnSecondTap(button, label, confirmLabel, run, key = confirmLabel) {
+  const showArmed = (armed) => {
+    button.textContent = armed ? confirmLabel : label;
+    button.classList.toggle('armed', armed);
+  };
+  const isArmed = () => performance.now() < (armedUntilByKey.get(key) || 0);
+  if (isArmed()) {
+    showArmed(true);
+    setTimeout(() => showArmed(isArmed()), armedUntilByKey.get(key) - performance.now() + 50);
+  }
+  button.addEventListener('click', () => {
+    if (isArmed()) {
+      armedUntilByKey.delete(key);
+      showArmed(false);
+      run();
+      return;
+    }
+    armedUntilByKey.set(key, performance.now() + CONFIRM_SECONDS * 1000);
+    showArmed(true);
+    setTimeout(() => showArmed(isArmed()), CONFIRM_SECONDS * 1000 + 50);
+  });
+}
+
+export function renderStructureActions(parent, { label, onMove, onDismantle }) {
+  const row = element('div', 'structure-actions', parent);
+  const moveButton = element('button', 'item-action take', row, '↔ Move');
+  moveButton.dataset.structureMove = label;
+  moveButton.addEventListener('click', onMove);
+  const dismantleButton = element('button', 'item-action take dismantle', row, '🔨 Dismantle');
+  dismantleButton.dataset.structureDismantle = label;
+  confirmOnSecondTap(dismantleButton, '🔨 Dismantle', `Tap again to dismantle the ${label}`, onDismantle);
+  return row;
+}
+
+export function salvageAction(entry, run) {
+  const refund = salvageReturn(entry.item.kind, definitionOf(entry.category, entry.item.kind));
+  if (!refund) return null;
+  const gain = Object.entries(refund).map(([type, amount]) => `${amount} ${RESOURCE_TYPES[type].icon}`).join(' ');
+  return { label: `♻️ Salvage · +${gain}`, secondary: true, confirm: 'Tap again to salvage', data: { salvage: String(entry.item.id) }, run };
 }
