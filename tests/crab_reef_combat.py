@@ -1,7 +1,7 @@
 import os, json, statistics, sys
 from playwright.sync_api import sync_playwright
 
-URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5'
+URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'
 RUNS = 10
 
 HELPERS = r'''

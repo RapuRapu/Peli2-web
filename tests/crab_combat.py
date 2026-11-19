@@ -1,7 +1,7 @@
 import os, json, statistics
 from playwright.sync_api import sync_playwright
 
-URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5'
+URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'
 
 HELPERS = r'''
 window.__combat = (() => {
@@ -248,7 +248,7 @@ with sync_playwright() as playwright:
 
     performance = {}
     for quality in ('low', 'medium', 'high'):
-        page.goto(URL.replace('quality=low', f'quality={quality}'))
+        page.goto(URL.replace('quality=low', f'quality={quality}').replace('&norender', ''))
         page.wait_for_function('!!window.__debug', timeout=180000)
         page.wait_for_timeout(2500)
         performance[quality] = page.evaluate("() => ({ calls: __debug.renderer.info.render.calls, triangles: __debug.renderer.info.render.triangles })")

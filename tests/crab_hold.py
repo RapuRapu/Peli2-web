@@ -2,7 +2,7 @@ import os, json, statistics, sys
 from playwright.sync_api import sync_playwright
 
 BASE = 'file://' + os.path.abspath('dist/index.html')
-URL = BASE + '?quality=low&dpr=0.5'
+URL = BASE + '?quality=low&dpr=0.5&norender'
 RUNS = 10
 
 HELPERS = r'''

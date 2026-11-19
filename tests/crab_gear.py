@@ -1,7 +1,7 @@
 import os, json
 from playwright.sync_api import sync_playwright
 
-URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5'
+URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'
 
 GATHER_AND_BUILD = r'''
 () => {
@@ -159,7 +159,7 @@ with sync_playwright() as playwright:
     phone_context.close()
 
     for quality in ('medium', 'high'):
-        page.goto(URL.replace('quality=low', f'quality={quality}'))
+        page.goto(URL.replace('quality=low', f'quality={quality}').replace('&norender', ''))
         page.wait_for_function('!!window.__debug', timeout=180000)
         page.evaluate("() => { __debug.save.inventory = { shellBits: 5, driftwood: 3, seaLettuce: 3 }; __debug.buildWorkshop(); }")
         page.wait_for_timeout(1500)

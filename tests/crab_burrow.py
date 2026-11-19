@@ -1,7 +1,7 @@
 import os, json
 from playwright.sync_api import sync_playwright
 
-URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5'
+URL = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'
 
 HELPERS = r'''
 window.__step = (seconds, until) => { const d = window.__debug; let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
@@ -90,7 +90,9 @@ AFTER_PLACE = r'''
   document.querySelector('#hud .storage-panel [data-take="pearls"]').click();
   out.pearlTaken = d.save.inventory.pearls === 1 && !d.storage.inventory.pearls;
   d.storagePanel.close();
+  d.setRendering(true);
   d.renderScene();
+  d.setRendering(false);
   out.undergroundCalls = d.renderer.info.render.calls;
   out.undergroundTriangles = d.renderer.info.render.triangles;
   d.exitBurrow();

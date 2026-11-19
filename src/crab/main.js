@@ -1777,6 +1777,7 @@ const pixelRatioControl = {
     pipeline.resize();
   },
 };
+let rendersFrames = !searchParameters.has('norender');
 const fixedPixelRatio = searchParameters.has('dpr') ? Number(searchParameters.get('dpr')) : isScreenshotMode ? Math.min(devicePixelRatio, 2) : null;
 const performanceMonitor = createPerformanceMonitor(pixelRatioControl, { fixedPixelRatio });
 addEventListener('resize', resize);
@@ -1810,7 +1811,7 @@ function renderScene() {
   playerRing.material.opacity = Math.max(farZoomShare * 0.75, dangerShare);
   playerRing.visible = farZoomShare > 0.01 || dangerShare > 0;
   updateGoalArrow(simulationTime, 1 + farZoomShare * 0.9);
-  pipeline.render(scene, camera, { focusDistance: camera.position.distanceTo(playerFocusPoint.set(player.x, player.y + 0.6, player.z)), time: simulationTime });
+  if (rendersFrames) pipeline.render(scene, camera, { focusDistance: camera.position.distanceTo(playerFocusPoint.set(player.x, player.y + 0.6, player.z)), time: simulationTime });
   hud.setTide(tideLabel(), (seaLevelAt(save.worldTime) - TIDE_MIDDLE) / TIDE_AMPLITUDE / 2 + 0.5);
 }
 
@@ -2234,6 +2235,7 @@ window.__debug = {
   tracks, ripples, hermit, gear, workshop, workbenchPanel, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
   audio, isAudioUnlocked: () => audioUnlocked, progression, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, recruitHelper, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
+  setRendering: (enabled) => { rendersFrames = enabled; },
   isPaused: () => paused,
   advanceWallClock: (milliseconds) => { wallClockOffsetMs += milliseconds; },
   bossRestRemainingMs, dropLoot, regionAt,

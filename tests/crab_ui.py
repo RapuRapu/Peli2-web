@@ -6,7 +6,7 @@ with sync_playwright() as p:
     context = b.new_context(viewport={'width': 915, 'height': 412}, has_touch=True)
     pg = context.new_page()
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e))); pg.on('console', lambda m: errs.append(m.text) if m.type == 'error' else None)
-    url = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5'
+    url = 'file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'
     pg.goto(url); pg.wait_for_function('!!window.__debug', timeout=120000)
     report = {}
     report['hintVisibleAtStart'] = pg.evaluate("!document.querySelector('#hud .hint').classList.contains('hidden')")

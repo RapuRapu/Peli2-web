@@ -37,7 +37,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
     pg = b.new_page(viewport={'width': 915, 'height': 412})
     errs = []; pg.on('pageerror', lambda e: errs.append(str(e)))
-    pg.goto('file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5'); pg.wait_for_function('!!window.__debug', timeout=120000)
+    pg.goto('file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender'); pg.wait_for_function('!!window.__debug', timeout=120000)
     print(json.dumps(pg.evaluate(SCRIPT), indent=1))
     print('errors:', errs)
     b.close()

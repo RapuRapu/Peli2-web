@@ -53,7 +53,7 @@ with sync_playwright() as playwright:
 
     game = browser.new_page(viewport={'width': 915, 'height': 412})
     game.on('pageerror', lambda error: errors.append(str(error)))
-    game.goto('file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5')
+    game.goto('file://' + os.path.abspath('dist/index.html') + '?quality=low&dpr=0.5&norender')
     game.wait_for_function('!!window.__debug', timeout=180000)
     before = game.evaluate("() => __debug.isAudioUnlocked()")
     game.mouse.click(600, 300)
