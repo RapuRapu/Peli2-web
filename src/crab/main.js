@@ -18,7 +18,7 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
-import { createGear, SHELLS, CLAWS, canAfford, BOSS_TROPHIES, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE, gearGlowLook, normalizeItem } from './gear.js';
+import { createGear, SHELLS, CLAWS, canAfford, BOSS_TROPHIES, MINIBOSS_MATERIALS, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE, gearGlowLook, normalizeItem } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createProgression, GATHER_EXPERIENCE, MOLT_KINDS, MOLT_SECONDS, SOFT_SECONDS, SOFT_DEFENSE_FACTOR } from './progression.js';
@@ -188,31 +188,31 @@ const POSES = {
   75: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -78, z: -40, distance: 60, tideShare: 0.56, heading: 3.6 },
   76: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -84, z: -48, distance: 30, tideShare: 0.56, heading: 3.4 },
   77: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -70, z: -60, distance: 24, tideShare: 0.56, heading: 3.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' }, enemy: { kind: 'rat', offsetX: -2, offsetZ: -3 }, fightSeconds: 1.2 },
-  78: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 5.4 },
-  79: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
-  80: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'fine' } },
-  81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'bottle', claws: 'fishhook', quality: 'fine' } },
+  78: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 34, tideShare: 0.56, heading: 3.0, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 5.4 },
+  79: { workshop: true, reefFound: true, crafted: ['snail', 'coral'], x: -95, z: -54, distance: 40, tideShare: 0.56, heading: 3.0, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'shipCat', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 6.5 },
+  80: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
+  81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'whelk', claws: 'coralTipped', quality: 'fine' } },
   82: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 9, scrap: 10, cloth: 6, driftwood: 3 }, scrollPanel: true },
   83: { x: -20, z: -30, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
-  84: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -46, distance: 60, tideShare: 0.56, heading: 3.4 },
-  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'fine' } },
-  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'fine' }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
-  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'skull', claws: 'fork', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'skull', claws: 'fork', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'skull', claws: 'fork', quality: 'fine' } },
-  90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'thimble', claws: 'fork', quality: 'fine' } },
-  91: { x: 40, z: -40, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'] },
-  93: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fork', quality: 'masterwork' } },
-  94: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fork', quality: 'masterwork' } },
-  95: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'tinCan', claws: 'fork', quality: 'masterwork' } },
-  96: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'tinCan'], x: -96, z: -76, distance: 30, tideShare: 0.56, heading: 0.2, level: 10, outfit: { shell: 'tinCan', claws: 'whisker', quality: 'fine' }, restingBosses: ['shipCat'] },
-  97: { x: 24, z: -27, distance: 40, tideShare: 0.56, heading: 1.75, outfit: { shell: 'lobster', claws: 'cleaver', quality: 'masterwork' } },
-  98: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, extraGear: [{ category: 'shell', kind: 'skull', quality: 'masterwork' }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', quality: 'masterwork' }, { category: 'claws', kind: 'coralTipped', quality: 'fine' }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', quality: 'masterwork' }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 1 },
-  99: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork' }, extraGear: [{ category: 'shell', kind: 'skull', quality: 'masterwork' }, { category: 'shell', kind: 'lobster' }, { category: 'claws', kind: 'cleaver', quality: 'masterwork' }, { category: 'claws', kind: 'coralTipped', quality: 'fine' }, { category: 'claws', kind: 'quill' }, { category: 'shell', kind: 'whelk', quality: 'masterwork' }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 3 },
-  100: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, coral: 4 }, extraGear: [{ category: 'shell', kind: 'coral', quality: 'masterwork', stored: true }, { category: 'claws', kind: 'fork', quality: 'masterwork', stored: true }], storagePanel: true },
+  84: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 80, z: -46, distance: 60, tideShare: 0.56, heading: 3.4 },
+  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
+  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
+  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
+  90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'whelk', claws: 'coralTipped', quality: 'fine' } },
+  91: { x: 40, z: -40, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'] },
+  93: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' } },
+  94: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' } },
+  95: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' } },
+  96: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: -96, z: -76, distance: 30, tideShare: 0.56, heading: 0.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' }, restingBosses: ['shipCat'] },
+  97: { x: 24, z: -27, distance: 40, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'cleaver', quality: 'masterwork' } },
+  98: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, extraGear: [{ category: 'shell', kind: 'coral', quality: 'masterwork' }, { category: 'shell', kind: 'coral' }, { category: 'claws', kind: 'cleaver', quality: 'masterwork' }, { category: 'claws', kind: 'coralTipped', quality: 'fine' }, { category: 'claws', kind: 'shellEdged' }, { category: 'shell', kind: 'whelk', quality: 'masterwork' }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 1 },
+  99: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, extraGear: [{ category: 'shell', kind: 'coral', quality: 'masterwork' }, { category: 'shell', kind: 'coral' }, { category: 'claws', kind: 'cleaver', quality: 'masterwork' }, { category: 'claws', kind: 'coralTipped', quality: 'fine' }, { category: 'claws', kind: 'shellEdged' }, { category: 'shell', kind: 'whelk', quality: 'masterwork' }], inventory: { shellBits: 14, driftwood: 6, coral: 5, scrap: 9, pearls: 3, driedKelp: 2, catWhisker: 2 }, selectSlot: 3 },
+  100: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, coral: 4 }, extraGear: [{ category: 'shell', kind: 'coral', quality: 'masterwork', stored: true }, { category: 'claws', kind: 'coralTipped', quality: 'masterwork', stored: true }], storagePanel: true },
   101: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molts: ['crusher'], moltPanel: true },
   102: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molting: true },
-  103: { x: 24, z: -27, distance: 9, tideShare: 0.56, heading: 1.75, molts: ['crusher', 'crusher', 'crusher', 'crusher', 'crusher', 'cutter'], outfit: { shell: 'tinCan', claws: 'fishhook', quality: 'masterwork', reinforcement: 'metalPlate' } },
+  103: { x: 24, z: -27, distance: 9, tideShare: 0.56, heading: 1.75, molts: ['crusher', 'crusher', 'crusher', 'crusher', 'crusher', 'cutter'], outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork', reinforcement: 'metalPlate' } },
   104: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], inBurrow: true, level: 6, molts: ['crusher'] },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
@@ -1117,9 +1117,12 @@ function gearChanged(message) {
   persist();
 }
 
+const CAMP_TOOL_TIER = 3;
+
 function upgradeTools() {
   const tools = gear.upgradeTools(save.inventory);
   if (!tools) return null;
+  if (gear.state.toolTier >= CAMP_TOOL_TIER) save.campGearCrafted = true;
   soundAt('craft');
   gearChanged(`🔨 New tools: ${tools.label}`);
   return tools;
@@ -1369,6 +1372,13 @@ function dropLoot(enemy) {
     hud.toast(`👑 ${enemy.definition.label} dropped ${message.join(' ')} · back in 24 h`);
     return;
   }
+  const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
+  if (minibossMaterial) {
+    giveMaterial(minibossMaterial, BOSS_MATERIAL_DROP, enemy);
+    const pearls = enemy.definition.pearlCount || 0;
+    hud.toast(`${enemy.definition.label} dropped ${RESOURCE_TYPES[minibossMaterial].icon} ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[minibossMaterial].label.toLowerCase()}s${pearls ? ` · 🦪 ${pearls}` : ''} · back in 15 min`);
+    return;
+  }
   if (random() < COMMON_DROP_CHANCE) {
     const options = REGION_MATERIALS[regionAt(enemy.x, enemy.z)];
     giveMaterial(options[Math.floor(random() * options.length)], 1, enemy);
@@ -1382,7 +1392,7 @@ function enemyKilled(enemy) {
   if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
     const pearls = enemy.definition.pearlCount || 1;
     save.inventory.pearls = (save.inventory.pearls || 0) + pearls;
-    if (!BOSS_TROPHIES[enemy.kind]) hud.toast(pearls > 1 ? `🦪 The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `🦪 The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
+    if (!BOSS_TROPHIES[enemy.kind] && !MINIBOSS_MATERIALS[enemy.kind]) hud.toast(pearls > 1 ? `🦪 The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `🦪 The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
     refreshHud('pearls');
   }
   dropLoot(enemy);

@@ -54,9 +54,9 @@ FLOW = r'''
   out.fedRegenInCombat = +(d.progression.state.health - fedStart).toFixed(2);
   d.player.lastCombatTime = -100;
 
-  Object.assign(d.save.inventory, { driedKelp: 4, shellBits: 4 });
-  const claws = d.craftItem('claws', 'kelpWrapped');
-  out.clawsCrafted = Boolean(claws);
+  Object.assign(d.save.inventory, { driedKelp: 2, shellBits: 6, driftwood: 4 });
+  const claws = d.craftItem('claws', 'shellEdged');
+  out.clawsCrafted = Boolean(claws) && Boolean(d.modifyItem(claws.id, 'kelp'));
   d.wearItem(claws.id);
   out.clawStats = d.playerStats();
   d.player.wellFedUntil = 0;
@@ -110,7 +110,7 @@ with sync_playwright() as playwright:
         'panelLoadsBatch': flow['panelOpens'] and flow['loaded']['slots'][0] == 0 and flow['loaded']['lettuce'] == 0,
         'driesIn60s': flow['readyBefore60'] == 0 and flow['readyAfter61'] == 1 and flow['kelpCollected'] == 1,
         'eatDoublesRegenInCombat': flow['hungryRegenInCombat'] == 0 and flow['wellFed'] and flow['kelpAfterEat'] == 0 and abs(flow['fedRegenInCombat'] - 4) < 0.15,
-        'kelpClaws': flow['clawsCrafted'] and flow['clawStats']['healOnHit'] == 1 and flow['clawStats']['attack'] == 6 and flow['hits'] >= 1 and flow['healthAfterHit'] >= 16,
+        'kelpClaws': flow['clawsCrafted'] and flow['clawStats']['healOnHit'] == 1 and flow['clawStats']['attack'] == 8 and flow['hits'] >= 1 and flow['healthAfterHit'] >= 16,
         'helperTendsRack': flow['rackHelper'] and result['storageLettuce'] <= 3 and (result['storageKelp'] >= 1 or result['rack']['ready'] >= 1),
     })
     page.reload()

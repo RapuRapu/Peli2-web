@@ -51,63 +51,6 @@ export const SHELLS = {
     cost: { seaGlass: 4, coral: 3, shellBits: 6 },
     look: { turns: 4.2, spireShare: 0.94, whorlRadius: 0.32, tubeRadius: 0.56, height: 1.75, bandFrequency: 52, light: [0.86, 0.9, 0.94], band: [0.2, 0.42, 0.62], inside: [0.96, 0.82, 0.72] },
   },
-  tinCan: {
-    label: 'Tin can',
-    tier: 3,
-    role: 'Camp tank',
-    defense: 20,
-    speedFactor: 0.8,
-    attackFactor: 1,
-    ability: { id: 'brace', label: 'Brace+ · Clang', description: '−40% damage taken while standing still; attackers take 5 damage', damageFactor: 0.6, thorns: 5 },
-    cost: { scrap: 6, cloth: 3, coral: 4 },
-    look: { form: 'can', radius: 0.78, length: 1.8, whorlRadius: 0.78, light: [0.78, 0.79, 0.82], band: [0.78, 0.14, 0.1], inside: [0.5, 0.5, 0.52] },
-  },
-  bottle: {
-    label: 'Glass bottle',
-    tier: 3,
-    role: 'Camp striker',
-    defense: 9,
-    speedFactor: 1.05,
-    attackFactor: 1.4,
-    ability: { id: 'pierce', label: 'Pierce', description: 'hits ignore enemy armour', pierce: true },
-    cost: { seaGlass: 6, scrap: 3, cloth: 3 },
-    look: { form: 'bottle', radius: 0.7, length: 2.2, neckRadius: 0.44, whorlRadius: 0.7, light: [0.2, 0.5, 0.28], band: [0.9, 0.84, 0.64], inside: [0.1, 0.22, 0.12] },
-  },
-  skull: {
-    label: 'Bird skull',
-    tier: 4,
-    role: 'Hold tank',
-    defense: 28,
-    speedFactor: 0.75,
-    attackFactor: 1,
-    ability: { id: 'brace', label: 'Brace+ · Dread', description: '−40% damage taken while standing still; enemies hit 20% softer', damageFactor: 0.6, dreadFactor: 0.8 },
-    cost: { fishBone: 8, wax: 4, scrap: 6 },
-    look: { form: 'skull', radius: 0.82, length: 2.0, whorlRadius: 0.82, light: [0.93, 0.9, 0.8], band: [0.45, 0.38, 0.3], inside: [0.2, 0.17, 0.14] },
-  },
-  thimble: {
-    label: 'Silver thimble',
-    tier: 4,
-    role: 'Hold striker',
-    defense: 12,
-    speedFactor: 1.1,
-    attackFactor: 1.6,
-    ability: { id: 'sting', label: 'Sting++', description: 'every 2nd hit deals double damage', everyHits: 2 },
-    cost: { scrap: 6, wax: 4, seaGlass: 3 },
-    look: { form: 'thimble', radius: 0.74, length: 1.7, whorlRadius: 0.74, light: [0.86, 0.87, 0.9], band: [0.5, 0.52, 0.56], inside: [0.3, 0.3, 0.33] },
-  },
-  lobster: {
-    label: 'Lobster shell',
-    tier: 2,
-    trophy: 'giantLobster',
-    role: 'Tank',
-    defense: 16,
-    speedFactor: 0.85,
-    attackFactor: 1,
-    ability: { id: 'brace', label: 'Brace+ · Spikes', description: '−40% damage taken while standing still; attackers take 5 damage', damageFactor: 0.6, thorns: 5 },
-    cost: { lobsterPlate: 3, coral: 4, seaGlass: 2 },
-    look: { turns: 2.2, spireShare: 0.88, whorlRadius: 0.64, tubeRadius: 0.84, height: 0.9, bandFrequency: 18, knobs: 46, light: [0.9, 0.3, 0.12], band: [0.45, 0.07, 0.04], inside: [0.98, 0.84, 0.7] },
-  },
-
 };
 
 export const NAKED = {
@@ -122,21 +65,14 @@ export const NAKED = {
 export const CLAWS = {
   bare: { label: 'Bare claws', attackBonus: 0, cost: null },
   shellEdged: { label: 'Shell-edged claws', attackBonus: 4, cost: { shellBits: 6, driftwood: 4 } },
-  kelpWrapped: { label: 'Kelp-wrapped claws', attackBonus: 2, cost: { driedKelp: 4, shellBits: 4 }, healOnHit: 1 },
   coralTipped: { label: 'Coral-tipped claws', tier: 2, attackBonus: 8, cost: { coral: 5, seaGlass: 2, driftwood: 2 }, tint: [1.7, 1.25, 1.6] },
-  fishhook: { label: 'Fishhook claws', tier: 3, attackBonus: 13, cost: { scrap: 5, cloth: 2, coral: 2 }, tint: [0.85, 2.3, 4.2] },
-  fork: { label: 'Fork-tine claws', tier: 4, attackBonus: 19, cost: { scrap: 6, fishBone: 4, cloth: 2 }, tint: [1.35, 1.4, 1.5], tines: true },
-  quill: { label: 'Quill claws', trophy: 'gull', attackBonus: 6, cost: { gullFeather: 3, driftwood: 4, shellBits: 4 }, tint: [1.55, 1.5, 1.35] },
-  whisker: { label: 'Whisker claws', tier: 3, trophy: 'shipCat', attackBonus: 16, cost: { catWhisker: 3, scrap: 4, cloth: 2 }, tint: [1.6, 1.15, 0.7], ability: { id: 'swift', label: 'Swift', description: 'attacks 20% faster', attackIntervalFactor: 0.8 } },
   cleaver: { label: 'Cleaver claws', tier: 5, trophy: 'cook', attackBonus: 24, cost: { apronScrap: 3, scrap: 6, fishBone: 4 }, tint: [1.25, 1.3, 1.4] },
 };
 
 export const BOSS_TROPHIES = {
-  gull: { material: 'gullFeather', category: 'claws', kind: 'quill' },
-  giantLobster: { material: 'lobsterPlate', category: 'shell', kind: 'lobster' },
-  shipCat: { material: 'catWhisker', category: 'claws', kind: 'whisker' },
   cook: { material: 'apronScrap', category: 'claws', kind: 'cleaver' },
 };
+export const MINIBOSS_MATERIALS = { gull: 'gullFeather', giantLobster: 'lobsterPlate', shipCat: 'catWhisker' };
 export const BOSS_MATERIAL_DROP = 2;
 export const BOSS_ITEM_CHANCE = 0.1;
 
@@ -163,12 +99,15 @@ export const BINDINGS = {
   kelp: { label: 'Kelp binding', cost: { driedKelp: 2 }, description: 'every hit heals 1 HP', healOnHit: 1 },
   thread: { label: 'Thread binding', cost: { cloth: 2 }, description: 'attacks 10% faster', attackIntervalFactor: 0.9 },
   wire: { label: 'Wire binding', cost: { scrap: 2, cloth: 1 }, description: '+20% claw attack', attackShare: 0.2 },
+  whisker: { label: 'Whisker binding', cost: { catWhisker: 2 }, description: 'attacks 20% faster', attackIntervalFactor: 0.8 },
 };
 
 export const REINFORCEMENTS = {
   coralCrust: { label: 'Coral crust', cost: { coral: 3, shellBits: 2 }, description: '+20% armour', defenseShare: 0.2 },
   metalPlate: { label: 'Metal plate', cost: { scrap: 3, cloth: 1 }, description: '+35% armour, −5% speed', defenseShare: 0.35, speedFactor: 0.95 },
   boneSpikes: { label: 'Bone spikes', cost: { fishBone: 3 }, description: 'attackers take 3 damage', thorns: 3 },
+  featherLining: { label: 'Feather lining', cost: { gullFeather: 2 }, description: '+8% speed', speedFactor: 1.08 },
+  lobsterArmor: { label: 'Lobster plate', cost: { lobsterPlate: 2 }, description: '+30% armour, attackers take 3 damage', defenseShare: 0.3, thorns: 3 },
 };
 
 export const MASTERWORK_SHEEN = { glow: 1.0, color: [1, 0.68, 0.18], pulse: false };
@@ -211,7 +150,10 @@ export function gearGlowLook(item) {
   return item && item.quality === 'masterwork' ? MASTERWORK_SHEEN : NO_GLOW;
 }
 
+const RETIRED_KINDS = { tinCan: 'coral', skull: 'coral', lobster: 'coral', bottle: 'whelk', thimble: 'whelk', fishhook: 'coralTipped', fork: 'coralTipped', whisker: 'coralTipped', quill: 'shellEdged', kelpWrapped: 'shellEdged' };
+
 export function normalizeItem(item) {
+  if (RETIRED_KINDS[item.kind]) item.kind = RETIRED_KINDS[item.kind];
   if (!item.quality) item.quality = (item.enchant || 0) >= 4 ? 'masterwork' : 'fine';
   delete item.enchant;
   return item;

@@ -8,8 +8,8 @@ SETUP = r'''() => {
   const d = window.__debug;
   d.setPaused(true);
   d.save.inventory = { shellBits: 8, coral: 3, scrap: 5, driedKelp: 1 };
-  d.gear.state.shells = [{ id: 701, kind: 'tinCan', quality: 'masterwork', reinforcement: 'metalPlate' }, { id: 702, kind: 'skull', quality: 'fine' }, { id: 703, kind: 'lobster', quality: 'masterwork' }];
-  d.gear.state.claws = [{ id: 2, kind: 'bare', quality: 'fine' }, { id: 704, kind: 'fishhook', quality: 'masterwork', binding: 'wire' }, { id: 705, kind: 'cleaver', quality: 'fine' }];
+  d.gear.state.shells = [{ id: 701, kind: 'coral', quality: 'masterwork', reinforcement: 'metalPlate' }, { id: 702, kind: 'turban', quality: 'fine' }, { id: 703, kind: 'whelk', quality: 'masterwork' }];
+  d.gear.state.claws = [{ id: 2, kind: 'bare', quality: 'fine' }, { id: 704, kind: 'coralTipped', quality: 'masterwork', binding: 'wire' }, { id: 705, kind: 'cleaver', quality: 'fine' }];
   d.gear.state.wornShellId = 701;
   d.gear.state.wornClawsId = 704;
   d.openBackpack();
@@ -52,14 +52,14 @@ with sync_playwright() as playwright:
     }""")
     print('view', json.dumps(view), flush=True)
     grid = {g['id']: g for g in view['gridGear']}
-    checks['qualityInNames'] = view['wornNames'] == ['Masterwork tin can', 'Masterwork fishhook claws'] and view['wornStats'][0].startswith('🛡 32') and view['wornStats'][1] == '🗡️ +19'
-    checks['tiers'] = grid['702']['tier'] == 'tier-4' and grid['703']['tier'] == 'tier-2 tier-trophy' and grid['703']['badge'] == '👑 T2' and grid['705']['badge'] == '👑 T5' and grid['703']['quality'] == '★' and grid['702']['quality'] == ''
+    checks['qualityInNames'] = view['wornNames'] == ['Masterwork coral shell', 'Masterwork coral-tipped claws'] and view['wornStats'][0].startswith('🛡 19') and view['wornStats'][1] == '🗡️ +12'
+    checks['tiers'] = grid['702']['tier'] == 'tier-1' and grid['703']['tier'] == 'tier-2' and grid['703']['badge'] == 'T2' and grid['705']['tier'] == 'tier-5 tier-trophy' and grid['705']['badge'] == '👑 T5' and grid['703']['quality'] == '★' and grid['702']['quality'] == ''
     checks['slotsAndImages'] = len(view['gridGear']) == 3 and all(g['image'] for g in view['gridGear']) and view['materials'] == ['shellBits×8', 'coral×3', 'scrap×5', 'driedKelp×1'] and view['doll']
 
     page.click('#hud .backpack .slot-grid [data-slot-item="703"]')
     details = page.evaluate("() => ({ name: document.querySelector('#hud .backpack .item-details .item-name').textContent, tier: document.querySelector('#hud .backpack .item-details .item-tier').textContent, breakdown: document.querySelector('#hud .backpack .item-details .item-owned')?.textContent, delta: document.querySelector('#hud .backpack .item-details .stat-delta')?.textContent, wear: !!document.querySelector('#hud .backpack [data-wear=\"703\"]') })")
     print('details', json.dumps(details), flush=True)
-    checks['details'] = details['delta'] == ' ▼12 vs worn' and details['name'] == 'Masterwork lobster shell' and 'Tier 2' in details['tier'] and 'Boss trophy' in details['tier'] and details['breakdown'] == '🛡 16 + 4 masterwork' and details['wear']
+    checks['details'] = details['delta'] == ' ▼13 vs worn' and details['name'] == 'Masterwork spiral whelk' and 'Tier 2' in details['tier'] and 'Boss trophy' not in details['tier'] and details['breakdown'] == '🛡 5 + 1 masterwork' and details['wear']
 
     page.dblclick('#hud .backpack .slot-grid [data-slot-item="702"]')
     after_double = page.evaluate("() => __debug.gear.wornShell().kind")
@@ -76,8 +76,8 @@ with sync_playwright() as playwright:
     coral_untouched = page.evaluate("() => !__debug.gear.wornShell() && !document.querySelector('#hud .backpack .slot-grid [data-slot-item=\"702\"]').classList.contains('selected')")
     wear = {'double': after_double, 'dragDoll': after_drag_doll, 'dragSlot': after_drag_slot, 'unequipDrag': after_unequip_drag, 'unequipDouble': after_unequip_double, 'swipeIgnored': coral_untouched}
     print('wear', json.dumps(wear), flush=True)
-    checks['doubleTapWear'] = after_double == 'skull' and after_unequip_double['shell'] is None and after_unequip_double['label'] == 'No shell' and after_unequip_double['look'] == 0
-    checks['doubleTapSwapAndSwipe'] = after_drag_doll == 'cleaver' and after_drag_slot == 'tinCan' and after_unequip_drag == 'bare' and coral_untouched
+    checks['doubleTapWear'] = after_double == 'turban' and after_unequip_double['shell'] is None and after_unequip_double['label'] == 'No shell' and after_unequip_double['look'] == 0
+    checks['doubleTapSwapAndSwipe'] = after_drag_doll == 'cleaver' and after_drag_slot == 'coral' and after_unequip_drag == 'bare' and coral_untouched
 
     page.click('#hud .backpack .slot-grid [data-material="driedKelp"]')
     page.click('#hud .backpack [data-eat]')
@@ -127,7 +127,7 @@ with sync_playwright() as playwright:
     phone.tap('#hud .backpack [data-wear="703"]')
     phone_button = phone.evaluate("() => __debug.gear.wornShell().kind")
     print('phone', phone_worn, phone_button, flush=True)
-    checks['phoneTouch'] = phone_worn == 'skull' and phone_button == 'lobster'
+    checks['phoneTouch'] = phone_worn == 'turban' and phone_button == 'whelk'
     phone_context.close()
 
     checks['noConsoleErrors'] = not errors

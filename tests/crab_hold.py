@@ -101,8 +101,9 @@ with sync_playwright() as playwright:
       d.craftItem('shell', 'snail');
       if (d.isUnderground()) d.exitBurrow();
       Object.assign(d.save, { reefFound: true, reefGearCrafted: true, campFound: true });
-      Object.assign(d.save.inventory, { scrap: 6, cloth: 3, coral: 4 });
-      d.craftItem('shell', 'tinCan');
+      Object.assign(d.save.inventory, { scrap: 4, cloth: 2, pearls: 2 });
+      d.gear.state.toolTier = 2;
+      d.upgradeTools();
       out.goal = goalText();
       document.querySelector('#hud .goal').click();
       const target = d.player.gatherTarget;
@@ -120,26 +121,11 @@ with sync_playwright() as playwright:
 
     page.evaluate("() => __debug.setPaused(true)")
     page.evaluate(HELPERS)
-    scenarios = {
-        'three roaches L10 coral★ coralTipped★': "'cockroach', 3, 10, 'coral', 3, 'coralTipped', 3, false",
-        'three roaches L10 tinCan★ fishhook★': "'cockroach', 3, 10, 'tinCan', 3, 'fishhook', 3, false",
-        'cook L10 tinCan★ fishhook★ fed': "'cook', 1, 10, 'tinCan', 6, 'fishhook', 6, true",
-        'cook L10 skull fork fed': "'cook', 1, 10, 'skull', 0, 'fork', 0, true",
-        'cook L10 skull★ fork★ fed': "'cook', 1, 10, 'skull', 6, 'fork', 6, true",
-        'cook L10 thimble★ fork★ fed': "'cook', 1, 10, 'thimble', 6, 'fork', 6, true",
-    }
     balance = {}
-    for name, arguments in scenarios.items():
-        results = [page.evaluate(f"() => __hold.fight({arguments})") for _ in range(RUNS)]
-        balance[name] = summarize(results)
-        print(name, balance[name], flush=True)
-    wins = lambda name: int(balance[name]['wins'].split('/')[0])
-    checks['roachesGateTier2'] = wins('three roaches L10 coral★ coralTipped★') <= 3 and wins('three roaches L10 tinCan★ fishhook★') >= 6
-    checks['cookNeedsTier4Enchanted'] = wins('cook L10 tinCan★ fishhook★ fed') <= 3 and wins('cook L10 skull fork fed') <= 3 and wins('cook L10 skull★ fork★ fed') >= 7
 
     behaviour = page.evaluate(r"""() => {
       const d = window.__debug; const c = window.__hold; const out = {};
-      const [cook] = c.setup('cook', 1, 10, 'skull', 9, 'fork', 0, false);
+      const [cook] = c.setup('cook', 1, 10, 'coral', 9, 'coralTipped', 0, false);
       cook.health = 1e5;
       c.place(70, -66); c.step(2);
       out.cookIgnoresOutside = cook.state === 'idle';
@@ -154,20 +140,10 @@ with sync_playwright() as playwright:
       c.place(106 - 5, -64); d.engage(cook);
       c.step(15, () => cook.zone && cook.zone.stomp);
       out.stompAfterTwoChops = !!(cook.zone && cook.zone.stomp) && cook.strikesMade === 2;
-      const skullStats = (() => { c.setup('cockroach', 1, 10, 'skull', 0, 'fork', 0, false); return d.playerStats(); })();
-      out.skullDread = skullStats.ability && skullStats.ability.dreadFactor === 0.8;
-      const thimbleStats = (() => { c.setup('cockroach', 1, 10, 'thimble', 0, 'fork', 0, false); return d.playerStats(); })();
-      out.thimbleStingEvery2 = thimbleStats.ability && thimbleStats.ability.everyHits === 2;
-      const [roach] = c.setup('cockroach', 1, 10, 'skull', 0, 'fork', 0, false);
-      d.enemies.startChase(roach);
-      const before = d.progression.state.health; c.step(1.2, () => d.progression.state.health < before);
-      const withDread = before - d.progression.state.health;
-      out.dreadDamage = withDread;
       return out;
     }""")
     print('behaviour', json.dumps(behaviour), flush=True)
     checks['cookAttacks'] = behaviour['cookIgnoresOutside'] and behaviour['chopTelegraphed'] and behaviour['chopDodged'] and behaviour['cookStaysPut'] and behaviour['stompAfterTwoChops']
-    checks['tier4Abilities'] = behaviour['skullDread'] and behaviour['thimbleStingEvery2']
 
     performance = {'start': frame_numbers(context, 1), 'holdOverview': frame_numbers(context, 84), 'inHold': frame_numbers(context, 85)}
     print('performance', json.dumps(performance), flush=True)

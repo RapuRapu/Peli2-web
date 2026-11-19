@@ -125,10 +125,6 @@ with sync_playwright() as playwright:
         'rat L10 coral★ coralTipped★': "'rat', 1, 10, 'coral', 3, 'coralTipped', 3, false",
         'two rats L10 coral★ coralTipped★': "'rat', 2, 10, 'coral', 3, 'coralTipped', 3, false",
         'two rats L10 turban★ edged★': "'rat', 2, 10, 'turban', 4, 'shellEdged', 4, false",
-        'cat L10 coral★ coralTipped★ fed': "'shipCat', 1, 10, 'coral', 6, 'coralTipped', 6, true",
-        'cat L10 tinCan fishhook fed': "'shipCat', 1, 10, 'tinCan', 0, 'fishhook', 0, true",
-        'cat L10 tinCan★ fishhook★ fed': "'shipCat', 1, 10, 'tinCan', 6, 'fishhook', 6, true",
-        'cat L10 bottle★ fishhook★ fed': "'shipCat', 1, 10, 'bottle', 6, 'fishhook', 6, true",
     }
     balance = {}
     for name, arguments in scenarios.items():
@@ -137,11 +133,10 @@ with sync_playwright() as playwright:
         print(name, balance[name], flush=True)
     wins = lambda name: int(balance[name]['wins'].split('/')[0])
     checks['ratsGateTier1'] = wins('rat L10 coral★ coralTipped★') >= 8 and wins('two rats L10 coral★ coralTipped★') >= 6 and wins('two rats L10 turban★ edged★') <= 3
-    checks['catNeedsTier3Enchanted'] = wins('cat L10 coral★ coralTipped★ fed') <= 3 and wins('cat L10 tinCan fishhook fed') <= 3 and wins('cat L10 tinCan★ fishhook★ fed') >= 7
 
     behaviour = page.evaluate(r'''() => {
       const d = window.__debug; const c = window.__camp; const out = {};
-      const [cat] = c.setup('shipCat', 1, 10, 'tinCan', 9, 'fishhook', 0, false);
+      const [cat] = c.setup('shipCat', 1, 10, 'coral', 9, 'coralTipped', 0, false);
       cat.health = 1e5;
       c.place(-97, -63 + 30); c.step(2);
       out.catIgnoresOutside = cat.state === 'idle';
@@ -156,20 +151,13 @@ with sync_playwright() as playwright:
       out.pounceDodged = d.progression.state.health >= healthBefore;
       out.catLanded = Math.hypot(cat.x - zone.x, cat.z - zone.z) < cat.definition.radius + 3;
       out.catNotOnPlayer = Math.hypot(cat.x - d.player.x, cat.z - d.player.z) > 1.5;
-      const pierce = (shell) => { c.setup('rat', 1, 10, shell, 0, 'fishhook', 0, false); return d.playerStats(); };
-      const bottleStats = pierce('bottle'); const coneStats = pierce('cone');
-      out.bottlePierces = !!(bottleStats.ability && bottleStats.ability.pierce) && !(coneStats.ability && coneStats.ability.pierce);
-      const [rat] = c.setup('rat', 1, 10, 'bottle', 0, 'fishhook', 0, false);
-      const ratHealth = rat.health; d.engage(rat); c.step(3, () => rat.health < ratHealth);
-      out.bottleHitIgnoresArmour = ratHealth - rat.health >= Math.floor(d.playerStats().attack * 0.85);
-      const [mate, other] = c.setup('rat', 2, 10, 'tinCan', 9, 'fishhook', 0, false);
+      const [mate, other] = c.setup('rat', 2, 10, 'coral', 9, 'coralTipped', 0, false);
       c.place(mate.x + 6, mate.z); c.step(2);
       out.ratPairBothChase = mate.state === 'chase' && other.state === 'chase';
       return out;
     }''')
     print('behaviour', json.dumps(behaviour), flush=True)
     checks['catPounce'] = behaviour['catIgnoresOutside'] and behaviour['pounceTelegraphed'] and behaviour['pounceDodged'] and behaviour['catLanded'] and behaviour['catNotOnPlayer']
-    checks['bottlePierce'] = behaviour['bottlePierces'] and behaviour['bottleHitIgnoresArmour']
     checks['ratsHuntTogether'] = behaviour['ratPairBothChase']
 
     performance = {'start': frame_numbers(context, 1), 'campOverview': frame_numbers(context, 75), 'inCamp': frame_numbers(context, 76)}
