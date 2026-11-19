@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside } from './seaside.js';
 import { random } from './random.js';
+import { creatureAssetAvailable, createCreature } from './creatureAssets.js';
 import { buildCockroachGeometry, buildCookLegGeometry, buildCleaverGeometry, LINE_TELEGRAPH_FRAGMENT_GLSL, buildRatGeometry, buildCatGeometry, buildMorayGeometry, buildOctopusGeometry, buildMantisGeometry, buildLobsterBodyGeometry, buildLobsterClawGeometry, TELEGRAPH_VERTEX_GLSL, TELEGRAPH_FRAGMENT_GLSL, INK_FRAGMENT_GLSL } from './reefCreatures.js';
 
 export const PLAYER_BODY_RADIUS = 0.9;
@@ -57,6 +58,7 @@ const GULL_CIRCLE_RADIUS = 16;
 const GULL_CIRCLE_ALTITUDE = 30;
 const GULL_FLIGHT_SPEED = 16;
 const GULL_LANDING_OFFSET = 6;
+const CREATURE_SCALE = { sandHopper: 1, shoreCrab: 1, gull: 1 };
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 
@@ -373,6 +375,11 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       const enemy = { id: nextId++, kind: entry.kind, definition: ENEMY_KINDS[entry.kind], entry, slot: list.filter((other) => other.kind === entry.kind).length, respawnTimer: 0, pack: null };
       enemy.bar = createBar(enemy);
       if (entry.kind === 'gull') enemy.model = createGullModel(scene, quality);
+      if (creatureAssetAvailable(entry.kind)) {
+        enemy.creature = createCreature(entry.kind, quality);
+        scene.add(enemy.creature.object);
+        if (enemy.model) enemy.model.torso.visible = false;
+      }
       if (entry.packSize && packLeft <= 0) {
         pack = null;
         packLeft = entry.packSize[0] + Math.floor(random() * (entry.packSize[1] - entry.packSize[0] + 1));
@@ -796,8 +803,24 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.rotation.set(-hop * 0.6 - pounce * 0.5 + startle * 0.6, enemy.heading, fall * Math.PI);
     transform.scale.setScalar(1.15 * (1 - deathSink(enemy) * 0.5));
     transform.updateMatrix();
+    if (enemy.creature) {
+      placeCreature(enemy, CREATURE_SCALE.sandHopper * (1 - deathSink(enemy) * 0.5));
+      enemy.creature.pose({ stride: time * 9 + enemy.id, motion: enemy.motion, hop: hop / 0.55 + pounce, startle, fall: enemy.state === 'dying' ? 1 : fall, time });
+      hopperMesh.setMatrixAt(enemy.slot, hidden);
+      return;
+    }
     hopperMesh.setMatrixAt(enemy.slot, enemy.state === 'dead' ? hidden : transform.matrix);
     setFlash(hopperMesh, enemy.slot, flashFor(enemy));
+  }
+
+  function placeCreature(enemy, scale) {
+    const { object } = enemy.creature;
+    object.visible = enemy.state !== 'dead';
+    object.position.copy(transform.position);
+    object.rotation.copy(transform.rotation);
+    object.scale.setScalar(scale);
+    const dyingFlash = enemy.state === 'dying' ? Math.max(0, 1 - enemy.sink * 4) : 0;
+    enemy.creature.setFlash(Math.max(enemy.hurt, dyingFlash));
   }
 
   function renderShoreCrab(enemy, time) {
@@ -811,6 +834,16 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     transform.scale.setScalar(1);
     transform.updateMatrix();
     parentMatrix.copy(transform.matrix);
+    if (enemy.creature) {
+      placeCreature(enemy, CREATURE_SCALE.shoreCrab);
+      const windingUpNow = enemy.state === 'chase' && enemy.attackTimer < 0.45 ? 1 - enemy.attackTimer / 0.45 : 0;
+      const raisedNow = (enemy.state === 'chase' ? 0.35 : 0.1 + 0.05 * Math.sin(time * 1.3 + enemy.id)) + windingUpNow * 0.55;
+      enemy.creature.pose({ stride, motion: enemy.motion, raised: raisedNow, snaps: [enemy.strike, Math.max(0, (enemy.strike - 0.35) / 0.65)], recoil, fall });
+      crabBodyMesh.setMatrixAt(enemy.slot, hidden);
+      for (let leg = 0; leg < 8; leg++) crabLegMesh.setMatrixAt(enemy.slot * 8 + leg, hidden);
+      for (let claw = 0; claw < 2; claw++) crabClawMesh.setMatrixAt(enemy.slot * 2 + claw, hidden);
+      return;
+    }
     crabBodyMesh.setMatrixAt(enemy.slot, enemy.state === 'dead' ? hidden : parentMatrix);
     const flash = flashFor(enemy);
     setFlash(crabBodyMesh, enemy.slot, flash);
@@ -1025,6 +1058,16 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     torso.position.z = Math.sin(enemy.strike * Math.PI) * 1.4;
     for (const material of enemy.model.materials) material.emissive.setRGB(0.55 * enemy.hurt * enemy.hurt, 0.16 * enemy.hurt * enemy.hurt, 0.04 * enemy.hurt * enemy.hurt);
     const flap = Math.sin(time * (enemy.state === 'circling' ? 2.2 : 7)) * (enemy.state === 'circling' ? 0.18 : 0.55);
+    if (enemy.creature) {
+      const { object } = enemy.creature;
+      object.visible = root.visible;
+      object.position.copy(root.position);
+      object.rotation.set(torso.rotation.x * 0.5, enemy.heading, fall * 1.45);
+      object.translateZ(torso.position.z);
+      object.scale.setScalar(CREATURE_SCALE.gull);
+      enemy.creature.setFlash(enemy.hurt);
+      enemy.creature.pose({ flying, flap: flap * 1.4, strike: Math.sin(enemy.strike * Math.PI * 0.5), windup, time });
+    }
     for (const wing of wings) {
       wing.pivot.visible = flying > 0.05;
       wing.pivot.rotation.set(0, wing.side * (1 - flying) * Math.PI * 0.45, wing.side * flying * flap);

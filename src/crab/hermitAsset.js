@@ -1,10 +1,9 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import crabModelBytes from './assets/crab.glb';
 import shellModelBytes from './assets/shells.glb';
+import { Joint, limbChain, parseModel } from './rig.js';
 
-const UP = new THREE.Vector3(0, 1, 0);
 const LEG_NAMES = ['leg_front_L', 'leg_middle_R', 'leg_rear_L', 'leg_front_R', 'leg_middle_L', 'leg_rear_R'];
 const TRIPOD_PHASE = { leg_front_L: 0, leg_middle_R: 0, leg_rear_L: 0, leg_front_R: Math.PI, leg_middle_L: Math.PI, leg_rear_R: Math.PI };
 const LEG_SWING = 0.5;
@@ -27,10 +26,6 @@ export const SHELL_MODEL_FIT = {
 let loadedCrab = null;
 const shellModels = new Map();
 
-async function parseModel(bytes) {
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  return new GLTFLoader().parseAsync(buffer, '');
-}
 
 export async function loadCrabAsset() {
   const [crab, shells] = await Promise.all([parseModel(crabModelBytes), parseModel(shellModelBytes)]);
@@ -67,39 +62,6 @@ export function buildShellModel(kind, material) {
 }
 
 export const crabAssetLoaded = () => loadedCrab !== null;
-
-class Joint {
-  constructor(bone, raiseAxisWorld) {
-    this.bone = bone;
-    this.rest = bone.quaternion.clone();
-    const worldRest = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
-    this.raiseAxis = raiseAxisWorld.clone().applyQuaternion(worldRest).normalize();
-    this.turnAxis = UP.clone().applyQuaternion(worldRest).normalize();
-    this.pitchAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(worldRest).normalize();
-  }
-
-  pose(raise = 0, turn = 0, pitch = 0) {
-    const bone = this.bone;
-    bone.quaternion.copy(this.rest);
-    if (turn) bone.quaternion.multiply(scratch.setFromAxisAngle(this.turnAxis, turn));
-    if (raise) bone.quaternion.multiply(scratch.setFromAxisAngle(this.raiseAxis, raise));
-    if (pitch) bone.quaternion.multiply(scratch.setFromAxisAngle(this.pitchAxis, pitch));
-  }
-}
-const scratch = new THREE.Quaternion();
-
-function limbChain(bones, name) {
-  const first = bones[`${name}_1`];
-  const last = bones[`${name}_tip`];
-  const start = first.getWorldPosition(new THREE.Vector3());
-  const end = last.getWorldPosition(new THREE.Vector3());
-  const outward = new THREE.Vector3(end.x - start.x, 0, end.z - start.z).normalize();
-  const raiseAxis = new THREE.Vector3().crossVectors(outward, UP).normalize();
-  return {
-    side: Math.sign(start.x) || 1,
-    joints: [1, 2, 3].map((segment) => new Joint(bones[`${name}_${segment}`], raiseAxis)),
-  };
-}
 
 export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rearMaterial }) {
   const model = cloneSkinned(loadedCrab);
