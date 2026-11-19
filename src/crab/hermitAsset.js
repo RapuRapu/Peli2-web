@@ -14,6 +14,7 @@ const CLAW_THRUST = 1.1;
 const CLAW_SPREAD = 1.3;
 const CLAW_OPEN = 0.35;
 const MODEL_SCALE = 1.2;
+const TUCKED_ABDOMEN_SCALE = 0.45;
 
 export const SHELL_MODEL_FIT = {
   snail: { scale: 0.8, rotation: [-1.0, Math.PI, 0], offset: [0.3, 0.2, -0.3] },
@@ -140,7 +141,7 @@ export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rea
   }
 
   function setNaked(naked) {
-    meshes.abdomen.visible = naked;
+    bones.abdomen.scale.setScalar(naked ? 1 : TUCKED_ABDOMEN_SCALE);
   }
 
   function setClawGrowth(bigScale, smallScale) {
