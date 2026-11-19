@@ -38,9 +38,9 @@ FLOW = r'''
   out.cameraOnBurrowLayer = d.camera.layers.mask === 2;
   out.buildButtonShown = !document.querySelector('#hud .build-open').classList.contains('hidden');
   out.playerY = d.player.y;
-  out.digStarted = d.startDigCell(5, 7);
-  window.__step(12, () => d.burrow.isDug(5, 7));
-  out.cellDug = d.burrow.isDug(5, 7);
+  out.digStarted = d.startDigCell(3, 5);
+  window.__step(12, () => d.burrow.isDug(3, 5));
+  out.cellDug = d.burrow.isDug(3, 5);
   out.notAdjacentRefused = d.startDigCell(0, 0) === false;
   Object.assign(d.save.inventory, { shellBits: 5, driftwood: 7, seaLettuce: 3 });
   document.querySelector('#hud .build-open').click();

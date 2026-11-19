@@ -1,6 +1,10 @@
 const SAMPLE_CAPACITY = 240;
 const TARGET_FRAME_INTERVAL_MS = 1000 / 60;
 const SLOW_FRAME_MS = 20;
+const PIXEL_RATIO_STEPS = [2, 1.75, 1.5, 1.25, 1, 0.8, 0.6];
+const SLOW_WINDOWS_BEFORE_DROP = 2;
+const CALM_WINDOWS_BEFORE_RISE = 2;
+const CALM_SLOW_SHARE = 0.03;
 const STORAGE_KEY = 'pirate-spike-pixel-ratio';
 
 function readStoredPixelRatio() {
@@ -36,6 +40,8 @@ export function createPerformanceMonitor(renderer, { fixedPixelRatio }) {
   let windowSlowFrames = 0;
   let windowIntervalSum = 0;
   let calmWindows = 0;
+  let slowWindows = 0;
+  let pendingPixelRatio = null;
   const uncapped = new URLSearchParams(location.search).has('uncapped');
 
   const overlay = document.createElement('div');
@@ -45,8 +51,15 @@ export function createPerformanceMonitor(renderer, { fixedPixelRatio }) {
   overlay.addEventListener('click', () => overlay.classList.toggle('compact'));
 
   function shouldRender(now) {
-    if (uncapped) return true;
-    return now - lastRenderTime >= TARGET_FRAME_INTERVAL_MS - 2;
+    const due = uncapped || now - lastRenderTime >= TARGET_FRAME_INTERVAL_MS - 2;
+    if (due) applyPendingResolution();
+    return due;
+  }
+
+  function stepFrom(ratio, direction) {
+    const steps = PIXEL_RATIO_STEPS.filter((step) => step >= minPixelRatio - 1e-3 && step <= maxPixelRatio + 1e-3);
+    if (direction < 0) return steps.find((step) => step < ratio - 1e-3) ?? minPixelRatio;
+    return [...steps].reverse().find((step) => step > ratio + 1e-3) ?? maxPixelRatio;
   }
 
   function adaptResolution() {
@@ -55,22 +68,33 @@ export function createPerformanceMonitor(renderer, { fixedPixelRatio }) {
     const averageInterval = windowIntervalSum / Math.max(1, windowFrames);
     let nextPixelRatio = pixelRatio;
     if (slowShare > 0.1 || averageInterval > 18.5) {
-      nextPixelRatio = Math.max(minPixelRatio, pixelRatio * 0.88);
       calmWindows = 0;
-    } else if (slowShare === 0 && averageInterval < 17.4) {
+      slowWindows++;
+      if (slowWindows >= SLOW_WINDOWS_BEFORE_DROP) {
+        nextPixelRatio = stepFrom(pixelRatio, -1);
+        slowWindows = 0;
+      }
+    } else if (slowShare <= CALM_SLOW_SHARE && averageInterval < 17.6) {
+      slowWindows = 0;
       calmWindows++;
-      if (calmWindows >= 3) {
-        nextPixelRatio = Math.min(maxPixelRatio, pixelRatio * 1.06);
+      if (calmWindows >= CALM_WINDOWS_BEFORE_RISE) {
+        nextPixelRatio = stepFrom(pixelRatio, 1);
         calmWindows = 0;
       }
     } else {
       calmWindows = 0;
+      slowWindows = 0;
     }
-    if (Math.abs(nextPixelRatio - pixelRatio) > 0.01) {
-      pixelRatio = nextPixelRatio;
-      renderer.setPixelRatio(pixelRatio);
-      storePixelRatio(pixelRatio);
-    }
+    if (Math.abs(nextPixelRatio - pixelRatio) > 0.01) pendingPixelRatio = nextPixelRatio;
+  }
+
+  function applyPendingResolution() {
+    if (pendingPixelRatio === null) return;
+    pixelRatio = pendingPixelRatio;
+    pendingPixelRatio = null;
+    renderer.setPixelRatio(pixelRatio);
+    storePixelRatio(pixelRatio);
+    lastRenderTime = 0;
   }
 
   function refreshOverlay(now) {

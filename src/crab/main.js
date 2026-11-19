@@ -28,7 +28,7 @@ import { createEnemies, ENEMY_KINDS } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
 import { random, randomSource } from './random.js';
 import { createAudio } from './audio.js';
-import { createBurrow, createEmptyBurrow, BURROW_GRID, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, cellCenter } from './burrow.js';
+import { createBurrow, loadBurrowModels, createEmptyBurrow, BURROW_GRID, BURROW_LAYER, BURROW_ORIGIN, ENTRANCE_REACH, ENTRANCE_BLOCK_RADIUS, STATION_KINDS, STATION_REACH, SHAFT_CELL, SHAFT_ACCESS_ROW_STEP, cellCenter } from './burrow.js';
 import { createThumbnails } from './thumbnails.js';
 import { createBuildPanel, createStoragePanel, createHelpersPanel, createRackPanel } from './burrowPanels.js';
 import { createRack, RACK_BATCH, RACK_DRY_SECONDS, RACK_REACH, RACK_BLOCK_RADIUS } from './rack.js';
@@ -171,10 +171,10 @@ const POSES = {
   43: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Improve', outfit: { shell: 'turban', claws: 'shellEdged', quality: 'fine' }, inventory: { pearls: 2, shellBits: 9 }, expandImprove: true },
   44: { x: 22, z: -14, distance: 14, tideShare: 0.56, heading: 1.2, naked: true, remainsAt: { x: 24, z: -12 }, remainsQuality: 'masterwork' },
   45: { x: 21, z: -24, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 } },
-  46: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[5, 7], [6, 7], [7, 5]], inBurrow: true },
-  47: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], dug: [[5, 7]], inBurrow: true, placingStation: 'storage' },
+  46: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[3, 5], [3, 4], [7, 5]], inBurrow: true },
+  47: { x: 15, z: -20, distance: 24, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop'], dug: [[3, 5]], inBurrow: true, placingStation: 'storage' },
   48: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], inBurrow: true, crafted: ['turban', 'cone'], inventory: { shellBits: 7, driftwood: 2, pearls: 1 }, stored: { seaLettuce: 6, shellBits: 12 }, storagePanel: true },
-  49: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[5, 7], [6, 7]], inBurrow: true },
+  49: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[3, 5], [3, 4]], inBurrow: true },
   50: { x: 21, z: -24, distance: 26, tideShare: 0.56, heading: 0.9, placingEntrance: true, previewEntrance: { x: 25, z: -19 } },
   51: { x: 20, z: -26, distance: 30, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], helpers: ['shellBits', 'driftwood', 'seaLettuce'], simulateSeconds: 5 },
   52: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], helpers: ['shellBits', 'seaLettuce'], inBurrow: true, simulateSeconds: 2, inventory: { seaLettuce: 6 }, helpersPanel: true },
@@ -357,9 +357,11 @@ pipeline.overlayScene.add(water.mesh);
 const navigation = createNavigation(world);
 const gear = createGear(save.gear);
 const progression = createProgression(save.progression);
+await loadBurrowModels().catch((error) => console.warn('burrow models failed, using procedural burrow', error));
 if (searchParameters.get('asset') !== 'procedural') await Promise.all([loadCrabAsset().catch((error) => console.warn('crab asset failed, using procedural crab', error)), loadCreatureAssets().catch((error) => console.warn('creature assets failed, using procedural enemies', error))]);
 const hermit = createHermit(scene, quality, gear.wornLook());
-hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
+const showHermitUnderground = () => hermit.root.traverse((child) => child.layers.enable(BURROW_LAYER));
+showHermitUnderground();
 
 function applyWornLook() {
   hermit.setShell(gear.wornLook());
@@ -367,6 +369,7 @@ function applyWornLook() {
   hermit.setClawGrowth(1 + CLAW_GROWTH_PER_MOLT * progression.moltCount('crusher'), 1 + CLAW_GROWTH_PER_MOLT * progression.moltCount('cutter'));
   hermit.setClawWeapon(gear.wornClaws().kind);
   hermit.setClawTint(CLAWS[gear.wornClaws().kind].tint || null);
+  showHermitUnderground();
   hermit.setClawTines(Boolean(CLAWS[gear.wornClaws().kind].tines));
 }
 applyWornLook();
@@ -1009,11 +1012,11 @@ function enterBurrow() {
   player.gatherTarget = null;
   player.combatTarget = null;
   setUnderground(true);
-  const arrival = burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 3.2);
+  const arrival = burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 3.2 * SHAFT_ACCESS_ROW_STEP);
   Object.assign(player, { x: arrival.x, z: arrival.z, y: BURROW_ORIGIN.y, speed: 0, heading: 0 });
   hud.fade();
   updateCamera(0, true);
-  if (!save.burrowDug) hud.setHint('Tap the floor to walk · tap sand marked ✦ to dig · walk into the light, then tap ⬆\u00a0Go outside');
+  if (!save.burrowDug) hud.setHint('Tap the floor to walk · tap the sand wall to dig · walk into the light, then tap ⬆\u00a0Go outside');
   else hud.setHint(null);
   refreshHud(null);
   persist();
@@ -1422,7 +1425,7 @@ function announceLevel() {
 }
 
 function wakeSpot() {
-  if (burrow.exists) return burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 2.2);
+  if (burrow.exists) return burrow.space.nearestWalkable(burrow.shaftCenter.x, burrow.shaftCenter.z + 2.2 * SHAFT_ACCESS_ROW_STEP);
   return navigation.nearestWalkable(HOME_SPOT.x, HOME_SPOT.z, 10) || HOME_SPOT;
 }
 
@@ -1797,6 +1800,24 @@ function resize() {
   pipeline.resize();
 }
 
+function precompileShaders() {
+  const hidden = [];
+  scene.traverse((object) => {
+    if (!object.visible) {
+      hidden.push(object);
+      object.visible = true;
+    }
+  });
+  const cameraLayers = camera.layers.mask;
+  camera.layers.enableAll();
+  try {
+    renderer.compile(scene, camera);
+  } finally {
+    camera.layers.mask = cameraLayers;
+    for (const object of hidden) object.visible = false;
+  }
+}
+
 const pixelRatioControl = {
   info: renderer.info,
   domElement: canvas,
@@ -1837,7 +1858,7 @@ function renderScene() {
   playerRing.scale.setScalar(1 + farZoomShare * 0.9);
   const dangerShare = enemies.list.some((enemy) => enemy.zone || (enemy.state === 'chase' && enemy.health > 0 && Math.hypot(enemy.x - player.x, enemy.z - player.z) < PLAYER_RING_DANGER_DISTANCE)) ? 0.8 : 0;
   playerRing.material.opacity = Math.max(farZoomShare * 0.75, dangerShare);
-  playerRing.visible = farZoomShare > 0.01 || dangerShare > 0;
+  playerRing.visible = false;
   updateGoalArrow(simulationTime, 1 + farZoomShare * 0.9);
   if (rendersFrames) pipeline.render(scene, camera, { focusDistance: camera.position.distanceTo(playerFocusPoint.set(player.x, player.y + 0.6, player.z)), time: simulationTime });
   hud.setTide(tideLabel(), (seaLevelAt(save.worldTime) - TIDE_MIDDLE) / TIDE_AMPLITUDE / 2 + 0.5);
@@ -2247,6 +2268,7 @@ if (isScreenshotMode) {
   window.__frameReady = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
 } else {
   updateCamera(0, true);
+  precompileShaders();
   renderer.setAnimationLoop((now) => {
     if (!performanceMonitor.shouldRender(now)) return;
     const deltaTime = Math.max(0, Math.min(0.05, (now - previousFrameTime) / 1000));

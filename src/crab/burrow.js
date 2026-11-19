@@ -4,6 +4,8 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { applySeaside } from './seaside.js';
 import { createNoise2D } from '../noise.js';
 import { element } from './workbench.js';
+import { parseModel } from './rig.js';
+import burrowPropBytes from './assets/burrowProps.glb';
 
 export const BURROW_ORIGIN = { x: 1000, y: 200, z: 0 };
 export const BURROW_GRID = 11;
@@ -11,7 +13,8 @@ export const BURROW_CELL = 3;
 export const BURROW_LAYER = 1;
 export const ENTRANCE_REACH = 2.6;
 export const ENTRANCE_BLOCK_RADIUS = 1.3;
-export const SHAFT_CELL = { column: 5, row: 3 };
+export const SHAFT_CELL = { column: 5, row: 7 };
+export const SHAFT_ACCESS_ROW_STEP = -1;
 export const STATION_REACH = 2.9;
 const CENTER = Math.floor(BURROW_GRID / 2);
 const WALL_HEIGHT = 1.05;
@@ -20,7 +23,48 @@ const PLAYER_CLEARANCE = 0.55;
 const STATION_BLOCK_RADIUS = 1.15;
 const PICK_RADIUS_PIXELS = 70;
 const DIG_SECONDS = 3;
-const DIGGABLE_TINT = 1.4;
+const SAND_SAMPLES_PER_CELL = 10;
+const SAND_BLUR_CELLS = 0.6;
+const SAND_WARP_CELLS = 0.28;
+const SAND_SINK = 0.15;
+const DIG_CHUNK_STEPS = 3;
+const CHUNKS_PER_STEP = 5;
+const CHUNK_SECONDS = 0.7;
+const EXIT_SAND_HEIGHT = 2.7;
+const EXIT_MODEL_SINK = 0.55;
+const EXIT_KEEP_CELLS = [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0]];
+const ENTRANCE_MODEL_WIDTH = 3.9;
+const ENTRANCE_HOLE_SHARE = 0.17;
+const ENTRANCE_HOLE_HEIGHT = 0.42;
+const EXIT_MODEL_WIDTH = 3.3;
+const MODEL_SAND_TINT = [1.32, 1.12, 0.86];
+
+const burrowModels = new Map();
+
+export async function loadBurrowModels() {
+  const { scene } = await parseModel(burrowPropBytes);
+  scene.traverse((node) => {
+    if (node.isMesh) burrowModels.set(node.name, node);
+  });
+}
+
+function buildPropModel(name, width, material) {
+  const source = burrowModels.get(name);
+  if (!source) return null;
+  material.map = source.material.map;
+  material.normalMap = source.material.normalMap;
+  material.roughnessMap = source.material.roughnessMap;
+  material.color.setRGB(...MODEL_SAND_TINT);
+  const mesh = new THREE.Mesh(source.geometry, material);
+  source.geometry.computeBoundingBox();
+  const bounds = source.geometry.boundingBox;
+  const scale = width / (bounds.max.x - bounds.min.x);
+  mesh.scale.setScalar(scale);
+  mesh.position.y = -bounds.min.y * scale - SAND_SINK;
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
 
 export const STATION_KINDS = {
   workshop: { label: 'Workshop', icon: '🔨', cost: { shellBits: 5, driftwood: 3, seaLettuce: 3 }, description: 'Craft shells and claws, improve your gear.' },
@@ -31,7 +75,6 @@ export const STATION_KINDS = {
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const WALL_COLOR = linearColor(0.86, 0.72, 0.5);
 const WALL_DARK = linearColor(0.5, 0.38, 0.25);
-const FLOOR_COLOR = linearColor(0.44, 0.33, 0.22);
 const DUG_FLOOR_COLOR = linearColor(0.82, 0.69, 0.5);
 const MOUND_COLOR = linearColor(0.86, 0.73, 0.52);
 const HOLE_COLOR = linearColor(0.08, 0.05, 0.03);
@@ -68,36 +111,13 @@ function colorize(geometry, colorAt) {
   return geometry;
 }
 
-function buildWallGeometry() {
-  const noise = createNoise2D(91);
-  const lumps = [];
-  for (const [offsetX, offsetZ, radius] of [[0, 0, 1.55]]) {
-    const lump = mergeVertices(new THREE.IcosahedronGeometry(radius, 3).deleteAttribute('normal').deleteAttribute('uv'));
-    const positions = lump.attributes.position;
-    for (let index = 0; index < positions.count; index++) {
-      const x = positions.getX(index);
-      const y = positions.getY(index);
-      const z = positions.getZ(index);
-      const bulge = 1 + 0.08 * noise(x * 0.7 + offsetX * 3, z * 0.7 + y * 0.4 + offsetZ * 3);
-      positions.setXYZ(index, x * bulge * 1.08 + offsetX, Math.max(-0.3, y * bulge * (WALL_HEIGHT / 1.55)), z * bulge * 1.08 + offsetZ);
-    }
-    lumps.push(lump);
-  }
-  for (const lump of lumps) lump.computeVertexNormals();
-  const geometry = mergeGeometries(lumps);
-  return colorize(geometry, (color, x, y, z) => {
-    const grain = 0.5 + 0.5 * noise(x * 6.3 + y * 5.1, z * 6.3 - y * 4.7);
-    color.copy(WALL_DARK).lerp(WALL_COLOR, THREE.MathUtils.smoothstep(y, -0.3, WALL_HEIGHT * 0.8) * 0.88 + grain * 0.12);
-  });
-}
-
 function buildFloorGeometry() {
   const noise = createNoise2D(57);
   const size = BURROW_GRID * BURROW_CELL + 12;
   const geometry = new THREE.PlaneGeometry(size, size, 66, 66).rotateX(-Math.PI / 2);
   return colorize(geometry, (color, x, y, z) => {
     const speckle = 0.5 + 0.5 * noise(x * 0.8, z * 0.8);
-    color.copy(FLOOR_COLOR).multiplyScalar(0.82 + 0.3 * speckle);
+    color.copy(DUG_FLOOR_COLOR).multiplyScalar(0.86 + 0.14 * speckle);
   });
 }
 
@@ -128,7 +148,6 @@ function buildMoundGeometry() {
 function buildStorageGeometry() {
   const plank = linearColor(0.55, 0.38, 0.22);
   const plankDark = linearColor(0.34, 0.22, 0.12);
-  const shell = linearColor(0.95, 0.88, 0.76);
   const parts = [];
   for (let slat = 0; slat < 4; slat++) {
     parts.push(colorize(new THREE.BoxGeometry(1.9, 0.26, 0.34).translate(0, 0.2 + slat * 0.27, -0.55 + (slat % 2) * 0.02), (color) => color.copy(slat % 2 ? plank : plankDark)));
@@ -137,11 +156,24 @@ function buildStorageGeometry() {
     parts.push(colorize(new THREE.BoxGeometry(0.34, 0.26, 1.3).translate(0.8, 0.2 + slat * 0.27, 0), (color) => color.copy(plankDark)));
   }
   parts.push(colorize(new THREE.BoxGeometry(1.5, 0.08, 1.0).translate(0, 0.08, 0), (color) => color.copy(plankDark)));
-  for (let pile = 0; pile < 5; pile++) parts.push(colorize(new THREE.SphereGeometry(0.24, 8, 6).scale(1, 0.55, 1.2).rotateY(pile).translate(-0.45 + pile * 0.22, 1.08 + (pile % 2) * 0.06, -0.1 + (pile % 3) * 0.12), (color) => color.copy(shell)));
+  parts.push(colorize(new THREE.BoxGeometry(1.95, 0.12, 1.45).translate(0, 1.16, 0), (color) => color.copy(plank)));
   return mergeGeometries(parts.map((geometry) => {
     geometry.deleteAttribute('uv');
     return geometry;
   }));
+}
+
+function softSpotTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext('2d');
+  const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.55, 'rgba(255,255,255,0.45)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(canvas);
 }
 
 function buildShaftBeam() {
@@ -174,10 +206,27 @@ function buildShaftBeam() {
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.15, 7, 24, 1, true).translate(0, 3.5, 0), material);
   beam.renderOrder = 3;
   const pool = new THREE.Mesh(
-    new THREE.CircleGeometry(1.35, 32).rotateX(-Math.PI / 2).translate(0, 0.04, 0),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(0.55, 0.85, 1.25), transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }),
+    new THREE.CircleGeometry(1.9, 32).rotateX(-Math.PI / 2).translate(0, 0.04, 0),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(1.15, 0.95, 0.68), map: softSpotTexture(), transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }),
   );
   return { beam, pool };
+}
+
+const BLUR_TAPS = (() => {
+  const taps = [];
+  for (let stepX = -2; stepX <= 2; stepX++) for (let stepZ = -2; stepZ <= 2; stepZ++) {
+    const distance = Math.hypot(stepX, stepZ) / 2;
+    if (distance <= 1) taps.push([stepX / 2, stepZ / 2, 1 - distance * 0.6]);
+  }
+  return taps;
+})();
+
+function buildSandSurface() {
+  const cells = BURROW_GRID + BORDER_RING * 2;
+  const size = cells * BURROW_CELL;
+  const geometry = new THREE.PlaneGeometry(size, size, cells * SAND_SAMPLES_PER_CELL, cells * SAND_SAMPLES_PER_CELL).rotateX(-Math.PI / 2).deleteAttribute('uv');
+  geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+  return geometry;
 }
 
 function setLayers(object, layers) {
@@ -190,13 +239,26 @@ function setLayers(object, layers) {
 export function createBurrow(scene, world, quality, labelParent, saved) {
   const state = saved ? structuredClone(saved) : createEmptyBurrow();
   const dugCells = new Set(state.dug);
+  dugCells.add(cellIndex(SHAFT_CELL.column, SHAFT_CELL.row));
+  dugCells.add(cellIndex(SHAFT_CELL.column, SHAFT_CELL.row + SHAFT_ACCESS_ROW_STEP));
+  state.dug = [...dugCells];
 
   const entranceGroup = new THREE.Group();
-  const entranceMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, side: THREE.DoubleSide }), { surface: 'sand', chromaticCaustics: quality.chromaticCaustics });
-  const mound = new THREE.Mesh(buildMoundGeometry(), entranceMaterial);
-  mound.receiveShadow = true;
-  mound.castShadow = true;
-  entranceGroup.add(mound);
+  const entranceModel = buildPropModel('burrow_entrance', ENTRANCE_MODEL_WIDTH, applySeaside(new THREE.MeshStandardMaterial({ roughness: 0.95 }), { chromaticCaustics: quality.chromaticCaustics }));
+  if (entranceModel) {
+    entranceGroup.add(entranceModel);
+    const holeShade = new THREE.Mesh(new THREE.CircleGeometry(ENTRANCE_MODEL_WIDTH * ENTRANCE_HOLE_SHARE, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x050302, map: softSpotTexture(), transparent: true, depthWrite: false }));
+    holeShade.position.y = ENTRANCE_HOLE_HEIGHT;
+    holeShade.renderOrder = 2;
+    entranceGroup.add(holeShade);
+  }
+  else {
+    const entranceMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, side: THREE.DoubleSide }), { surface: 'sand', chromaticCaustics: quality.chromaticCaustics });
+    const mound = new THREE.Mesh(buildMoundGeometry(), entranceMaterial);
+    mound.receiveShadow = true;
+    mound.castShadow = true;
+    entranceGroup.add(mound);
+  }
   entranceGroup.visible = false;
   scene.add(entranceGroup);
   const entranceLabel = element('div', 'world-label surface-label entrance-label hidden', labelParent, '🕳️ Burrow');
@@ -207,31 +269,33 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   const floor = new THREE.Mesh(buildFloorGeometry(), floorMaterial);
   floor.receiveShadow = true;
   interior.add(floor);
-  const wallMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93 });
-  const wallSlots = (BURROW_GRID + BORDER_RING * 2) * (BURROW_GRID + BORDER_RING * 2);
-  const walls = new THREE.InstancedMesh(buildWallGeometry(), wallMaterial, wallSlots);
-  walls.castShadow = true;
-  walls.receiveShadow = true;
-  interior.add(walls);
-  const dugFloor = new THREE.InstancedMesh(
-    colorize(new THREE.PlaneGeometry(BURROW_CELL + 0.6, BURROW_CELL + 0.6, 10, 10).rotateX(-Math.PI / 2).translate(0, 0.03, 0).deleteAttribute('uv'), (color, x, y, z) => {
-      color.copy(DUG_FLOOR_COLOR).multiplyScalar(0.95 + 0.04 * Math.sin(x * 9.1 + z * 6.7) * Math.cos(z * 8.3 - x * 3));
-    }),
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }),
-    BURROW_GRID * BURROW_GRID,
-  );
-  dugFloor.receiveShadow = true;
-  interior.add(dugFloor);
-  const digMarkMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.2, 0.8), transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending });
-  const digMarks = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.3, 0).scale(0.75, 1.6, 0.75), digMarkMaterial, BURROW_GRID * BURROW_GRID);
-  digMarks.count = 0;
-  digMarks.renderOrder = 5;
-  interior.add(digMarks);
+  const sandMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94 });
+  const sandGeometry = buildSandSurface();
+  const sand = new THREE.Mesh(sandGeometry, sandMaterial);
+  sand.castShadow = true;
+  sand.receiveShadow = true;
+  interior.add(sand);
+  const chunkMaterial = new THREE.MeshStandardMaterial({ color: WALL_COLOR, roughness: 0.95, transparent: true });
+  const chunkGeometry = new THREE.IcosahedronGeometry(0.3, 1);
+  const chunks = new THREE.InstancedMesh(chunkGeometry, chunkMaterial, DIG_CHUNK_STEPS * CHUNKS_PER_STEP * 2);
+  chunks.count = 0;
+  chunks.castShadow = true;
+  interior.add(chunks);
+  const flyingChunks = [];
   const shaft = buildShaftBeam();
   const shaftCenter = cellCenter(SHAFT_CELL.column, SHAFT_CELL.row);
   shaft.beam.position.set(shaftCenter.x - BURROW_ORIGIN.x, 0, shaftCenter.z - BURROW_ORIGIN.z);
   shaft.pool.position.copy(shaft.beam.position);
   interior.add(shaft.beam, shaft.pool);
+  const exitModel = buildPropModel('burrow_exit', EXIT_MODEL_WIDTH, new THREE.MeshStandardMaterial({ roughness: 0.95, side: THREE.DoubleSide }));
+  if (exitModel) {
+    exitModel.position.x = shaftCenter.x - BURROW_ORIGIN.x;
+    exitModel.position.z = shaftCenter.z - BURROW_ORIGIN.z + BURROW_CELL * 0.35;
+    exitModel.rotation.y = Math.PI;
+    exitModel.position.y -= EXIT_MODEL_SINK;
+    interior.add(exitModel);
+    shaft.beam.visible = false;
+  }
   const storageMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
   const storageGeometry = buildStorageGeometry();
   const highlightMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 2.2, 0.8), transparent: true, opacity: 0.5, depthWrite: false });
@@ -245,7 +309,10 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
   const digging = { cell: -1, progress: 0 };
+  let lastUpdateTime = null;
+  const sandNoise = createNoise2D(91);
 
+  const exitKeep = new Set(EXIT_KEEP_CELLS.map(([column, row]) => cellIndex(SHAFT_CELL.column + column, SHAFT_CELL.row + row)));
   const isDug = (column, row) => column >= 0 && row >= 0 && column < BURROW_GRID && row < BURROW_GRID && dugCells.has(cellIndex(column, row));
   const stationAt = (column, row) => state.stations.find((station) => station.column === column && station.row === row) || null;
 
@@ -255,56 +322,96 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     return best;
   }
 
+  function solidity(column, row) {
+    if (isDug(column, row)) return 0;
+    if (cellIndex(column, row) === digging.cell && column >= 0 && row >= 0 && column < BURROW_GRID && row < BURROW_GRID) return 1 - Math.floor(digging.progress * DIG_CHUNK_STEPS) / DIG_CHUNK_STEPS;
+    return 1;
+  }
+
+  function smoothSolidity(column, row) {
+    const left = Math.floor(column);
+    const top = Math.floor(row);
+    const across = column - left;
+    const down = row - top;
+    const upper = solidity(left, top) * (1 - across) + solidity(left + 1, top) * across;
+    const lower = solidity(left, top + 1) * (1 - across) + solidity(left + 1, top + 1) * across;
+    return upper * (1 - down) + lower * down;
+  }
+
+  function sandHeightAt(x, z) {
+    const reach = SAND_BLUR_CELLS * BURROW_CELL;
+    const warp = SAND_WARP_CELLS * BURROW_CELL;
+    x += warp * sandNoise(x * 0.31 + 17, z * 0.31);
+    z += warp * sandNoise(x * 0.31, z * 0.31 - 23);
+    let total = 0;
+    let weight = 0;
+    for (const [offsetX, offsetZ, share] of BLUR_TAPS) {
+      const sampleX = x + offsetX * reach;
+      const sampleZ = z + offsetZ * reach;
+      total += smoothSolidity(sampleX / BURROW_CELL + CENTER, sampleZ / BURROW_CELL + CENTER) * share;
+      weight += share;
+    }
+    const filled = total / weight;
+    const exitDistance = Math.hypot(x - (shaftCenter.x - BURROW_ORIGIN.x), z - (shaftCenter.z - BURROW_ORIGIN.z) - BURROW_CELL * 0.6);
+    const exitRise = (EXIT_SAND_HEIGHT - WALL_HEIGHT) * (1 - THREE.MathUtils.smoothstep(exitDistance, BURROW_CELL * 0.9, BURROW_CELL * 2.3));
+    return THREE.MathUtils.smoothstep(filled, 0.38, 0.98) * (WALL_HEIGHT + exitRise) * (1 + 0.1 * sandNoise(x * 0.45, z * 0.45));
+  }
+
   function rebuildWalls() {
+    const positions = sandGeometry.attributes.position;
+    const colors = sandGeometry.attributes.color;
+    const color = new THREE.Color();
+    for (let index = 0; index < positions.count; index++) {
+      const x = positions.getX(index);
+      const z = positions.getZ(index);
+      const height = sandHeightAt(x, z);
+      positions.setY(index, height - SAND_SINK);
+      const { column, row } = cellOf(x + BURROW_ORIGIN.x, z + BURROW_ORIGIN.z);
+      const depth = Math.min(4, openDistance(column, row));
+      const grain = 0.5 + 0.5 * sandNoise(x * 2.3, z * 2.3);
+      color.copy(WALL_DARK).lerp(WALL_COLOR, THREE.MathUtils.clamp(height / WALL_HEIGHT, 0, 1) * 0.85 + grain * 0.15);
+      color.multiplyScalar(Math.max(0.45, 1 - 0.13 * Math.max(0, depth - 1)));
+      colors.setXYZ(index, color.r, color.g, color.b);
+    }
+    positions.needsUpdate = true;
+    colors.needsUpdate = true;
+    sandGeometry.computeVertexNormals();
+    sandGeometry.computeBoundingSphere();
+  }
+
+  function burstChunks(column, row) {
+    const center = cellCenter(column, row);
+    for (let piece = 0; piece < CHUNKS_PER_STEP; piece++) {
+      const angle = Math.random() * Math.PI * 2;
+      flyingChunks.push({
+        x: center.x - BURROW_ORIGIN.x + Math.cos(angle) * 0.6, y: WALL_HEIGHT * 0.7, z: center.z - BURROW_ORIGIN.z + Math.sin(angle) * 0.6,
+        speedX: Math.cos(angle) * 1.6, speedY: 2.2 + Math.random(), speedZ: Math.sin(angle) * 1.6, age: 0, size: 0.6 + Math.random() * 0.6, spin: Math.random() * 6,
+      });
+    }
+    if (flyingChunks.length > chunks.instanceMatrix.count) flyingChunks.splice(0, flyingChunks.length - chunks.instanceMatrix.count);
+  }
+
+  function updateChunks(deltaTime) {
     let slot = 0;
-    const lumpColor = new THREE.Color();
-    for (let row = -BORDER_RING; row < BURROW_GRID + BORDER_RING; row++) {
-      for (let column = -BORDER_RING; column < BURROW_GRID + BORDER_RING; column++) {
-        if (isDug(column, row)) continue;
-        const center = cellCenter(column, row);
-        const shrink = cellIndex(column, row) === digging.cell && column >= 0 && row >= 0 && column < BURROW_GRID && row < BURROW_GRID ? 1 - 0.75 * digging.progress : 1;
-        transform.position.set(center.x - BURROW_ORIGIN.x, 0, center.z - BURROW_ORIGIN.z);
-        const hash = Math.abs(Math.sin(column * 12.9898 + row * 78.233) * 43758.5453) % 1;
-        const hashB = Math.abs(Math.sin(column * 39.346 + row * 11.135) * 24634.6345) % 1;
-        const widthVariation = 1.12 + 0.2 * hash;
-        transform.rotation.set(0, hashB * Math.PI * 2, 0);
-        transform.position.x += (hashB - 0.5) * 0.5;
-        transform.position.z += (hash - 0.5) * 0.5;
-        transform.scale.set(shrink * widthVariation, shrink * (0.75 + 0.55 * hashB), shrink * widthVariation * (0.9 + 0.2 * hash));
-        transform.updateMatrix();
-        walls.setMatrixAt(slot, transform.matrix);
-        const distanceToOpen = openDistance(column, row);
-        walls.setColorAt(slot++, lumpColor.setScalar(canDig(column, row) ? DIGGABLE_TINT : distanceToOpen <= 1.5 ? 0.7 : Math.max(0.32, 0.7 - 0.16 * (distanceToOpen - 1.5))));
+    for (let index = flyingChunks.length - 1; index >= 0; index--) {
+      const chunk = flyingChunks[index];
+      chunk.age += deltaTime;
+      if (chunk.age > CHUNK_SECONDS) {
+        flyingChunks.splice(index, 1);
+        continue;
       }
-    }
-    walls.count = slot;
-    let markSlot = 0;
-    for (let row = 0; row < BURROW_GRID; row++) {
-      for (let column = 0; column < BURROW_GRID; column++) {
-        if (!canDig(column, row) || cellIndex(column, row) === digging.cell) continue;
-        const center = cellCenter(column, row);
-        transform.position.set(center.x - BURROW_ORIGIN.x, WALL_HEIGHT + 0.75, center.z - BURROW_ORIGIN.z);
-        transform.rotation.set(0, 0.6, 0);
-        transform.scale.set(1, 1, 1);
-        transform.updateMatrix();
-        digMarks.setMatrixAt(markSlot++, transform.matrix);
-      }
-    }
-    digMarks.count = markSlot;
-    digMarks.instanceMatrix.needsUpdate = true;
-    let floorSlot = 0;
-    for (const index of dugCells) {
-      const center = cellCenter(cellColumn(index), cellRow(index));
-      transform.position.set(center.x - BURROW_ORIGIN.x, 0, center.z - BURROW_ORIGIN.z);
-      transform.rotation.set(0, 0, 0);
-      transform.scale.set(1, 1, 1);
+      chunk.speedY -= 9 * deltaTime;
+      chunk.x += chunk.speedX * deltaTime;
+      chunk.y = Math.max(0.1, chunk.y + chunk.speedY * deltaTime);
+      chunk.z += chunk.speedZ * deltaTime;
+      transform.position.set(chunk.x, chunk.y, chunk.z);
+      transform.rotation.set(chunk.spin * chunk.age, chunk.spin, 0);
+      transform.scale.setScalar(chunk.size * (1 - THREE.MathUtils.smoothstep(chunk.age, CHUNK_SECONDS * 0.6, CHUNK_SECONDS)));
       transform.updateMatrix();
-      dugFloor.setMatrixAt(floorSlot++, transform.matrix);
+      chunks.setMatrixAt(slot++, transform.matrix);
     }
-    dugFloor.count = floorSlot;
-    dugFloor.instanceMatrix.needsUpdate = true;
-    walls.instanceMatrix.needsUpdate = true;
-    if (walls.instanceColor) walls.instanceColor.needsUpdate = true;
+    chunks.count = slot;
+    chunks.instanceMatrix.needsUpdate = true;
   }
 
   function stationSpot(station) {
@@ -431,17 +538,22 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   };
 
   function canDig(column, row) {
-    if (column < 0 || row < 0 || column >= BURROW_GRID || row >= BURROW_GRID || isDug(column, row)) return false;
+    if (column < 0 || row < 0 || column >= BURROW_GRID || row >= BURROW_GRID || isDug(column, row) || exitKeep.has(cellIndex(column, row))) return false;
     return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([stepColumn, stepRow]) => isDug(column + stepColumn, row + stepRow));
   }
 
   function setDigProgress(index, progress) {
+    const step = Math.floor(progress * DIG_CHUNK_STEPS);
+    const previousStep = digging.cell === index ? Math.floor(digging.progress * DIG_CHUNK_STEPS) : 0;
     digging.cell = index;
     digging.progress = progress;
+    if (step === previousStep && progress > 0) return;
+    if (step > previousStep) burstChunks(cellColumn(index), cellRow(index));
     rebuildWalls();
   }
 
   function finishDig(column, row) {
+    burstChunks(column, row);
     dugCells.add(cellIndex(column, row));
     state.dug = [...dugCells];
     digging.cell = -1;
@@ -499,7 +611,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   }
 
   function freeCells() {
-    return [...dugCells].map((index) => ({ column: cellColumn(index), row: cellRow(index) })).filter(({ column, row }) => !stationAt(column, row) && !(column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row + 1)));
+    return [...dugCells].map((index) => ({ column: cellColumn(index), row: cellRow(index) })).filter(({ column, row }) => !stationAt(column, row) && !(column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row + SHAFT_ACCESS_ROW_STEP)));
   }
 
   function showPlacementCells(visible) {
@@ -547,9 +659,8 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
       placeLabel(station.label, spot.x, BURROW_ORIGIN.y + 2.4, spot.z, camera, underground);
     }
     highlightMaterial.opacity = 0.32 + 0.16 * Math.sin(time * 4);
-    digMarkMaterial.opacity = 0.55 + 0.4 * Math.sin(time * 3.2);
-    digMarks.rotation.y = 0;
-    digMarks.position.y = 0.12 * Math.sin(time * 2.2);
+    updateChunks(Math.min(0.1, Math.max(0, time - (lastUpdateTime ?? time))));
+    lastUpdateTime = time;
     shaft.pool.material.opacity = 0.3 + 0.06 * Math.sin(time * 1.3);
   }
 

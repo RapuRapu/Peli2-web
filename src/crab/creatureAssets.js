@@ -121,6 +121,15 @@ export function createCreature(kind, quality) {
     }
   }
 
+  function walkOnFourLegs(stride, motion, swing, lift, fold = 0) {
+    for (const leg of limbs.legs) {
+      const cycle = stride + leg.phase;
+      leg.joints[0].pose(0, 0, -Math.sin(cycle) * swing * motion + fold * 0.3);
+      leg.joints[1].pose(0, 0, Math.max(0, Math.cos(cycle)) * lift * motion + fold);
+      leg.joints[2].pose(0, 0, -Math.max(0, Math.cos(cycle)) * lift * 0.5 * motion);
+    }
+  }
+
   function poseShoreCrab({ stride, motion, raised, snaps, recoil, fall }) {
     walk(stride, motion, 0.6, 0.35, fall * 0.9 + recoil * 0.4);
     for (const arm of arms) {
@@ -166,18 +175,18 @@ export function createCreature(kind, quality) {
   }
 
   function poseRat({ stride, motion, lunge, fall, time }) {
-    walk(stride, motion, 0.7, 0.55, fall * 0.8);
+    walkOnFourLegs(stride, motion, 0.55, 0.7, fall * 0.8);
     swayTail(time, 0.35 + motion * 0.2);
     if (head) head.pose(0, 0.08 * Math.sin(time * 4), -lunge * 0.4 + 0.08 * Math.sin(time * 6));
   }
 
   function poseCat({ stride, motion, crouch, leap, lunge, windup = 0, fall, time }) {
-    walk(stride, motion, 0.6, 0.5, fall * 0.8 + crouch * 2.5 + leap * 0.8);
+    walkOnFourLegs(stride, motion, 0.5, 0.6, fall * 0.8 + crouch * 0.9 + leap * 0.5);
     const swipePaw = limbs.legs[0];
     if (swipePaw && (windup > 0 || lunge > 0)) {
-      swipePaw.joints[0].pose(windup * 1.5 + lunge * 0.9, 0);
-      swipePaw.joints[1].pose(-windup * 0.9 - lunge * 0.3);
-      swipePaw.joints[2].pose(-windup * 0.5);
+      swipePaw.joints[0].pose(0, 0, -(windup * 1.4 + lunge * 0.8));
+      swipePaw.joints[1].pose(0, 0, windup * 1.1 - lunge * 0.4);
+      swipePaw.joints[2].pose(0, 0, -windup * 0.4);
     }
     swayTail(time * 0.6, 0.25, 0.3 + crouch * 0.4);
     if (head) head.pose(0, 0.1 * Math.sin(time * 0.7), -lunge * 0.35 + crouch * 0.4);
