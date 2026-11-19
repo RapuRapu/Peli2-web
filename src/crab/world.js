@@ -428,22 +428,37 @@ const CAMP_BLOCKERS = {
   rope: (prop) => [{ x: prop.x, z: prop.z, radius: prop.radius + 0.5 }],
 };
 
-export const HOLD = { x: 88, z: -68, halfLength: 28, halfWidth: 19, entranceAngle: Math.PI * 0.6, entranceHalfAngle: 0.22 };
-export const COOK_SPOT = { x: 106, z: -64, territoryRadius: 20 };
+export const HOLD = { x: 74, z: -66, halfLength: 42, halfWidth: 28, entranceAngle: Math.PI * 0.6, entranceHalfAngle: 0.22 };
+export const COOK_SPOT = { x: 101, z: -60, territoryRadius: 20 };
 
 export const HOLD_PROPS = [
-  { kind: 'crate', x: 70, z: -76, size: 9, heading: 0.4 },
-  { kind: 'crate', x: 79, z: -81, size: 7, heading: -0.2 },
-  { kind: 'sack', x: 68, z: -62, radius: 3.6, heading: 0.3 },
-  { kind: 'sack', x: 74, z: -56, radius: 3.2, heading: 1.2 },
-  { kind: 'sack', x: 92, z: -80, radius: 3.4, heading: 2.0 },
-  { kind: 'barrel', x: 100, z: -81, radius: 4.2, height: 12 },
-  { kind: 'lantern', x: 86, z: -68, height: 16 },
-  { kind: 'hearth', x: 110, z: -74, radius: 5 },
-  { kind: 'choppingBlock', x: 98, z: -55, radius: 3.4 },
-  { kind: 'fishBones', x: 78, z: -66, length: 8, heading: 0.8 },
-  { kind: 'onions', x: 96, z: -72, radius: 2.2 },
+  { kind: 'crate', x: 47, z: -78, size: 9, heading: 0.4 },
+  { kind: 'crate', x: 60, z: -86, size: 7, heading: -0.2 },
+  { kind: 'sack', x: 44, z: -57, radius: 3.6, heading: 0.3 },
+  { kind: 'sack', x: 53, z: -48, radius: 3.2, heading: 1.2 },
+  { kind: 'sack', x: 80, z: -84, radius: 3.4, heading: 2.0 },
+  { kind: 'barrel', x: 92, z: -86, radius: 4.2, height: 12 },
+  { kind: 'lantern', x: 71, z: -66, height: 16 },
+  { kind: 'hearth', x: 107, z: -75, radius: 5 },
+  { kind: 'choppingBlock', x: 89, z: -46, radius: 3.4 },
+  { kind: 'fishBones', x: 59, z: -63, length: 8, heading: 0.8 },
+  { kind: 'onions', x: 66, z: -80, radius: 2.2 },
 ];
+
+const COOK_STATION_GAP = { hearth: 8, choppingBlock: 8.5, barrel: 11 };
+const COOK_ACTIVITY = { hearth: 'grumble', choppingBlock: 'chop', barrel: 'chop' };
+
+export const COOK_STATIONS = HOLD_PROPS.filter((prop) => COOK_ACTIVITY[prop.kind]).map((prop) => {
+  const towardCenterX = HOLD.x - prop.x;
+  const towardCenterZ = HOLD.z - prop.z;
+  const length = Math.hypot(towardCenterX, towardCenterZ);
+  const distance = prop.radius + COOK_STATION_GAP[prop.kind];
+  const x = prop.x + (towardCenterX / length) * distance;
+  const z = prop.z + (towardCenterZ / length) * distance;
+  return { x, z, heading: Math.atan2(prop.x - x, prop.z - z), activity: COOK_ACTIVITY[prop.kind] };
+});
+
+export const HOLD_EXIT = { x: HOLD.x + Math.cos(HOLD.entranceAngle) * (HOLD.halfLength + 6), z: HOLD.z + Math.sin(HOLD.entranceAngle) * (HOLD.halfWidth + 6) };
 
 const HOLD_WALL_STEP = 0.07;
 
@@ -588,5 +603,5 @@ const awayFromCook = (x, z, margin) => Math.hypot(x - COOK_SPOT.x, z - COOK_SPOT
 export const HOLD_ENEMIES = [
   { kind: 'cockroach', count: 6, packSize: [3, 3], accept: (world, x, z) => isInHold(x, z) && awayFromCook(x, z, -8) },
   { kind: 'rat', count: 2, packSize: [2, 2], accept: (world, x, z) => isInHold(x, z) && awayFromCook(x, z, -6) },
-  { kind: 'cook', count: 1, spotsFrom: () => [COOK_SPOT], accept: (world, x, z) => Math.hypot(x - COOK_SPOT.x, z - COOK_SPOT.z) < 1, territory: (x, z) => !awayFromCook(x, z, 0) && isInHold(x, z) },
+  { kind: 'cook', count: 1, spotsFrom: () => [COOK_SPOT], accept: (world, x, z) => Math.hypot(x - COOK_SPOT.x, z - COOK_SPOT.z) < 1, territory: (x, z) => isInHold(x, z), stations: COOK_STATIONS, exit: HOLD_EXIT },
 ];

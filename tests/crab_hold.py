@@ -21,10 +21,10 @@ window.__hold = (() => {
     while (d.remains.list.length) d.remains.remove(d.remains.list[0]);
     const enemies = [];
     if (kind === 'cook') {
-      place(106 - 6, -64 - 1);
-      enemies.push(d.enemies.spawn('cook', 106, -64));
+      place(101 - 6, -60 - 1);
+      enemies.push(d.enemies.spawn('cook', 101, -60));
     } else {
-      const spot = place(82, -66);
+      const spot = place(66, -63);
       for (let index = 0; index < count; index++) {
         const enemySpot = d.navigation.nearestWalkable(spot.x - 3 - index * 1.5, spot.z + 1.5 - index * 3, 10);
         enemies.push(d.enemies.spawn(kind, enemySpot.x, enemySpot.z, index));
@@ -79,15 +79,16 @@ with sync_playwright() as playwright:
       out.counts = { fishBone: nodes.filter((n) => n.type === 'fishBone').length, wax: nodes.filter((n) => n.type === 'wax').length };
       const home = { x: d.player.x, z: d.player.z };
       out.reachable = nodes.filter((n) => { const spot = d.navigation.nearestWalkable(n.x, n.z, 4); return spot && d.navigation.findPath(home.x, home.z, spot.x, spot.z).length > 0; }).length;
-      out.cookReachable = d.navigation.findPath(home.x, home.z, 100, -64).length > 0;
-      out.insideReachable = d.navigation.findPath(home.x, home.z, 88, -68).length > 0;
+      out.cookReachable = d.navigation.findPath(home.x, home.z, 95, -60).length > 0;
+      out.insideReachable = d.navigation.findPath(home.x, home.z, 74, -64).length > 0;
+      out.stationsWalkable = d.enemies.list.find((e) => e.kind === 'cook').entry.stations.every((s) => w.isWalkable(s.x, s.z) && w.isInHold(s.x, s.z));
       out.beachItemsInHold = d.resources.nodes.filter((n) => !['fishBone', 'wax'].includes(n.type) && !n.gathered && w.isInHold(n.x, n.z)).length;
       out.holdEnemies = { cockroaches: d.enemies.list.filter((e) => e.kind === 'cockroach').length, cooks: d.enemies.list.filter((e) => e.kind === 'cook').length, ratsInHold: d.enemies.list.filter((e) => e.kind === 'rat' && w.isInHold(e.x, e.z)).length };
       out.propsBlock = w.holdProps.filter((p) => p.kind !== 'fishBones').every((p) => !w.isWalkable(p.x, p.z));
       return out;
     }""")
     print('area', json.dumps(area), flush=True)
-    checks['holdArea'] = area['counts'] == {'fishBone': 10, 'wax': 8} and area['reachable'] == 18 and area['cookReachable'] and area['insideReachable'] and area['beachItemsInHold'] == 0 and area['holdEnemies']['cockroaches'] == 6 and area['holdEnemies']['cooks'] == 1 and area['propsBlock']
+    checks['holdArea'] = area['counts'] == {'fishBone': 10, 'wax': 8} and area['reachable'] == 18 and area['cookReachable'] and area['stationsWalkable'] and area['insideReachable'] and area['beachItemsInHold'] == 0 and area['holdEnemies']['cockroaches'] == 6 and area['holdEnemies']['cooks'] == 1 and area['propsBlock']
 
     goal = page.evaluate(r"""async () => {
       const d = window.__debug; const out = {};
@@ -127,23 +128,45 @@ with sync_playwright() as playwright:
       const d = window.__debug; const c = window.__hold; const out = {};
       const [cook] = c.setup('cook', 1, 10, 'coral', 9, 'coralTipped', 0, false);
       cook.health = 1e5;
-      c.place(70, -66); c.step(2);
+      const start = { x: cook.x, z: cook.z };
+      c.place(40, -30);
+      const activities = new Set();
+      let farthest = 0;
+      c.step(40, () => { if (cook.activity) activities.add(cook.activity); farthest = Math.max(farthest, Math.hypot(cook.x - start.x, cook.z - start.z)); return false; });
       out.cookIgnoresOutside = cook.state === 'idle';
-      c.place(106 - 12, -64); c.step(3, () => cook.zone);
+      out.cookPatrols = farthest > 8 && activities.size >= 2 && d.world.isInHold(cook.x, cook.z);
+      c.place(cook.x - 22, cook.z); const gapBefore = Math.hypot(d.player.x - cook.x, d.player.z - cook.z);
+      c.step(3);
+      out.cookWalksToPlayer = cook.state === 'chase' && Math.hypot(d.player.x - cook.x, d.player.z - cook.z) < gapBefore - 6;
+      c.step(4, () => cook.zone);
       out.chopTelegraphed = !!(cook.zone && cook.zone.shape === 'line');
       const zone = cook.zone; const healthBefore = d.progression.state.health;
       d.player.combatTarget = null;
-      c.place(d.player.x + Math.cos(zone.angle) * 5, d.player.z - Math.sin(zone.angle) * 5);
-      c.step(zone.timer + 0.3);
+      if (zone) {
+        c.place(d.player.x + Math.cos(zone.angle) * 5, d.player.z - Math.sin(zone.angle) * 5);
+        c.step(zone.timer + 0.3);
+      }
       out.chopDodged = d.progression.state.health >= healthBefore;
-      out.cookStaysPut = Math.hypot(cook.x - 106, cook.z + 64) < 0.5;
-      c.place(106 - 5, -64); d.engage(cook);
+      c.place(cook.x - 5, cook.z); d.engage(cook);
       c.step(15, () => cook.zone && cook.zone.stomp);
       out.stompAfterTwoChops = !!(cook.zone && cook.zone.stomp) && cook.strikesMade === 2;
+      c.place(40, -30); d.player.combatTarget = null;
+      c.step(20, () => cook.state === 'idle');
+      out.cookStaysInHold = cook.state !== 'chase' && d.world.isInHold(cook.x, cook.z);
+      const apronBefore = d.save.inventory.apronScrap || 0;
+      c.place(cook.x - 5, cook.z);
+      d.enemies.damage(cook, 1e9, d.simulationTime(), d.player);
+      out.fleeStarts = cook.state === 'dying' && (d.save.inventory.apronScrap || 0) > apronBefore;
+      const fleeFrom = { x: cook.x, z: cook.z };
+      const fleeSeconds = c.step(15, () => cook.state === 'dead');
+      out.fleeSeconds = +fleeSeconds.toFixed(1);
+      out.cookFled = cook.state === 'dead' && fleeSeconds < 10 && d.bossRestRemainingMs('cook') > 0;
+      out.fleeDistance = +Math.hypot(cook.x - fleeFrom.x, cook.z - fleeFrom.z).toFixed(1);
       return out;
     }""")
     print('behaviour', json.dumps(behaviour), flush=True)
-    checks['cookAttacks'] = behaviour['cookIgnoresOutside'] and behaviour['chopTelegraphed'] and behaviour['chopDodged'] and behaviour['cookStaysPut'] and behaviour['stompAfterTwoChops']
+    checks['cookAttacks'] = behaviour['cookIgnoresOutside'] and behaviour['chopTelegraphed'] and behaviour['chopDodged'] and behaviour['cookWalksToPlayer'] and behaviour['stompAfterTwoChops']
+    checks['cookPatrolsAndFlees'] = behaviour['cookPatrols'] and behaviour['cookStaysInHold'] and behaviour['fleeStarts'] and behaviour['cookFled'] and behaviour['fleeDistance'] > 15
 
     performance = {'start': frame_numbers(context, 1), 'holdOverview': frame_numbers(context, 84), 'inHold': frame_numbers(context, 85)}
     print('performance', json.dumps(performance), flush=True)

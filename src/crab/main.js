@@ -73,7 +73,15 @@ const CAMP_FALLBACK_SPOT = { x: -74, z: -36 };
 const HOLD_FALLBACK_SPOT = { x: 77, z: -50 };
 const REEF_VIEW_THRESHOLD_Z = 42;
 const CAMP_VIEW_MARGIN = 30;
-const HOLD_VIEW_MARGIN = 15;
+const HOLD_VIEW_MARGIN = 5;
+const HOLD_VIEW_HEIGHT = 48;
+const HOLD_RIM_SAMPLES = 48;
+const HOLD_RIM_POINTS = Array.from({ length: HOLD_RIM_SAMPLES * 2 }, (_, index) => {
+  const angle = ((index % HOLD_RIM_SAMPLES) / HOLD_RIM_SAMPLES) * Math.PI * 2;
+  return new THREE.Vector3(HOLD.x + Math.cos(angle) * (HOLD.halfLength + HOLD_VIEW_MARGIN), index < HOLD_RIM_SAMPLES ? 0 : HOLD_VIEW_HEIGHT, HOLD.z + Math.sin(angle) * (HOLD.halfWidth + HOLD_VIEW_MARGIN));
+});
+const viewFrustum = new THREE.Frustum();
+const frustumMatrix = new THREE.Matrix4();
 const REEF_VIEW_REACH_PER_DISTANCE = 1.6;
 const STARTER_SPOTS = { shellBits: { x: 11, z: -26.5 }, driftwood: { x: 17.5, z: -23 }, seaLettuce: { x: 12, z: -14 }, coral: { x: 14, z: 57 }, scrap: { x: -74, z: -34 }, fishBone: { x: 79, z: -55 } };
 const FAR_ZOOM_RING_DISTANCES = [46, 66];
@@ -195,11 +203,11 @@ const POSES = {
   81: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'whelk', claws: 'coralTipped', quality: 'fine' } },
   82: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, panel: 'Craft', inventory: { shellBits: 14, coral: 12, seaGlass: 9, scrap: 10, cloth: 6, driftwood: 3 }, scrollPanel: true },
   83: { x: -20, z: -30, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
-  84: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 80, z: -46, distance: 60, tideShare: 0.56, heading: 3.4 },
-  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 84, z: -64, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
-  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 80, z: -68, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
-  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 94, z: -66, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
-  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 94, z: -66, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  84: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 65, z: -36, distance: 80, tideShare: 0.56, heading: 3.4 },
+  85: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 80, z: -63, distance: 30, tideShare: 0.56, heading: 2.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
+  86: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 62, z: -69, distance: 24, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' }, enemy: { kind: 'cockroach', offsetX: 3, offsetZ: -2 }, fightSeconds: 1.1 },
+  87: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 83, z: -63, distance: 34, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
+  88: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 83, z: -63, distance: 40, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'cook', offsetX: 12, offsetZ: 2 }, fightSeconds: 0.9 },
   89: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'fine' } },
   90: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, outfit: { shell: 'whelk', claws: 'coralTipped', quality: 'fine' } },
   91: { x: 40, z: -40, distance: 30, tideShare: 0.56, workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'] },
@@ -218,6 +226,7 @@ const POSES = {
   105: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'coral' },
   106: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'whelk' },
   107: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 4.9, shell: 'coral' },
+  108: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 70, z: -60, distance: 70, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' } },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
   68: { x: 10, z: 74, distance: 18, tideShare: 0.75, heading: 0.4, level: 8, enemy: { kind: 'mantisShrimp', offsetX: 2, offsetZ: 1.6 }, fightSeconds: 1.1 },
   69: { x: -60, z: 91, distance: 28, tideShare: 0.75, heading: 0.2, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' }, enemy: { kind: 'giantLobster', offsetX: -2, offsetZ: 6.5 }, fightSeconds: 3.3 },
@@ -396,8 +405,8 @@ const enemies = createEnemies({
   },
   onAttackPlayer: hitPlayer,
   onKilled: enemyKilled,
-  onAlert: (enemy) => {
-    floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, '!', 'alert');
+  onAlert: (enemy, symbol = '!') => {
+    floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, symbol, 'alert');
     soundAt('alert', enemy.x, enemy.z);
   },
   onSound: (name, enemy) => soundAt(name, enemy.x, enemy.z),
@@ -1373,7 +1382,8 @@ function dropLoot(enemy) {
       message.push(`and ${itemLabel}!`);
       soundAt('craft');
     }
-    hud.toast(`👑 ${enemy.definition.label} dropped ${message.join(' ')} · back in 24 h`);
+    const opening = enemy.definition.flees ? `😱 ${enemy.definition.label} lost his nerve and fled! Dropped` : `👑 ${enemy.definition.label} dropped`;
+    hud.toast(`${opening} ${message.join(' ')} · back in 24 h`);
     return;
   }
   const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
@@ -1753,8 +1763,9 @@ function updateCamera(deltaTime, snap) {
   const campInView = !underground && Math.hypot(cameraFocus.x - CAMP.x, cameraFocus.z - CAMP.z) < CAMP.radius + CAMP_VIEW_MARGIN + cameraDistance;
   campProps.setVisible(campInView);
   resources.setCampVisible(campInView);
-  enemies.setCampVisible(campInView || Math.hypot(cameraFocus.x - HOLD.x, cameraFocus.z - HOLD.z) < HOLD.halfLength + HOLD_VIEW_MARGIN + cameraDistance);
-  const holdInView = !underground && Math.hypot(cameraFocus.x - HOLD.x, cameraFocus.z - HOLD.z) < HOLD.halfLength + HOLD_VIEW_MARGIN + cameraDistance;
+  viewFrustum.setFromProjectionMatrix(frustumMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  const holdInView = !underground && (isInHold(cameraFocus.x, cameraFocus.z) || HOLD_RIM_POINTS.some((point) => viewFrustum.containsPoint(point)));
+  enemies.setCampVisible(campInView || holdInView);
   holdProps.setVisible(holdInView);
   resources.setHoldVisible(holdInView);
   enemies.setHoldVisible(holdInView);

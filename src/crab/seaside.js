@@ -297,10 +297,12 @@ if (cutAlong < cutLength - 1.2 && cutAway < cutRadius && vSeaWorld.y > uCutPlaye
   if (checker < 0.5 || cutAway < cutRadius * 0.7 || cutAlong < cutLength * 0.5) discard;
 #endif
 }
+#ifndef SEA_RAY_CUTAWAY
 if (cutAlong < cutLength * 0.62 && vSeaWorld.y > uCutPlayer.y + 2.0) {
   float checker = mod(floor(gl_FragCoord.x) + floor(gl_FragCoord.y), 2.0);
   if (checker < 0.5 || cutAlong < cutLength * 0.52) discard;
 }
+#endif
 `;
 
 export function applySeaside(material, { cutaway = false, surface = null, wetDarkening = 0.62, wetRoughness = 0.22, wetGloss = 1, causticStrength = 1.5, chromaticCaustics = true, glow = 0, glowPulse = false, vertexMotion = null, bodyWetness = null, instanceFlash = false, gearGlow = null } = {}) {
@@ -311,7 +313,8 @@ export function applySeaside(material, { cutaway = false, surface = null, wetDar
   if (glow > 0) material.defines.SEA_GLOW = glow.toFixed(3);
   if (glowPulse) material.defines.SEA_GLOW_PULSE = '';
   if (bodyWetness) material.defines.SEA_BODY_WETNESS = '';
-  if (cutaway === 'soft') material.defines.SEA_SOFT_CUTAWAY = '';
+  if (cutaway === 'soft' || cutaway === 'ray') material.defines.SEA_SOFT_CUTAWAY = '';
+  if (cutaway === 'ray') material.defines.SEA_RAY_CUTAWAY = '';
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, seaUniforms, vertexMotion ? vertexMotion.uniforms || {} : {}, bodyWetness || {}, gearGlow || {});
     shader.vertexShader = injectVertexMotion(shader.vertexShader.replace('#include <project_vertex>', VERTEX_WORLD_GLSL), vertexMotion)

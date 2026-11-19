@@ -5,6 +5,7 @@ import sandHopperBytes from './assets/sandHopper.glb';
 import gullBytes from './assets/gull.glb';
 import { Joint, limbChain, parseModel } from './rig.js';
 import { applySeaside } from './seaside.js';
+import { cookAssetAvailable, createCook, loadCookAsset } from './cookAsset.js';
 
 const CREATURE_BYTES = { shoreCrab: shoreCrabBytes, sandHopper: sandHopperBytes, gull: gullBytes };
 const GROUND_TIP_SHARE = 0.15;
@@ -14,11 +15,11 @@ const WING_FOLD = { lower: 1.25, sweep: 1.5, elbow: 0.5, hand: 0.4 };
 const loadedCreatures = new Map();
 
 export async function loadCreatureAssets() {
-  const entries = await Promise.all(Object.entries(CREATURE_BYTES).map(async ([kind, bytes]) => [kind, (await parseModel(bytes)).scene]));
+  const [entries] = await Promise.all([Promise.all(Object.entries(CREATURE_BYTES).map(async ([kind, bytes]) => [kind, (await parseModel(bytes)).scene])), loadCookAsset()]);
   for (const [kind, scene] of entries) loadedCreatures.set(kind, scene);
 }
 
-export const creatureAssetAvailable = (kind) => loadedCreatures.has(kind);
+export const creatureAssetAvailable = (kind) => (kind === 'cook' ? cookAssetAvailable() : loadedCreatures.has(kind));
 
 function classifyLimbs(model, bones) {
   const limbNames = Object.keys(bones).filter((name) => name.endsWith('_1')).map((name) => name.slice(0, -2));
@@ -42,6 +43,7 @@ function classifyLimbs(model, bones) {
 }
 
 export function createCreature(kind, quality) {
+  if (kind === 'cook') return createCook(quality);
   const model = cloneSkinned(loadedCreatures.get(kind));
   model.updateMatrixWorld(true);
   const bones = {};

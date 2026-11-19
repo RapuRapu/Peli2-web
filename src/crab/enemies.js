@@ -20,7 +20,7 @@ export const ENEMY_KINDS = {
   rat: { label: 'Rat', health: 130, attack: 22, defense: 6, attackInterval: 1.4, windup: 0.4, speed: 6.2, radius: 1.3, bodyReach: 2.4, temperament: 'aggressive', sightRange: 10, experience: 140, pearlChance: 0.15, respawnSeconds: 120, barHeight: 3.2, camp: true },
   shipCat: { label: "Ship's cat", health: 1300, attack: 36, defense: 12, attackInterval: 2.4, windup: 1.0, speed: 4.2, radius: 2.9, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 3.8, radius: 3.0, pounceEvery: 3, pounceRange: 16, pounceRadius: 3.4, pounceWindup: 1.5 }, experience: 1500, pearlChance: 1, pearlCount: 3, respawnSeconds: MINIBOSS_RESPAWN_SECONDS, barHeight: 7.5, boss: true, camp: true },
   cockroach: { label: 'Cockroach', health: 90, attack: 26, defense: 10, attackInterval: 1.0, windup: 0.25, speed: 7.5, radius: 1.1, bodyReach: 2.2, temperament: 'aggressive', sightRange: 9, experience: 160, pearlChance: 0.1, respawnSeconds: 100, barHeight: 2.4, hold: true },
-  cook: { label: 'The Cook', health: 1550, attack: 48, defense: 16, attackInterval: 2.6, windup: 1.3, speed: 0, radius: 3.6, temperament: 'aggressive', sightRange: 0, telegraph: { shape: 'line', lineLength: 16, lineWidth: 3.6, lineRange: 21, stompEvery: 3, stompRadius: 7.5, stompWindup: 1.1 }, experience: 2000, pearlChance: 1, pearlCount: 4, respawnSeconds: 480, barHeight: 13, boss: true, hold: true, dailyBoss: true },
+  cook: { label: 'The Cook', health: 1550, attack: 48, defense: 16, attackInterval: 2.6, windup: 1.3, speed: 4.3, radius: 3.6, temperament: 'aggressive', sightRange: 0, nerves: true, flees: true, telegraph: { shape: 'line', lineLength: 24, lineWidth: 3.6, lineRange: 15, stompEvery: 3, stompRadius: 7.5, stompWindup: 1.1 }, experience: 2000, pearlChance: 1, pearlCount: 4, respawnSeconds: 480, barHeight: 13, boss: true, hold: true, dailyBoss: true },
   giantLobster: { label: 'Giant lobster', health: 1040, attack: 30, defense: 8, attackInterval: 2.6, windup: 1.2, speed: 3.2, radius: 3.0, temperament: 'aggressive', sightRange: 0, telegraph: { reach: 4.4, radius: 3.0 }, experience: 800, pearlChance: 1, pearlCount: 2, respawnSeconds: MINIBOSS_RESPAWN_SECONDS, barHeight: 7.5, boss: true, reef: true },
 };
 
@@ -51,6 +51,13 @@ const LABEL_EDGE_PIXELS = 72;
 const LABEL_SPACING_X = 120;
 const LABEL_SPACING_Y = 26;
 const COOK_STANCE = 3.4;
+const COOK_PATROL_SHARE = 0.7;
+const COOK_ACTIVITY_SECONDS = [4, 8];
+const COOK_FLEE_SPEED = 12;
+const COOK_FLEE_SECONDS = 9;
+const COOK_STRIDE_UNITS = 11;
+const COOK_CHOP_TWIST = 0.15;
+const COOK_FLEE_ANIMATION_RATE = 1.15;
 const LOBSTER_SCALE = 1.35;
 const LOBSTER_CLAW_SCALE = 1.4;
 const FLASH_STRENGTH = 0.3;
@@ -75,6 +82,7 @@ function painted(geometry, colorAt) {
   return geometry.index ? geometry.toNonIndexed() : geometry;
 }
 
+const barName = (definition) => (definition.boss ? `👑 ${definition.label}${definition.nerves ? ' · nerves' : ''}` : definition.label);
 const solid = (geometry, color) => painted(geometry, (target) => target.copy(color));
 
 function buildHopperGeometry() {
@@ -287,10 +295,13 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   const cookMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 }), { cutaway: true, chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.4, wetRoughness: 0.3, instanceFlash: true });
   const cookLegMesh = new THREE.InstancedMesh(buildCookLegGeometry(), cookMaterial, Math.max(1, counts.cook * 2));
   const cleaverMesh = new THREE.InstancedMesh(buildCleaverGeometry(), cookMaterial, Math.max(1, counts.cook));
-  const holdMeshes = [cockroachMesh, cookLegMesh, cleaverMesh];
+  const cookModelMeshes = [cookLegMesh, cleaverMesh];
+  const holdMeshes = creatureAssetAvailable('cook') ? [cockroachMesh] : [cockroachMesh, ...cookModelMeshes];
+  if (creatureAssetAvailable('cook')) for (const mesh of cookModelMeshes) mesh.visible = false;
   const reefMeshes = [morayMesh, octopusMesh, mantisMesh, lobsterBodyMesh, lobsterClawMesh];
   const shadowless = new Set([morayMesh, mantisMesh, lobsterClawMesh]);
   const allMeshes = [hopperMesh, crabBodyMesh, crabLegMesh, crabClawMesh, ...reefMeshes, ...campMeshes, ...holdMeshes];
+  const replacedByModels = [...(creatureAssetAvailable('sandHopper') ? [hopperMesh] : []), ...(creatureAssetAvailable('shoreCrab') ? [crabBodyMesh, crabLegMesh, crabClawMesh] : [])];
   const flatDisc = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   const telegraphMaterial = new THREE.ShaderMaterial({ uniforms: { uProgress: { value: 0 }, uOpacity: { value: 0 } }, vertexShader: TELEGRAPH_VERTEX_GLSL.replace('position.xy', 'position.xz'), fragmentShader: TELEGRAPH_FRAGMENT_GLSL, transparent: true, depthWrite: false, depthTest: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   const telegraphMesh = new THREE.Mesh(flatDisc, telegraphMaterial);
@@ -305,6 +316,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   lineTelegraphMesh.visible = false;
   scene.add(telegraphMesh, inkMesh, lineTelegraphMesh);
   const ink = { x: 0, z: 0, until: -1, duration: 1 };
+  for (const mesh of replacedByModels) mesh.visible = false;
   for (const mesh of allMeshes) {
     mesh.castShadow = !shadowless.has(mesh);
     mesh.receiveShadow = true;
@@ -346,13 +358,14 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     box.className = 'enemy-bar hidden';
     const name = document.createElement('div');
     name.className = 'enemy-name';
-    name.textContent = enemy.definition.boss ? `👑 ${enemy.definition.label}` : enemy.definition.label;
+    name.textContent = barName(enemy.definition);
     const track = document.createElement('div');
     track.className = 'enemy-track';
     const fill = document.createElement('div');
     fill.className = 'enemy-fill';
     track.appendChild(fill);
     box.append(name, track);
+    if (enemy.definition.nerves) box.classList.add('nerves');
     labelParent.appendChild(box);
     return { box, fill, name };
   }
@@ -365,6 +378,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       path: [], pathIndex: 0, repathTimer: 0, outOfReachSeconds: 0, wanderTimer: 1 + random() * 4, attackTimer: 0, anchor: null, sink: 0, provoked: false,
       lastHurtTime: -100, motion: 0, strike: 0, hurt: 0, circleAngle: random() * Math.PI * 2,
       retreat: 0, retreatReadyAt: 0, emerge: 0, leap: null, followUp: 0, strikesMade: 0, inkWindup: false, zone: null, cooldown: 0,
+      stationIndex: 0, activity: null, activityTimer: 0, moveSpeed: 0, fleeTime: 0,
     });
   }
 
@@ -456,6 +470,10 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       enemy.zone = null;
       enemy.state = 'dying';
       enemy.sink = 0;
+      enemy.fleeTime = 0;
+      if (enemy.definition.flees) onAlert(enemy, '😱');
+      enemy.path = [];
+      enemy.repathTimer = 0;
       onKilled(enemy);
       return true;
     }
@@ -631,7 +649,8 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
         onAlert(enemy);
       }
       enemy.wanderTimer -= deltaTime;
-      if (enemy.wanderTimer <= 0 && definition.speed > 0) {
+      if (enemy.entry.stations) moving = patrol(enemy, deltaTime);
+      else if (enemy.wanderTimer <= 0 && definition.speed > 0) {
         enemy.wanderTimer = 3 + random() * 4;
         const angle = random() * Math.PI * 2;
         const distance = random() * WANDER_RADIUS;
@@ -643,15 +662,17 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
           enemy.repathTimer = 99;
         }
       }
-      if (enemy.pathIndex < enemy.path.length) moving = moveToward(enemy, enemy.path[enemy.path.length - 1].x, enemy.path[enemy.path.length - 1].z, definition.speed * 0.35, deltaTime);
+      if (!enemy.entry.stations && enemy.pathIndex < enemy.path.length) moving = moveToward(enemy, enemy.path[enemy.path.length - 1].x, enemy.path[enemy.path.length - 1].z, definition.speed * 0.35, deltaTime);
     } else if (enemy.state === 'chase') {
-      const leashed = lurker ? toPlayer > reach + 3 : Math.hypot(player.x - enemy.anchor.x, player.z - enemy.anchor.z) > LEASH_DISTANCE;
+      enemy.activity = null;
+      const leashed = enemy.entry.stations ? false : lurker ? toPlayer > reach + 3 : Math.hypot(player.x - enemy.anchor.x, player.z - enemy.anchor.z) > LEASH_DISTANCE;
       const leftTerritory = enemy.entry.territory && !enemy.entry.territory(player.x, player.z) && toPlayer > reach + 2 && !enemy.zone;
       if (!player.alive || leashed || leftTerritory) {
         enemy.zone = null;
         giveUp(enemy);
       } else if (definition.telegraph) {
         if (!updateTelegraph(enemy, deltaTime, player, toPlayer, reach)) moving = moveToward(enemy, player.x, player.z, definition.speed, deltaTime);
+        if (moving) enemy.moveSpeed = definition.speed;
       } else if (toPlayer > reach) {
         if (definition.speed > 0) moving = moveToward(enemy, player.x, player.z, definition.speed, deltaTime);
         enemy.outOfReachSeconds += deltaTime;
@@ -662,6 +683,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       }
     } else if (enemy.state === 'return') {
       moving = definition.speed > 0 && moveToward(enemy, enemy.home.x, enemy.home.z, definition.speed * 0.7, deltaTime);
+      enemy.moveSpeed = definition.speed * 0.7;
       enemy.health = Math.min(definition.health, enemy.health + definition.health * 0.2 * deltaTime);
       if (Math.hypot(enemy.home.x - enemy.x, enemy.home.z - enemy.z) < 1 || !moving) {
         enemy.state = 'idle';
@@ -673,6 +695,40 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     enemy.motion += ((moving ? 1 : 0) - enemy.motion) * Math.min(1, deltaTime * 8);
     if (definition.speed > 0 && player.alive) keepOffPlayer(enemy, player);
     enemy.y = world.heightAt(enemy.x, enemy.z);
+  }
+
+  function patrol(enemy, deltaTime) {
+    const stations = enemy.entry.stations;
+    const station = stations[enemy.stationIndex % stations.length];
+    if (enemy.activityTimer > 0) {
+      enemy.activityTimer -= deltaTime;
+      enemy.activity = station.activity;
+      turnToward(enemy, station.heading, deltaTime, 3);
+      if (enemy.activityTimer <= 0) {
+        enemy.activity = null;
+        enemy.stationIndex = (enemy.stationIndex + 1) % stations.length;
+      }
+      return false;
+    }
+    enemy.moveSpeed = enemy.definition.speed * COOK_PATROL_SHARE;
+    const moving = moveToward(enemy, station.x, station.z, enemy.moveSpeed, deltaTime);
+    if (!moving || Math.hypot(station.x - enemy.x, station.z - enemy.z) < 0.6) {
+      const [shortest, longest] = COOK_ACTIVITY_SECONDS;
+      enemy.activityTimer = shortest + random() * (longest - shortest);
+      enemy.path = [];
+    }
+    return moving;
+  }
+
+  function flee(enemy, deltaTime) {
+    const exit = enemy.entry.exit;
+    enemy.fleeTime += deltaTime;
+    enemy.moveSpeed = COOK_FLEE_SPEED;
+    const moving = moveToward(enemy, exit.x, exit.z, COOK_FLEE_SPEED, deltaTime);
+    if (moving && enemy.moveHeading !== undefined) turnToward(enemy, enemy.moveHeading, deltaTime, 6);
+    enemy.motion = moving ? 1 : 0;
+    enemy.y = world.heightAt(enemy.x, enemy.z);
+    return Math.hypot(exit.x - enemy.x, exit.z - enemy.z) < 2 || enemy.fleeTime > COOK_FLEE_SECONDS || !moving;
   }
 
   function keepOffPlayer(enemy, player) {
@@ -771,7 +827,9 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
         continue;
       }
       if (enemy.state === 'dying') {
-        enemy.sink += deltaTime / DEATH_SINK_SECONDS;
+        enemy.hurt = Math.max(0, enemy.hurt - deltaTime / HURT_SECONDS);
+        if (enemy.definition.flees) enemy.sink = flee(enemy, deltaTime) ? 1 : 0;
+        else enemy.sink += deltaTime / DEATH_SINK_SECONDS;
         if (enemy.sink >= 1) {
           enemy.state = 'dead';
           enemy.zone = null;
@@ -819,7 +877,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     object.position.copy(transform.position);
     object.rotation.copy(transform.rotation);
     object.scale.setScalar(scale);
-    const dyingFlash = enemy.state === 'dying' ? Math.max(0, 1 - enemy.sink * 4) : 0;
+    const dyingFlash = enemy.state === 'dying' && !enemy.definition.flees ? Math.max(0, 1 - enemy.sink * 4) : 0;
     enemy.creature.setFlash(Math.max(enemy.hurt, dyingFlash));
   }
 
@@ -939,11 +997,15 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
   function renderZones(time) {
     const telegraphing = list.find((enemy) => enemy.zone && alive(enemy));
     const lining = telegraphing && telegraphing.zone.shape === 'line';
-    lineTelegraphMesh.visible = Boolean(lining);
+    const landedChop = !lining && list.find((enemy) => enemy.lastChop && enemy.lastChop.until > time && alive(enemy));
+    lineTelegraphMesh.visible = Boolean(lining || landedChop);
     telegraphMesh.visible = Boolean(telegraphing) && !lining;
-    if (lining) {
-      const zone = telegraphing.zone;
-      lineTelegraphMesh.position.set(zone.x, Math.max(world.heightAt(zone.x, zone.z), world.heightAt(telegraphing.x, telegraphing.z)) + TELEGRAPH_LIFT + 0.5, zone.z);
+    lineTelegraphMaterial.uniforms.uOpacity.value = landedChop ? (landedChop.lastChop.until - time) / CHOP_LINGER_SECONDS : 1;
+    if (lining || landedChop) {
+      const source = lining ? telegraphing : landedChop;
+      const zone = lining ? telegraphing.zone : { ...landedChop.lastChop, timer: 0, duration: 1 };
+      const lineOwner = source;
+      lineTelegraphMesh.position.set(zone.x, Math.max(world.heightAt(zone.x, zone.z), world.heightAt(lineOwner.x, lineOwner.z)) + TELEGRAPH_LIFT + 0.5, zone.z);
       lineTelegraphMesh.rotation.y = zone.angle;
       lineTelegraphMesh.scale.set(zone.width / 2, 1, zone.length / 2);
       lineTelegraphMaterial.uniforms.uProgress.value = THREE.MathUtils.clamp(1 - zone.timer / zone.duration, 0, 1);
@@ -972,7 +1034,9 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     for (const mesh of campMeshes) mesh.visible = visible;
   }
 
+  let holdVisible = true;
   function setHoldVisible(visible) {
+    holdVisible = visible;
     for (const mesh of holdMeshes) mesh.visible = visible;
   }
 
@@ -988,7 +1052,34 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     placeInstance(cockroachMesh, enemy.slot, enemy, transform.matrix);
   }
 
+  function cookAnimation(enemy, time) {
+    if (enemy.state === 'dying') return { mode: 'run', rate: COOK_FLEE_ANIMATION_RATE };
+    const zone = enemy.zone;
+    if (zone && zone.shape === 'line') return { mode: 'slam', phase: 1 - zone.timer / zone.duration };
+    if (zone && zone.stomp) return { mode: 'stomp', phase: 1 - zone.timer / zone.duration };
+    if (enemy.lastChop && enemy.lastChop.until > time) return { mode: 'slam', phase: 2 - (enemy.lastChop.until - time) / CHOP_LINGER_SECONDS };
+    if (enemy.motion > 0.5) return { mode: 'walk', rate: enemy.moveSpeed / COOK_STRIDE_UNITS };
+    if (enemy.activity === 'chop') return { mode: 'chop', rate: 0.55 };
+    if (enemy.activity === 'grumble') return { mode: 'grumble', rate: 0.5 };
+    return { mode: 'stand' };
+  }
+
   function renderCook(enemy, time) {
+    if (enemy.creature) {
+      cookLegMesh.setMatrixAt(enemy.slot * 2, hidden);
+      cookLegMesh.setMatrixAt(enemy.slot * 2 + 1, hidden);
+      cleaverMesh.setMatrixAt(enemy.slot, hidden);
+      const deltaTime = THREE.MathUtils.clamp(time - (enemy.lastPoseTime ?? time), 0, 0.1);
+      enemy.lastPoseTime = time;
+      const chopping = (enemy.zone && enemy.zone.shape === 'line') || (enemy.lastChop && enemy.lastChop.until > time);
+      enemy.chopTwist = (enemy.chopTwist || 0) + ((chopping ? COOK_CHOP_TWIST : 0) - (enemy.chopTwist || 0)) * Math.min(1, deltaTime * 5);
+      transform.position.set(enemy.x, enemy.y, enemy.z);
+      transform.rotation.set(0, enemy.heading + enemy.chopTwist, 0);
+      placeCreature(enemy, 1);
+      enemy.creature.object.visible = enemy.creature.object.visible && holdVisible;
+      if (enemy.creature.object.visible) enemy.creature.pose({ deltaTime, glint: enemy.strike, ...cookAnimation(enemy, time) });
+      return;
+    }
     const zone = enemy.zone;
     const stompLift = zone && zone.stomp ? Math.sin(Math.min(1, (1 - zone.timer / zone.duration) * 1.15) * Math.PI * 0.5) * 6 : 0;
     const sway = Math.sin(time * 0.7 + enemy.id) * 0.04;
@@ -1103,7 +1194,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       enemy.bar.box.classList.toggle('hidden', !onScreen);
       enemy.bar.box.classList.toggle('resting', Boolean(restText));
       if (onScreen) {
-        const nameText = restText || (enemy.definition.boss ? `👑 ${enemy.definition.label}` : enemy.definition.label);
+        const nameText = restText || barName(enemy.definition);
         if (enemy.bar.name.textContent !== nameText) {
           enemy.bar.name.textContent = nameText;
           enemy.bar.halfWidth = 0;

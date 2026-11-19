@@ -168,9 +168,7 @@ function buildHearth(radius) {
 
 function buildChoppingBlock(radius) {
   const block = paint(new THREE.CylinderGeometry(radius, radius * 1.05, 3.2, 20).translate(0, 1.6, 0), (color, x, y, z) => color.copy(FLOOR_WOOD).multiplyScalar(y > 3.1 ? 0.8 + 0.25 * Math.sin(Math.hypot(x, z) * 6) : 0.75));
-  const blade = solid(new THREE.BoxGeometry(0.2, 3.2, 4.5).translate(0.8, 4.2, 0.3).rotateZ(0.15), STEEL);
-  const handle = solid(new THREE.CylinderGeometry(0.35, 0.35, 3, 8).rotateX(Math.PI / 2).translate(1.2, 5.6, 3.6), HULL_DARK);
-  return mergeGeometries([block, blade, handle].map(normalize));
+  return mergeGeometries([block].map(normalize));
 }
 
 function buildFishBones(length) {
