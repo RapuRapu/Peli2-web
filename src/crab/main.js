@@ -521,6 +521,7 @@ const STRANDED_FREE_SPOTS = [
 const STRANDED_GUARD_KINDS = ['gull', 'giantLobster', 'shipCat'];
 const STRANDED_PICK_RADIUS_PIXELS = 60;
 const RESCUE_REACH = 2.6;
+const GUARDED_SPOT_OFFSET = { x: 7, z: 5.8 };
 
 function strandedHelperSpots() {
   const spots = [];
@@ -532,7 +533,7 @@ function strandedHelperSpots() {
     const guard = enemies.list.find((enemy) => enemy.kind === guardKind);
     const home = guard && (guard.home || { x: guard.x, z: guard.z });
     if (!home) continue;
-    const free = navigation.nearestWalkable(home.x + 3, home.z + 2.5, 10);
+    const free = navigation.nearestWalkable(home.x + GUARDED_SPOT_OFFSET.x, home.z + GUARDED_SPOT_OFFSET.z, 10);
     if (free) spots.push({ id: `guarded-${guardKind}`, x: free.x, z: free.z, heading: spots.length * 2.2, guardKind });
   }
   return spots;
@@ -633,8 +634,10 @@ function stationName(station) {
   return `${STATION_KINDS[station.kind].label}${number}`;
 }
 
+const guardOf = (spot) => (spot.guardKind && enemies.list.find((enemy) => enemy.kind === spot.guardKind && enemies.alive(enemy))) || null;
+
 function rescueHelperAt(spot) {
-  const guard = spot.guardKind && enemies.list.find((enemy) => enemy.kind === spot.guardKind && enemies.alive(enemy));
+  const guard = guardOf(spot);
   if (guard) {
     hud.toast(`The ${guard.definition.label.toLowerCase()} guards this helper — defeat it first`);
     return null;
@@ -1214,13 +1217,45 @@ const FILL_PROBLEM_TEXT = {
   exitAccess: 'This tunnel leads to an exit',
   occupied: 'Someone is standing there',
   cutsOff: 'That would cut off a structure',
+  notBesideSand: 'Fill tunnels next to the sand walls',
 };
+const FILL_REFRESH_SECONDS = 0.3;
 
 function startFillMode() {
   closePanels();
   stopWalking();
   placement.filling = true;
-  hud.setMode('Tap a tunnel to fill it with sand', cancelPlacement);
+  placement.fillSelection = null;
+  refreshFillCells();
+  hud.setMode('Tap a glowing tunnel, tap it again to fill', cancelPlacement);
+}
+
+function refreshFillCells() {
+  if (!placement.filling) return;
+  const cells = burrow.fillableCells(occupiedBurrowCells());
+  const selected = placement.fillSelection;
+  if (selected && !cells.some((cell) => cell.column === selected.column && cell.row === selected.row)) placement.fillSelection = null;
+  burrow.showFillCells(cells, placement.fillSelection);
+}
+
+function handleFillTap(clientX, clientY) {
+  const point = burrow.pointOnFloor(clientX, clientY, camera, raycaster);
+  const selected = placement.fillSelection;
+  if (point && point.inside && !point.wall && selected && selected.column === point.column && selected.row === point.row) {
+    placement.fillSelection = null;
+    startFillCell(point.column, point.row);
+    refreshFillCells();
+    return;
+  }
+  if (point && point.inside && !point.wall && !burrow.fillProblem(point.column, point.row, occupiedBurrowCells())) {
+    placement.fillSelection = { column: point.column, row: point.row };
+    refreshFillCells();
+    return;
+  }
+  placement.fillSelection = null;
+  refreshFillCells();
+  const ground = groundPointUnder(clientX, clientY);
+  if (ground) setDestination(ground.x, ground.z);
 }
 
 function occupiedBurrowCells() {
@@ -1956,6 +1991,7 @@ function updatePlayer(deltaTime) {
             burrow.finishFill(dig.column, dig.row);
             save.burrow = burrow.serialize();
             persist();
+            refreshFillCells();
           }
         } else {
           if (!save.burrowDug) {
@@ -2213,6 +2249,10 @@ function renderScene() {
   destinationMarker.scale.setScalar(1 + 0.12 * Math.sin(simulationTime * 5));
   workshop.update(simulationTime, underground && !hasCraftedGear() && !anyPanelOpen() && !isPlacing(), camera, underground);
   burrow.update(simulationTime, camera, underground);
+  if (placement.filling && simulationTime - (placement.fillRefreshedAt || 0) > FILL_REFRESH_SECONDS) {
+    placement.fillRefreshedAt = simulationTime;
+    refreshFillCells();
+  }
   helpers.render(simulationTime);
   rack.render(simulationTime, camera, !underground);
   campProps.update(simulationTime);
@@ -2295,9 +2335,7 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
     return;
   }
   if (placement.filling) {
-    if (!isNewTouch) return;
-    const point = burrow.pointOnFloor(clientX, clientY, camera, raycaster);
-    if (point && !point.wall && point.inside) startFillCell(point.column, point.row);
+    if (isNewTouch) handleFillTap(clientX, clientY);
     return;
   }
   if (placement.station === 'exit') {
@@ -2373,7 +2411,7 @@ function handleTap(clientX, clientY, isNewTouch) {
     return;
   }
   const strandedSpot = isNewTouch ? helpers.strandedUnder(clientX, clientY, camera, STRANDED_PICK_RADIUS_PIXELS) : null;
-  if (strandedSpot && fog.isRevealed(strandedSpot.x, strandedSpot.z)) {
+  if (strandedSpot && fog.isRevealed(strandedSpot.x, strandedSpot.z) && !guardOf(strandedSpot)) {
     walkToStranded(strandedSpot);
     return;
   }

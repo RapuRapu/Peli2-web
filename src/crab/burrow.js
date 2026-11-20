@@ -689,6 +689,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     if (column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row - 1)) return 'shaft';
     if (state.stations.some((station) => station.access && station.access.column === column && station.access.row === row)) return 'exitAccess';
     if (occupiedCells.some((cell) => cell.column === column && cell.row === row)) return 'occupied';
+    if (!besideSand(column, row)) return 'notBesideSand';
     const removed = cellIndex(column, row);
     const reached = new Set([cellIndex(SHAFT_CELL.column, SHAFT_CELL.row)]);
     const queue = [[SHAFT_CELL.column, SHAFT_CELL.row]];
@@ -705,6 +706,36 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     }
     if (state.stations.some((station) => !reached.has(cellIndex(station.column, station.row)))) return 'cutsOff';
     return null;
+  }
+
+  function besideSand(column, row) {
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([stepColumn, stepRow]) => !isDug(column + stepColumn, row + stepRow));
+  }
+
+  function fillableCells(occupiedCells = []) {
+    const cells = [];
+    for (const index of dugCells) {
+      const column = (index % BURROW_SPAN) + BURROW_CELL_MIN;
+      const row = Math.floor(index / BURROW_SPAN) + BURROW_CELL_MIN;
+      if (!fillProblem(column, row, occupiedCells)) cells.push({ column, row });
+    }
+    return cells;
+  }
+
+  function showFillCells(cells, selected) {
+    highlights.count = 0;
+    highlights.renderOrder = 0;
+    highlightMaterial.depthTest = true;
+    for (const { column, row } of cells) {
+      const center = cellCenter(column, row);
+      const isSelected = selected && selected.column === column && selected.row === row;
+      transform.position.set(center.x - BURROW_ORIGIN.x, isSelected ? 0.14 : 0.1, center.z - BURROW_ORIGIN.z);
+      transform.rotation.set(0, 0, 0);
+      transform.scale.setScalar(isSelected ? 1 : 0.4);
+      transform.updateMatrix();
+      highlights.setMatrixAt(highlights.count++, transform.matrix);
+    }
+    highlights.instanceMatrix.needsUpdate = true;
   }
 
   function setFillProgress(index, progress) {
@@ -983,6 +1014,8 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     travelPoints,
     exitWallSpots,
     fillProblem,
+    fillableCells,
+    showFillCells,
     setFillProgress,
     finishFill,
     showExitSpots,
