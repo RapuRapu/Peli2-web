@@ -43,6 +43,12 @@ FLOW = r'''
     lastHealth = crab.health;
   }
   out.helpedInFight = buddy.fightTargetId === crab.id || helperHits > 0;
+  const experienceBefore = (buddy.experience || 0) + (buddy.level || 1) * 1e6;
+  crab.assistingHelperIds = new Set([buddy.id]);
+  crab.health = 1;
+  d.enemies.damage(crab, 999, d.simulationTime, null);
+  step(0.2);
+  out.assistExperience = (buddy.experience || 0) + (buddy.level || 1) * 1e6 > experienceBefore;
   Object.assign(crab, { state: 'dead', respawnTimer: 1e9 });
   d.player.combatTarget = null;
 
@@ -76,6 +82,7 @@ with sync_playwright() as playwright:
         'onlyOneFollower': flow['followSet'] and flow['secondRefused'] and flow['optionHidden'],
         'followsOnSurface': flow['cameOut'] and flow['followDistance'] <= 6,
         'helpsInFight': flow['helpedInFight'],
+        'assistGivesExperience': flow['assistExperience'],
         'followsIntoBurrow': flow['inBurrowWithYou'],
         'canSwitchFollower': flow['unfollow'],
         'noErrors': not errors,

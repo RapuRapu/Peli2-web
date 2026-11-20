@@ -247,6 +247,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       onSound('shellClonk', helper);
       helper.attackAnimPending = true;
       logHelperHit(helper, target, stats);
+      (target.assistingHelperIds ||= new Set()).add(helper.id);
       enemies.damage(target, hitDamage(stats.attack, target.definition.defense || 0), time, helper, { provoke: false });
       return;
     }

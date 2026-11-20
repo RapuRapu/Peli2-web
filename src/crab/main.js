@@ -1799,8 +1799,21 @@ function rewardHelperKill(helper, enemy) {
   persist();
 }
 
+function rewardAssistingHelpers(enemy, attacker) {
+  const assistingIds = enemy.assistingHelperIds;
+  enemy.assistingHelperIds = null;
+  if (!assistingIds) return;
+  for (const helper of helpers.list) {
+    if (helper === attacker || !assistingIds.has(helper.id)) continue;
+    const helperExperience = experienceForKill(enemy.definition.experience, enemy.definition.level, helper.level || 1);
+    hud.log('helperCombat', `${helpers.nameOf(helper)} helped defeat the ${enemy.definition.label.toLowerCase()} (+${helperExperience} XP)`);
+    if (helpers.gainExperience(helper, helperExperience)) hud.log('helper', `${helpers.nameOf(helper)} reached level ${helper.level}!`);
+  }
+}
+
 function enemyKilled(enemy, attacker = null) {
   if (player.combatTarget === enemy) player.combatTarget = null;
+  rewardAssistingHelpers(enemy, attacker);
   if (attacker && attacker.helperId && attacker.job === 'follow') {
     const helperExperience = experienceForKill(enemy.definition.experience, enemy.definition.level, attacker.level || 1);
     hud.log('helperCombat', `${helpers.nameOf(attacker)} landed the final blow (+${helperExperience} XP)`);
