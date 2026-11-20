@@ -19,7 +19,7 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
-import { createGear, SHELLS, CLAWS, canAfford, BOSS_TROPHIES, MINIBOSS_MATERIALS, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE, gearGlowLook, normalizeItem } from './gear.js';
+import { createGear, SHELLS, CLAWS, QUALITIES, REINFORCEMENTS, qualityFactor, shellDefenseOf, canAfford, BOSS_TROPHIES, MINIBOSS_MATERIALS, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE, gearGlowLook, normalizeItem } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createStatusPanel } from './statusPanel.js';
@@ -445,17 +445,17 @@ const enemies = createEnemies({
   },
   onSound: (name, enemy) => soundAt(name, enemy.x, enemy.z),
   onWarn: (enemy, text) => {
-    if (text) floatAt(enemy.x, enemy.y + enemy.definition.barHeight, enemy.z, text, 'alert');
+    if (text) hud.log('combat', `${enemy.definition.label}: ${text}`);
     soundAt('alert', enemy.x, enemy.z, 0.6);
   },
   onInk: (enemy, seconds, factor) => {
     player.inkedUntil = simulationTime + seconds;
     player.inkSpeedFactor = factor;
     player.lastCombatTime = simulationTime;
-    floatAt(player.x, player.y + 2.4, player.z, `Slowed ${Math.round((1 - factor) * 100)}%`, 'taken');
+    hud.log('combat', `${enemy.definition.label} inks you — slowed ${Math.round((1 - factor) * 100)} % for ${seconds} s`);
   },
   onDodge: (enemy) => {
-    floatAt(player.x, player.y + 2.4, player.z, 'Dodged!', 'experience');
+    hud.log('combat', `You dodged the ${enemy.definition.label.toLowerCase()}`);
     soundAt('hitThud', enemy.x, enemy.z, 0.7);
   },
 });
@@ -481,7 +481,7 @@ const storagePanel = createStoragePanel(hud.root, {
   },
   onSalvage: (refund, label) => {
     soundAt('craft');
-    hud.toast(`${label} salvaged — +${materialsText(refund)}`);
+    hud.log('loot', `${label} salvaged — +${materialsText(refund)}`);
   },
   onMove: (station) => startMovingStructure(station || 'storage'),
   onDismantle: (station) => dismantleStructure(station || 'storage'),
@@ -506,7 +506,7 @@ const rackPanel = createRackPanel(hud.root, {
     if (!taken) return;
     save.inventory.driedKelp = (save.inventory.driedKelp || 0) + taken;
     soundAt('gatherDriftwood');
-    hud.toast(`+${taken} Dried kelp`);
+    hud.log('loot', `+${taken} Dried kelp`);
     refreshHud('driedKelp');
     rackPanel.render();
     persist();
@@ -567,13 +567,14 @@ const helpers = createHelpers(scene, {
     if (storagePanel.isOpen) storagePanel.render();
   },
   onLost: (helper, enemy) => {
-    hud.toast(`A ${enemy.definition.label.toLowerCase()} knocked out a helper — it ran home to its nest`);
+    hud.log('combat', `The ${enemy.definition.label.toLowerCase()} knocked out ${helpers.nameOf(helper)} — it woke up in its nest without a job`);
     if (helpersPanel.isOpen) helpersPanel.render();
     persist();
   },
   onSound: (name, helper) => {
     if (helper.inside === underground) soundAt(name, helper.x, helper.z, 0.45);
   },
+  onLog: (kind, text) => hud.log(kind, text),
 });
 const helpersPanel = createHelpersPanel(hud.root, {
   helpers,
@@ -641,17 +642,17 @@ const guardOf = (spot) => (spot.guardKind && enemies.list.find((enemy) => enemy.
 function rescueHelperAt(spot) {
   const guard = guardOf(spot);
   if (guard) {
-    hud.toast(`The ${guard.definition.label.toLowerCase()} guards this helper — defeat it first`);
+    hud.log('notice', `The ${guard.definition.label.toLowerCase()} guards this helper — defeat it first`);
     return null;
   }
   if (!burrow.exists || !helpers.freeNest()) {
-    hud.toast('Build a helper nest in your burrow first — then come back for this crab');
+    hud.log('notice', 'Build a helper nest in your burrow first — then come back for this crab');
     return null;
   }
   const helper = helpers.rescue(spot);
   if (!helper) return null;
   soundAt('recoverRemains');
-  hud.toast('A helper crab joined your nest — give it a job from Helpers');
+  hud.log('helper', 'A helper crab joined your nest — give it a job from Helpers');
   refreshHud(null);
   persist();
   return helper;
@@ -800,7 +801,7 @@ function updateTide(deltaTime) {
   seaUniforms.uWetLevel.value = tideState.wetLevel;
   if (wasRising && !tideState.rising && deltaTime > 0) {
     const returned = resources.washAshore(player);
-    if (returned > 0) hud.toast('The tide left new things on the beach');
+    if (returned > 0) hud.log('loot', 'The tide left new things on the beach');
   }
 }
 
@@ -900,7 +901,7 @@ function digEntranceAt(x, z) {
   blockEntrance();
   save.burrow = burrow.serialize();
   soundAt('craft');
-  hud.toast('Burrow dug — walk to it, then tap Enter burrow');
+  hud.log('build', 'Burrow dug — walk to it, then tap Enter burrow');
   refreshHud(null);
   persist();
 }
@@ -920,7 +921,7 @@ function chooseEntranceSpot(x, z) {
   const problem = entranceSpotProblem(x, z);
   showSpotFeedback(x, z, !problem);
   if (problem) {
-    hud.toast(problem === 'wet' ? 'Too wet — pick sand above the high-tide line' : 'No room — pick open sand away from rocks');
+    hud.log('notice', problem === 'wet' ? 'Too wet — pick sand above the high-tide line' : 'No room — pick open sand away from rocks');
     return false;
   }
   placement.entrance = false;
@@ -954,7 +955,7 @@ function buildStation(kind, column, row) {
     if (free) Object.assign(player, { x: free.x, z: free.z });
   }
   soundAt('craft');
-  hud.toast({ workshop: 'Workshop built — tap it to craft', exit: 'Exit dug — walk to it to go up', crabBed: 'Crab bed built — tap it to sleep' }[kind] || `${definition.label} built — tap it to open`);
+  hud.log('build', { workshop: 'Workshop built — tap it to craft', exit: 'Exit dug — walk to it to go up', crabBed: 'Crab bed built — tap it to sleep' }[kind] || `${definition.label} built — tap it to open`);
   refreshHud(null);
   persist();
   return true;
@@ -965,13 +966,13 @@ function buildRackStation() {
   if (rack.exists || !burrow.exists || !canAfford(definition.cost, save.inventory)) return false;
   const built = rack.build(burrow.state.entrance);
   if (!built) {
-    hud.toast('No room beside the entrance for a drying rack');
+    hud.log('notice', 'No room beside the entrance for a drying rack');
     return false;
   }
   for (const [type, amount] of Object.entries(definition.cost)) save.inventory[type] -= amount;
   rackBlockedCells = world.blockCircle(built.x, built.z, RACK_BLOCK_RADIUS);
   soundAt('craft');
-  hud.toast('Drying rack built beside your burrow entrance');
+  hud.log('build', 'Drying rack built beside your burrow entrance');
   refreshHud(null);
   persist();
   return true;
@@ -982,7 +983,7 @@ function eatKelp() {
   save.inventory.driedKelp -= 1;
   player.wellFedUntil = simulationTime + WELL_FED_SECONDS;
   soundAt('gatherSeaLettuce');
-  hud.toast('Well fed — HP comes back twice as fast for 90 s');
+  hud.log('progress', 'Well fed — HP comes back twice as fast for 90 s');
   persist();
   return true;
 }
@@ -1055,7 +1056,7 @@ function buildWorkshop() {
 function noticeHold() {
   if (save.holdFound || underground || !isInHold(player.x, player.z)) return;
   save.holdFound = true;
-  hud.toast('The shipwreck\'s galley! Something big is cooking in here');
+  hud.log('discovery', 'The shipwreck\'s galley! Something big is cooking in here');
   refreshHud(null);
   persist();
 }
@@ -1063,7 +1064,7 @@ function noticeHold() {
 function noticeCamp() {
   if (save.campFound || underground || !isInCamp(player.x, player.z)) return;
   save.campFound = true;
-  hud.toast('A pirate camp! Giants sleep here — mind the rats and the cat');
+  hud.log('discovery', 'A pirate camp! Giants sleep here — mind the rats and the cat');
   refreshHud(null);
   persist();
 }
@@ -1071,7 +1072,7 @@ function noticeCamp() {
 function noticeReef() {
   if (save.reefFound || underground || !world.isOnReef(player.x, player.z)) return;
   save.reefFound = true;
-  hud.toast('You found the reef — coral and sea glass wash up here');
+  hud.log('discovery', 'You found the reef — coral and sea glass wash up here');
   refreshHud(null);
   persist();
 }
@@ -1269,7 +1270,7 @@ function occupiedBurrowCells() {
 function startFillCell(column, row) {
   const problem = burrow.fillProblem(column, row, occupiedBurrowCells());
   if (problem) {
-    hud.toast(FILL_PROBLEM_TEXT[problem] || 'Cannot fill there');
+    hud.log('notice', FILL_PROBLEM_TEXT[problem] || 'Cannot fill there');
     return false;
   }
   const target = cellCenter(column, row);
@@ -1304,7 +1305,7 @@ function craftItem(category, kind) {
   if (craftedTier === 2) save.reefGearCrafted = true;
   if (craftedTier === 3) save.campGearCrafted = true;
   soundAt('craft');
-  hud.toast(`New ${label.toLowerCase()}! Open the backpack to wear it`);
+  hud.log('progress', `New ${label.toLowerCase()}! Open the backpack to wear it`);
   hud.setBagDot(true);
   refreshHud(null);
   workbenchPanel.render();
@@ -1313,7 +1314,7 @@ function craftItem(category, kind) {
 }
 
 function gearChanged(message) {
-  if (message) hud.toast(message);
+  if (message) hud.log('progress', message);
   applyWornLook();
   refreshHud(null);
   persist();
@@ -1362,7 +1363,7 @@ function startMolt(kind) {
   player.moltKind = kind;
   player.moltTimer = MOLT_SECONDS;
   moltPanel.close();
-  hud.toast(`Molting… ${MOLT_SECONDS} s`);
+  hud.log('progress', `Molting… ${MOLT_SECONDS} s`);
   refreshHud(null);
   persist();
   return true;
@@ -1376,7 +1377,7 @@ function finishMolt() {
   player.softUntil = simulationTime + SOFT_SECONDS;
   soundAt('levelUp');
   applyWornLook();
-  hud.toast(`${MOLT_KINDS[kind].icon} New skin! ${MOLT_KINDS[kind].label} claw grew · soft for ${SOFT_SECONDS / 60} min`);
+  hud.log('progress', `${MOLT_KINDS[kind].icon} New skin! ${MOLT_KINDS[kind].label} claw grew · soft for ${SOFT_SECONDS / 60} min`);
   refreshHud(null);
   persist();
 }
@@ -1386,7 +1387,7 @@ function salvageItem(id) {
   const refund = gear.salvage(id, save.inventory);
   if (!refund) return null;
   soundAt('craft');
-  hud.toast(`${found.definition.label} salvaged — +${materialsText(refund)}`);
+  hud.log('loot', `${found.definition.label} salvaged — +${materialsText(refund)}`);
   backpack.render();
   refreshHud(null);
   persist();
@@ -1448,7 +1449,7 @@ function moveStationTo(column, row) {
     if (free) Object.assign(player, { x: free.x, z: free.z });
   }
   soundAt('craft');
-  hud.toast(`${STATION_KINDS[station.kind].label} moved`);
+  hud.log('build', `${STATION_KINDS[station.kind].label} moved`);
   persist();
   return true;
 }
@@ -1471,7 +1472,7 @@ function moveRackTo(x, z) {
   showSpotFeedback(x, z, !problem);
   if (problem) {
     rackBlockedCells = world.blockCircle(rack.state.x, rack.state.z, RACK_BLOCK_RADIUS);
-    hud.toast({ far: 'Keep the rack near your burrow entrance', wet: 'Too wet here — the kelp would never dry', blocked: 'No room here — pick open sand' }[problem]);
+    hud.log('notice', { far: 'Keep the rack near your burrow entrance', wet: 'Too wet here — the kelp would never dry', blocked: 'No room here — pick open sand' }[problem]);
     return false;
   }
   rack.moveTo(x, z);
@@ -1481,7 +1482,7 @@ function moveRackTo(x, z) {
     if (free) Object.assign(player, { x: free.x, z: free.z });
   }
   soundAt('craft');
-  hud.toast('Drying rack moved');
+  hud.log('build', 'Drying rack moved');
   persist();
   return true;
 }
@@ -1495,15 +1496,15 @@ function dismantleStructure(target) {
   const targetStation = typeof target === 'string' ? (kind === 'dryingRack' ? null : burrow.stationOf(kind)) : target;
   const definition = STATION_KINDS[kind];
   if (kind === 'storage' && !boxIsEmpty(storage)) {
-    hud.toast('Empty the storage first');
+    hud.log('notice', 'Empty the storage first');
     return false;
   }
   if (kind === 'helperNest' && helpers.list.some((helper) => helper.nestId === targetStation.id)) {
-    hud.toast('Helpers live in this nest — it has to stay');
+    hud.log('notice', 'Helpers live in this nest — it has to stay');
     return false;
   }
   if (kind === 'helperNest' && !boxIsEmpty(targetStation.box)) {
-    hud.toast('Empty the nest box first');
+    hud.log('notice', 'Empty the nest box first');
     return false;
   }
   const refund = { ...definition.cost };
@@ -1527,7 +1528,7 @@ function dismantleStructure(target) {
   closeStructurePanels();
   for (const [type, amount] of Object.entries(refund)) save.inventory[type] = (save.inventory[type] || 0) + amount;
   soundAt('craft');
-  hud.toast(`${definition.label} dismantled — +${materialsText(refund)}`);
+  hud.log('build', `${definition.label} dismantled — +${materialsText(refund)}`);
   refreshHud(null);
   persist();
   return true;
@@ -1624,10 +1625,29 @@ function playerStats() {
   return gear.stats(progression.attackBonus(), { ...progression.combatModifiers(), defenseFactor: isSoft() ? SOFT_DEFENSE_FACTOR : 1 });
 }
 
-function rollDamage(attack, defense) {
+function rollDamageDetailed(attack, defense) {
   const spread = 1 - DAMAGE_SPREAD + 2 * DAMAGE_SPREAD * random();
-  return Math.max(1, Math.round(Math.max(1, attack - defense / 2) * spread));
+  const blocked = Math.min(attack - 1, defense / 2);
+  return { damage: Math.max(1, Math.round(Math.max(1, attack - defense / 2) * spread)), blocked, spread };
 }
+
+const rollDamage = (attack, defense) => rollDamageDetailed(attack, defense).damage;
+const roundedText = (value) => String(Math.round(value * 10) / 10);
+const rollText = (spread) => `roll ${Math.round(spread * 100)} %`;
+
+function armourParts() {
+  const item = gear.wornShell();
+  if (!item) return isSoft() ? 'no shell, soft skin' : 'no shell';
+  const definition = gear.wornShellDefinition();
+  const qualityDefense = Math.round(definition.defense * qualityFactor(item));
+  const parts = [`${QUALITIES[item.quality || 'fine'].label} ${definition.label.toLowerCase()} ${qualityDefense}`];
+  const reinforcementBonus = shellDefenseOf(definition, item) - qualityDefense;
+  if (reinforcementBonus) parts.push(`${REINFORCEMENTS[item.reinforcement].label.toLowerCase()} +${reinforcementBonus}`);
+  if (isSoft()) parts.push(`soft skin ×${SOFT_DEFENSE_FACTOR}`);
+  return parts.join(', ');
+}
+
+const healthText = () => `HP ${Math.max(0, Math.ceil(progression.state.health))}/${progression.maxHealth()}`;
 
 function floatAt(x, y, z, text, kind) {
   projected.set(x, y, z).project(camera);
@@ -1652,7 +1672,11 @@ function strike(enemy) {
   const stats = playerStats();
   player.hitCount++;
   const isSting = stats.ability && stats.ability.id === 'sting' && player.hitCount % (stats.ability.everyHits || STING_EVERY_HITS) === 0;
-  const damage = rollDamage(stats.attack, stats.ability && stats.ability.pierce ? 0 : enemy.definition.defense) * (isSting ? 2 : 1);
+  const pierces = Boolean(stats.ability && stats.ability.pierce);
+  const roll = rollDamageDetailed(stats.attack, pierces ? 0 : enemy.definition.defense);
+  const damage = roll.damage * (isSting ? 2 : 1);
+  const armourText = pierces ? 'armour pierced' : `its armour ${enemy.definition.defense || 0} blocks ${roundedText(roll.blocked)}`;
+  hud.log('combat', `You hit ${enemy.definition.label} for ${damage} — attack ${stats.attack}, ${armourText}, ${rollText(roll.spread)}${isSting ? ', sting ×2' : ''}`);
   player.lastCombatTime = simulationTime;
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.7, enemy.z, isSting ? `${damage}!` : String(damage), isSting ? 'sting' : 'dealt');
   hermit.playAttack(isSting ? 'both' : player.hitCount % 2 ? 'big' : 'small');
@@ -1662,22 +1686,33 @@ function strike(enemy) {
   progression.practiceClaws();
   if (stats.healOnHit && progression.state.health < progression.maxHealth()) {
     progression.state.health = Math.min(progression.maxHealth(), progression.state.health + stats.healOnHit);
-    floatAt(player.x, player.y + 2.2, player.z, `+${stats.healOnHit} ❤`, 'experience');
+    hud.log('combat', `Your claws heal you +${stats.healOnHit} · ${healthText()}`);
   }
 }
 
 function hitPlayer(enemy) {
   if (player.dyingTimer > 0) return;
   const stats = playerStats();
-  let damage = rollDamage(enemy.definition.attack, stats.defense);
-  if (stats.ability && stats.ability.dreadFactor) damage = Math.max(1, Math.round(damage * stats.ability.dreadFactor));
+  const roll = rollDamageDetailed(enemy.definition.attack, stats.defense);
+  let damage = roll.damage;
+  const modifiers = [];
+  if (stats.ability && stats.ability.dreadFactor) {
+    damage = Math.max(1, Math.round(damage * stats.ability.dreadFactor));
+    modifiers.push(`dread ×${stats.ability.dreadFactor}`);
+  }
   const braced = stats.ability && stats.ability.id === 'brace' && player.speed < BRACE_MAXIMUM_SPEED;
-  if (braced) damage = Math.max(1, Math.round(damage * (stats.ability.damageFactor || BRACE_DAMAGE_FACTOR)));
+  if (braced) {
+    const braceFactor = stats.ability.damageFactor || BRACE_DAMAGE_FACTOR;
+    damage = Math.max(1, Math.round(damage * braceFactor));
+    modifiers.push(`brace ×${braceFactor}`);
+  }
   if (stats.thorns && enemies.alive(enemy)) {
     floatAt(enemy.x, enemy.y + enemy.definition.barHeight * 0.7, enemy.z, `${stats.thorns}`, 'sting');
+    hud.log('combat', `Your spikes hit ${enemy.definition.label} for ${stats.thorns}`);
     enemies.damage(enemy, stats.thorns, simulationTime);
   }
   progression.state.health -= damage;
+  hud.log('combat', `${enemy.definition.label} hits you for ${damage} — attack ${enemy.definition.attack}, your armour ${stats.defense} blocks ${roundedText(roll.blocked)} [${armourParts()}], ${rollText(roll.spread)}${modifiers.length ? `, ${modifiers.join(', ')}` : ''} · ${healthText()}`);
   player.lastCombatTime = simulationTime;
   floatAt(player.x, player.y + 2.4, player.z, `−${damage}`, 'taken');
   hud.flashHurt();
@@ -1709,7 +1744,7 @@ function regionAt(x, z) {
 
 function giveMaterial(type, amount, enemy) {
   save.inventory[type] = (save.inventory[type] || 0) + amount;
-  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.55, enemy.z, `+${amount} ${RESOURCE_TYPES[type].label}`, 'experience');
+  hud.log('loot', `+${amount} ${RESOURCE_TYPES[type].label}`);
   refreshHud(type);
 }
 
@@ -1729,14 +1764,14 @@ function dropLoot(enemy) {
       soundAt('craft');
     }
     const opening = enemy.definition.flees ? `${enemy.definition.label} lost his nerve and fled! Dropped` : `${enemy.definition.label} dropped`;
-    hud.toast(`${opening} ${message.join(' ')} · back in 24 h`);
+    hud.log('loot', `${opening} ${message.join(' ')} · back in 24 h`);
     return;
   }
   const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
   if (minibossMaterial) {
     giveMaterial(minibossMaterial, BOSS_MATERIAL_DROP, enemy);
     const pearls = enemy.definition.pearlCount || 0;
-    hud.toast(`${enemy.definition.label} dropped ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[minibossMaterial].label.toLowerCase()}s${pearls ? ` · ${pearls} pearls` : ''} · back in 15 min`);
+    hud.log('loot', `${enemy.definition.label} dropped ${BOSS_MATERIAL_DROP} ${RESOURCE_TYPES[minibossMaterial].label.toLowerCase()}s${pearls ? ` · ${pearls} pearls` : ''} · back in 15 min`);
     return;
   }
   const drops = enemy.definition.drops || [];
@@ -1746,7 +1781,7 @@ function dropLoot(enemy) {
 function rewardHelperKill(helper, enemy) {
   const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, helper.level || 1);
   const levelsGained = helpers.gainExperience(helper, experience);
-  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `Helper +${experience} XP`, 'experience');
+  hud.log('helper', `${helpers.nameOf(helper)} defeated the ${enemy.definition.label.toLowerCase()} (+${experience} XP)`);
   const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
   const trophy = BOSS_TROPHIES[enemy.kind];
   const drops = enemy.definition.drops || [];
@@ -1755,7 +1790,7 @@ function rewardHelperKill(helper, enemy) {
     helpers.bringHome(helper, trophy.material, BOSS_MATERIAL_DROP);
   } else if (minibossMaterial) helpers.bringHome(helper, minibossMaterial, BOSS_MATERIAL_DROP);
   else if (drops.length) helpers.bringHome(helper, drops[Math.floor(random() * drops.length)], 1);
-  if (levelsGained) hud.toast(`A helper reached level ${helper.level}!`);
+  if (levelsGained) hud.log('helper', `${helpers.nameOf(helper)} reached level ${helper.level}!`);
   if (helpersPanel.isOpen) helpersPanel.render();
   persist();
 }
@@ -1764,18 +1799,19 @@ function enemyKilled(enemy, attacker = null) {
   if (player.combatTarget === enemy) player.combatTarget = null;
   if (attacker && attacker.helperId && attacker.job === 'follow') {
     const helperExperience = experienceForKill(enemy.definition.experience, enemy.definition.level, attacker.level || 1);
-    if (helpers.gainExperience(attacker, helperExperience)) hud.toast(`A helper reached level ${attacker.level}!`);
+    hud.log('helper', `${helpers.nameOf(attacker)} landed the final blow (+${helperExperience} XP)`);
+    if (helpers.gainExperience(attacker, helperExperience)) hud.log('helper', `${helpers.nameOf(attacker)} reached level ${attacker.level}!`);
   } else if (attacker && attacker.helperId) {
     rewardHelperKill(attacker, enemy);
     return;
   }
   const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, progression.state.level);
   const levelsGained = progression.gainExperience(experience);
-  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${experience} XP`, 'experience');
+  hud.log('combat', `${enemy.definition.label} defeated (+${experience} XP)`);
   if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
     const pearls = enemy.definition.pearlCount || 1;
     save.inventory.pearls = (save.inventory.pearls || 0) + pearls;
-    if (!BOSS_TROPHIES[enemy.kind] && !MINIBOSS_MATERIALS[enemy.kind]) hud.toast(pearls > 1 ? `The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
+    if (!BOSS_TROPHIES[enemy.kind] && !MINIBOSS_MATERIALS[enemy.kind]) hud.log('loot', pearls > 1 ? `The ${enemy.definition.label.toLowerCase()} dropped ${pearls} pearls!` : `The ${enemy.definition.label.toLowerCase()} dropped a pearl!`);
     refreshHud('pearls');
   }
   dropLoot(enemy);
@@ -1786,7 +1822,7 @@ function enemyKilled(enemy, attacker = null) {
 function announceLevel() {
   soundAt('levelUp');
   const moltReady = progression.moltsAvailable() ? ' · you can molt in your burrow' : '';
-  hud.toast(`Level ${progression.state.level}! Max HP +8 · attack +1${moltReady}`);
+  hud.log('progress', `Level ${progression.state.level}! Max HP +8 · attack +1${moltReady}`);
 }
 
 function wakeSpot() {
@@ -1823,7 +1859,7 @@ function finishDeath() {
   setUnderground(burrow.exists);
   Object.assign(player, { x: spot.x, z: spot.z, y: space().heightAt(spot.x, spot.z), speed: 0 });
   updateCamera(0, true);
-  hud.toast('You were defeated — your things wait in your remains');
+  hud.log('combat', 'You were defeated — your things wait in your remains');
   refreshHud(null);
   persist();
 }
@@ -1834,7 +1870,7 @@ function recoverRemains(entry) {
   applyWornLook();
   remains.remove(entry);
   soundAt('recoverRemains');
-  hud.toast('You recovered your things');
+  hud.log('loot', 'You recovered your things');
   refreshHud('remains');
   persist();
 }
@@ -1988,7 +2024,7 @@ function updatePlayer(deltaTime) {
         else if (dig.kind === 'fill') {
           if (burrow.fillProblem(dig.column, dig.row, occupiedBurrowCells())) {
             burrow.setFillProgress(-1, 0);
-            hud.toast('Could not fill — something is in the way');
+            hud.log('notice', 'Could not fill — something is in the way');
           } else {
             burrow.finishFill(dig.column, dig.row);
             save.burrow = burrow.serialize();
@@ -2049,14 +2085,13 @@ function updatePlayer(deltaTime) {
         resources.gather(target);
         soundAt(`gather${target.type[0].toUpperCase()}${target.type.slice(1)}`);
         save.inventory[target.type] = (save.inventory[target.type] || 0) + 1;
-        hud.toast(`+1 ${RESOURCE_TYPES[target.type].icon} ${RESOURCE_TYPES[target.type].label}`);
-        floatAt(target.x, target.y + 1.4, target.z, `+${GATHER_EXPERIENCE} XP`, 'experience');
+        hud.log('loot', `+1 ${RESOURCE_TYPES[target.type].label} (+${GATHER_EXPERIENCE} XP)`);
         if (progression.gainExperience(GATHER_EXPERIENCE)) announceLevel();
         refreshHud(target.type);
         player.gatherTarget = null;
         if (goalReached() && !save.goalAnnounced) {
           save.goalAnnounced = true;
-          hud.toast(burrow.exists ? 'Enough for a workshop — build it in your burrow' : 'Enough for a workshop — dig a burrow first');
+          hud.log('progress', burrow.exists ? 'Enough for a workshop — build it in your burrow' : 'Enough for a workshop — dig a burrow first');
         }
         persist();
       }
@@ -2120,7 +2155,7 @@ function wakeUp(rested) {
   hud.setMode(null);
   if (rested) {
     player.restedUntil = simulationTime + RESTED_SECONDS;
-    hud.toast('You wake up rested — faster healing and +10% speed for 15 min');
+    hud.log('progress', 'You wake up rested — faster healing and +10% speed for 15 min');
   }
   persist();
 }
@@ -2241,6 +2276,25 @@ const pixelRatioControl = {
 let rendersFrames = !searchParameters.has('norender');
 const fixedPixelRatio = searchParameters.has('dpr') ? Number(searchParameters.get('dpr')) : isScreenshotMode ? Math.min(devicePixelRatio, 2) : null;
 const performanceMonitor = createPerformanceMonitor(pixelRatioControl, { fixedPixelRatio });
+const SHOW_PERFORMANCE_KEY = 'seaofcrabs-show-performance';
+function readShowPerformance() {
+  try {
+    return localStorage.getItem(SHOW_PERFORMANCE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+function setShowPerformance(visible) {
+  performanceMonitor.setVisible(visible);
+  hud.setPerformanceToggle(visible);
+  try {
+    localStorage.setItem(SHOW_PERFORMANCE_KEY, visible ? '1' : '0');
+  } catch {
+    /* storage unavailable: the choice lasts until reload */
+  }
+}
+setShowPerformance(readShowPerformance());
+hud.onPerformanceToggle(setShowPerformance);
 addEventListener('resize', resize);
 resize();
 
@@ -2333,7 +2387,7 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
     if (!isNewTouch) return;
     const point = burrow.pointOnFloor(clientX, clientY, camera, raycaster);
     if (point && moveStationTo(point.column, point.row)) cancelPlacement();
-    else if (point) hud.toast('Pick one of the glowing spots');
+    else if (point) hud.log('notice', 'Pick one of the glowing spots');
     return;
   }
   if (placement.filling) {
@@ -2348,7 +2402,7 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
       return distance < EXIT_PICK_DISTANCE && (!best || distance < best.distance) ? { candidate, distance } : best;
     }, null);
     if (spot && buildStation('exit', spot.candidate.column, spot.candidate.row)) cancelPlacement();
-    else if (floor) hud.toast('Pick one of the glowing spots');
+    else if (floor) hud.log('notice', 'Pick one of the glowing spots');
     return;
   }
   if (placement.station) {
@@ -2356,7 +2410,7 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
     const point = burrow.pointOnFloor(clientX, clientY, camera, raycaster);
     const free = point && burrow.freeCells().find((cell) => cell.column === point.column && cell.row === point.row);
     if (free && buildStation(placement.station, free.column, free.row)) cancelPlacement();
-    else if (point) hud.toast('Pick one of the glowing spots');
+    else if (point) hud.log('notice', 'Pick one of the glowing spots');
     return;
   }
   if (isNewTouch) {
@@ -2375,7 +2429,7 @@ function handleBurrowTap(clientX, clientY, isNewTouch) {
   if (!point) return;
   if (point.wall) {
     if (!isNewTouch) return;
-    if (!startDigCell(point.column, point.row)) hud.toast('Dig next to an open part of your burrow');
+    if (!startDigCell(point.column, point.row)) hud.log('notice', 'Dig next to an open part of your burrow');
     return;
   }
   setDestination(point.x, point.z);
@@ -2805,7 +2859,7 @@ if (isScreenshotMode) {
 }
 
 window.__debug = {
-  simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
+  hud, setShowPerformance, simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, salvageItem, startMovingStructure, dismantleStructure, moveStationTo, moveRackTo, isRecipeDiscovered, placement, cancelPlacement, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
   audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, equipHelper, openMap, startFillMode, startFillCell, startSleeping, wakeUp, isRested, mapView, fog, exitCellProblem, chooseStation, nearestTravelPoint, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },

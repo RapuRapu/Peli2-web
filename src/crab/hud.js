@@ -1,4 +1,5 @@
 import { QUALITY_LEVELS } from './quality.js';
+import { createGameLog } from './gameLog.js';
 
 function element(tag, className, parent, text) {
   const node = document.createElement(tag);
@@ -61,7 +62,7 @@ export function createHud(activeQualityName) {
   const tideLabel = element('span', '', tide, '🌊');
   const tideFill = element('div', 'tide-fill', element('div', 'tide-gauge', tide));
 
-  const toastBox = element('div', 'toast', root);
+  const gameLog = createGameLog(root);
 
   const pauseMenu = element('div', 'pause-menu', root);
   const pauseCard = element('div', 'pause-card', pauseMenu);
@@ -83,6 +84,11 @@ export function createHud(activeQualityName) {
     input.addEventListener('input', () => volumeListener(key, Number(input.value)));
     volumeInputs[key] = input;
   }
+  element('div', 'pause-note', pauseCard, 'Display');
+  const performanceRow = element('label', 'toggle-row', pauseCard, 'Show performance');
+  const performanceToggle = element('input', '', performanceRow);
+  performanceToggle.type = 'checkbox';
+  performanceToggle.addEventListener('change', () => performanceListener(performanceToggle.checked));
   const resetButton = element('button', 'reset', pauseCard, 'Start over');
   element('div', 'pause-note', pauseCard, 'The game saves on its own.');
 
@@ -93,13 +99,13 @@ export function createHud(activeQualityName) {
   let mapListener = () => {};
   let bagListener = () => {};
   let volumeListener = () => {};
+  let performanceListener = () => {};
   let buildListener = () => {};
   let helpersListener = () => {};
   let moltListener = () => {};
   let modeCancelListener = () => {};
   let travelListener = () => {};
   let travelShown = null;
-  let toastTimer = 0;
   let resetArmed = false;
 
   pauseButton.addEventListener('click', () => pauseListener(true));
@@ -128,6 +134,14 @@ export function createHud(activeQualityName) {
     onReset: (listener) => { resetListener = listener; },
     onQuality: (listener) => { qualityListener = listener; },
     onVolume: (listener) => { volumeListener = listener; },
+    onPerformanceToggle: (listener) => { performanceListener = listener; },
+    setPerformanceToggle(visible) {
+      performanceToggle.checked = visible;
+    },
+    gameLog,
+    log(kind, text) {
+      gameLog.post(kind, text);
+    },
     setVolumes(values) {
       for (const [key, input] of Object.entries(volumeInputs)) input.value = values[key];
     },
@@ -223,12 +237,6 @@ export function createHud(activeQualityName) {
       deathFade.classList.remove('visible');
       void deathFade.offsetWidth;
       deathFade.classList.add('visible');
-    },
-    toast(text) {
-      toastBox.textContent = text;
-      toastBox.classList.add('visible');
-      clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => toastBox.classList.remove('visible'), 2600);
     },
     setVisible(visible) {
       root.style.display = visible ? '' : 'none';

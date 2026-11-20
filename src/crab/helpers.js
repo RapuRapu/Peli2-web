@@ -72,7 +72,7 @@ export function expectsToWin(helper, enemy) {
   return (enemy.health / helperPerSecond) * WIN_MARGIN < helper.health / enemyPerSecond;
 }
 
-export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, getPlayer, isUnderground, onDeposit, onLost, onSound }) {
+export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, getPlayer, isUnderground, onDeposit, onLost, onSound, onLog = () => {} }) {
   const savedState = Array.isArray(saved) ? { list: saved, rescued: [] } : saved || { list: [], rescued: [] };
   const list = savedState.list.map((entry) => {
     const helper = { job: null, nestId: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, ...entry, helperId: entry.id, state: 'resting', inside: true, path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, load: entry.load || 0, targetId: null };
@@ -224,6 +224,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     const target = player.combatTarget && enemies.alive(player.combatTarget) && Math.hypot(player.combatTarget.x - helper.x, player.combatTarget.z - helper.z) < ASSIST_RANGE ? player.combatTarget : null;
     const threat = helper.inside ? null : threatNear(helper);
     if (threat && threat.distance < DANGER_DISTANCE && inDanger(helper, threat.enemy)) {
+      onLog('helper', `${nameOf(helper)} stops following and flees from the ${threat.enemy.definition.label.toLowerCase()}`);
       stopFollowing(helper, true);
       return;
     }
@@ -245,6 +246,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       helper.attackTimer = stats.attackInterval;
       onSound('shellClonk', helper);
       helper.attackAnimPending = true;
+      logHelperHit(helper, target, stats);
       enemies.damage(target, hitDamage(stats.attack, target.definition.defense || 0), time, helper, { provoke: false });
       return;
     }
@@ -454,6 +456,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     helper.attackTimer = stats.attackInterval;
     onSound('shellClonk', helper);
     helper.attackAnimPending = true;
+    logHelperHit(helper, enemy, stats);
     const killed = enemies.damage(enemy, hitDamage(stats.attack, enemy.definition.defense || 0), time, helper, { provoke: false });
     if (killed) helper.fightTargetId = null;
   }
@@ -503,8 +506,11 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       helper.biteTimer = (helper.biteTimer || 0) - deltaTime;
       if (helper.biteTimer <= 0) {
         helper.biteTimer = threat.enemy.definition.attackInterval;
-        helper.health -= hitDamage(threat.enemy.definition.attack, helperStats(helper).defense);
+        const defense = helperStats(helper).defense;
+        const damage = hitDamage(threat.enemy.definition.attack, defense);
+        helper.health -= damage;
         helper.hurtAnimPending = true;
+        onLog('combat', `${threat.enemy.definition.label} hits ${nameOf(helper)} for ${damage} — attack ${threat.enemy.definition.attack}, shell ${defense} blocks ${Math.min(threat.enemy.definition.attack - 1, defense / 2)} · HP ${Math.max(0, Math.ceil(helper.health))}/${helperMaxHealth(helper)}`);
         onSound('shellClonk', helper);
         if (helper.health <= 0) {
           knockedOut(helper, threat.enemy);
@@ -523,8 +529,13 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       return;
     }
     if (threat && threat.distance < DANGER_DISTANCE && helper.state !== 'fleeing') {
-      if (expectsToWin(helper, threat.enemy)) startFight(helper, threat.enemy);
-      else headHome(helper, true);
+      if (expectsToWin(helper, threat.enemy)) {
+        onLog('helper', `${nameOf(helper)} takes on the ${threat.enemy.definition.label.toLowerCase()}`);
+        startFight(helper, threat.enemy);
+      } else {
+        onLog('helper', `${nameOf(helper)} flees from the ${threat.enemy.definition.label.toLowerCase()}`);
+        headHome(helper, true);
+      }
     }
     if (helper.state === 'toRack') {
       step(helper, deltaTime, WALK_SPEED);
@@ -692,6 +703,13 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     }
   }
 
+  const nameOf = (helper) => `Helper ${list.indexOf(helper) + 1}`;
+
+  function logHelperHit(helper, enemy, stats) {
+    const defense = enemy.definition.defense || 0;
+    onLog('combat', `${nameOf(helper)} hits ${enemy.definition.label} for ${hitDamage(stats.attack, defense)} — attack ${stats.attack}, its armour ${defense} blocks ${Math.min(stats.attack - 1, defense / 2)}`);
+  }
+
   const follower = () => list.find((helper) => helper.job === 'follow') || null;
 
   function setJob(id, job, carryOrder = null) {
@@ -712,5 +730,5 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
 
   for (const helper of list) placeAtNest(helper);
 
-  return { list, follower, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [carryMesh] };
+  return { list, nameOf, follower, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [carryMesh] };
 }

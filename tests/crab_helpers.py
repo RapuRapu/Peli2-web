@@ -52,7 +52,7 @@ FLOW = r'''
   Object.assign(crab, { state: 'idle', health: crab.definition.health, x: runner.x + 1, z: runner.z, respawnTimer: 0 });
   runner.health = 1;
   step(3, () => runner.inside);
-  out.knockedOut = { inside: runner.inside, job: runner.job, count: d.helpers.list.length, toast: document.querySelector('#hud .toast').textContent };
+  out.knockedOut = { inside: runner.inside, job: runner.job, count: d.helpers.list.length, toast: d.hud.gameLog.entries.map((entry) => entry.text).join(' | ') };
   Object.assign(crab, { state: 'dead', respawnTimer: 1e9 });
 
   const carrier = d.helpers.list[1];
