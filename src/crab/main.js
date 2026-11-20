@@ -453,9 +453,11 @@ const enemies = createEnemies({
     player.inkSpeedFactor = factor;
     player.lastCombatTime = simulationTime;
     hud.log('combat', `${enemy.definition.label} inks you — slowed ${Math.round((1 - factor) * 100)} % for ${seconds} s`);
+    floatAt(player.x, player.y + 2.4, player.z, `Slowed ${Math.round((1 - factor) * 100)}%`, 'taken');
   },
   onDodge: (enemy) => {
     hud.log('combat', `You dodged the ${enemy.definition.label.toLowerCase()}`);
+    floatAt(player.x, player.y + 2.4, player.z, 'Dodged!', 'experience');
     soundAt('hitThud', enemy.x, enemy.z, 0.7);
   },
 });
@@ -1687,6 +1689,7 @@ function strike(enemy) {
   if (stats.healOnHit && progression.state.health < progression.maxHealth()) {
     progression.state.health = Math.min(progression.maxHealth(), progression.state.health + stats.healOnHit);
     hud.log('combat', `Your claws heal you +${stats.healOnHit} · ${healthText()}`);
+    floatAt(player.x, player.y + 2.2, player.z, `+${stats.healOnHit} ❤`, 'experience');
   }
 }
 
@@ -1745,6 +1748,7 @@ function regionAt(x, z) {
 function giveMaterial(type, amount, enemy) {
   save.inventory[type] = (save.inventory[type] || 0) + amount;
   hud.log('loot', `+${amount} ${RESOURCE_TYPES[type].label}`);
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight * 0.55, enemy.z, `+${amount} ${RESOURCE_TYPES[type].label}`, 'experience');
   refreshHud(type);
 }
 
@@ -1782,6 +1786,7 @@ function rewardHelperKill(helper, enemy) {
   const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, helper.level || 1);
   const levelsGained = helpers.gainExperience(helper, experience);
   hud.log('helper', `${helpers.nameOf(helper)} defeated the ${enemy.definition.label.toLowerCase()} (+${experience} XP)`);
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `Helper +${experience} XP`, 'experience');
   const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
   const trophy = BOSS_TROPHIES[enemy.kind];
   const drops = enemy.definition.drops || [];
@@ -1808,6 +1813,7 @@ function enemyKilled(enemy, attacker = null) {
   const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, progression.state.level);
   const levelsGained = progression.gainExperience(experience);
   hud.log('combat', `${enemy.definition.label} defeated (+${experience} XP)`);
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${experience} XP`, 'experience');
   if (enemy.definition.pearlChance && random() < enemy.definition.pearlChance) {
     const pearls = enemy.definition.pearlCount || 1;
     save.inventory.pearls = (save.inventory.pearls || 0) + pearls;
@@ -2086,6 +2092,7 @@ function updatePlayer(deltaTime) {
         soundAt(`gather${target.type[0].toUpperCase()}${target.type.slice(1)}`);
         save.inventory[target.type] = (save.inventory[target.type] || 0) + 1;
         hud.log('loot', `+1 ${RESOURCE_TYPES[target.type].label} (+${GATHER_EXPERIENCE} XP)`);
+        floatAt(target.x, target.y + 1.4, target.z, `+${GATHER_EXPERIENCE} XP`, 'experience');
         if (progression.gainExperience(GATHER_EXPERIENCE)) announceLevel();
         refreshHud(target.type);
         player.gatherTarget = null;
