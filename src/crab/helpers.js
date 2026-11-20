@@ -33,6 +33,10 @@ const FLEE_HEALTH_SHARE = 0.3;
 const FIGHT_REACH = 0.9;
 const FIGHT_GIVE_UP_DISTANCE = 12;
 const HELPER_REGEN_PER_SECOND = 1;
+const FOLLOW_DISTANCE = 2.6;
+const FOLLOW_CATCH_UP_DISTANCE = 35;
+const FOLLOW_REPATH_SECONDS = 0.5;
+const ASSIST_RANGE = 16;
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const BODY_COLOR = linearColor(0.92, 0.42, 0.18);
@@ -92,7 +96,7 @@ function buildHelperGeometry(look = SHELL_LOOK) {
   return mergeGeometries(parts.map((part) => (part.index ? part : part)));
 }
 
-export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, onDeposit, onLost, onSound }) {
+export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, getPlayer, isUnderground, onDeposit, onLost, onSound }) {
   const savedState = Array.isArray(saved) ? { list: saved, rescued: [] } : saved || { list: [], rescued: [] };
   const list = savedState.list.map((entry) => {
     const helper = { job: null, nestId: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, ...entry, helperId: entry.id, state: 'resting', inside: true, path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, load: entry.load || 0, targetId: null };
@@ -228,8 +232,90 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     return true;
   }
 
+  function placeNearPlayer(helper) {
+    const player = getPlayer();
+    const underground = isUnderground();
+    const space = underground ? burrow.space : navigation;
+    const spot = space.nearestWalkable(player.x - 1.4, player.z - 1.2, 6) || { x: player.x, z: player.z };
+    Object.assign(helper, { x: spot.x, z: spot.z, inside: underground, path: [], pathIndex: 0, exitPoint: null });
+  }
+
+  function startFollowing(helper) {
+    if (isUnderground()) {
+      helper.inside = true;
+      helper.path = [];
+      helper.pathIndex = 0;
+    } else if (helper.inside) stepOutside(helper);
+    helper.state = 'following';
+    helper.repathTimer = 0;
+  }
+
+  function stopFollowing(helper, fleeing) {
+    helper.fightTargetId = null;
+    if (helper.inside) returnToNest(helper);
+    else headHome(helper, fleeing);
+  }
+
+  function updateFollow(helper, deltaTime, time) {
+    const player = getPlayer();
+    if (!player.alive) {
+      stopFollowing(helper, false);
+      return;
+    }
+    if (helper.inside !== isUnderground()) placeNearPlayer(helper);
+    const target = player.combatTarget && enemies.alive(player.combatTarget) && Math.hypot(player.combatTarget.x - helper.x, player.combatTarget.z - helper.z) < ASSIST_RANGE ? player.combatTarget : null;
+    const threat = helper.inside ? null : threatNear(helper);
+    if (threat && threat.distance < DANGER_DISTANCE && inDanger(helper, threat.enemy)) {
+      stopFollowing(helper, true);
+      return;
+    }
+    if (target && !helper.inside) {
+      helper.fightTargetId = target.id;
+      const distance = Math.hypot(target.x - helper.x, target.z - helper.z);
+      const reach = target.definition.radius + FIGHT_REACH;
+      helper.heading = Math.atan2(target.x - helper.x, target.z - helper.z);
+      if (distance > reach) {
+        const stride = Math.min(distance - reach, FLEE_SPEED * helperStats(helper).speedFactor * deltaTime);
+        const nextX = helper.x + ((target.x - helper.x) / distance) * stride;
+        const nextZ = helper.z + ((target.z - helper.z) / distance) * stride;
+        if (world.isWalkable(nextX, nextZ)) Object.assign(helper, { x: nextX, z: nextZ, moving: true });
+        return;
+      }
+      helper.attackTimer = (helper.attackTimer ?? 0) - deltaTime;
+      if (helper.attackTimer > 0) return;
+      const stats = helperStats(helper);
+      helper.attackTimer = stats.attackInterval;
+      onSound('shellClonk', helper);
+      enemies.damage(target, hitDamage(stats.attack, target.definition.defense || 0), time, helper, { provoke: false });
+      return;
+    }
+    helper.fightTargetId = null;
+    const distance = Math.hypot(player.x - helper.x, player.z - helper.z);
+    if (!helper.inside && distance > FOLLOW_CATCH_UP_DISTANCE) {
+      placeNearPlayer(helper);
+      return;
+    }
+    if (distance <= FOLLOW_DISTANCE) {
+      helper.path = [];
+      helper.pathIndex = 0;
+      return;
+    }
+    helper.repathTimer = (helper.repathTimer || 0) - deltaTime;
+    if (helper.repathTimer <= 0 || helper.pathIndex >= helper.path.length) {
+      helper.repathTimer = FOLLOW_REPATH_SECONDS;
+      const space = helper.inside ? burrow.space : navigation;
+      helper.path = space.findPath(helper.x, helper.z, player.x, player.z);
+      helper.pathIndex = 0;
+    }
+    step(helper, deltaTime, distance > FOLLOW_DISTANCE * 3 ? FLEE_SPEED : WALK_SPEED);
+  }
+
   function leaveNest(helper) {
     if (!helper.job) return;
+    if (helper.job === 'follow') {
+      startFollowing(helper);
+      return;
+    }
     if (helper.job === 'rack') {
       if (!leaveForRack(helper)) helper.restTimer = IDLE_RETRY_SECONDS;
       return;
@@ -300,6 +386,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     let nearest = null;
     for (const enemy of enemies.list) {
       if (enemy.state === 'dead' || enemy.state === 'dying' || enemy.definition.temperament !== 'aggressive') continue;
+      if (enemy.state === 'chase' || enemy.state === 'landing') continue;
       if (enemy.definition.flies && (enemy.altitude || 0) > 2) continue;
       const distance = Math.hypot(enemy.x - helper.x, enemy.z - helper.z);
       if (!nearest || distance < nearest.distance) nearest = { enemy, distance };
@@ -359,6 +446,11 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     }
   }
 
+  function inDanger(helper, enemy) {
+    const nextHit = hitDamage(enemy.definition.attack, helperStats(helper).defense);
+    return helper.health <= Math.max(helperMaxHealth(helper) * FLEE_HEALTH_SHARE, nextHit * 1.2);
+  }
+
   function startFight(helper, enemy) {
     release(helper);
     helper.state = 'fighting';
@@ -379,7 +471,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       headHome(helper, false);
       return;
     }
-    if (helper.health < helperMaxHealth(helper) * FLEE_HEALTH_SHARE && !expectsToWin(helper, enemy)) {
+    if (inDanger(helper, enemy) && !expectsToWin(helper, enemy)) {
       helper.fightTargetId = null;
       headHome(helper, true);
       return;
@@ -434,6 +526,10 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       if (helper.restTimer <= 0) leaveNest(helper);
       return;
     }
+    if (helper.inside && helper.state === 'following') {
+      updateFollow(helper, deltaTime, time);
+      return;
+    }
     if (helper.inside) {
       updateInside(helper, deltaTime);
       return;
@@ -450,6 +546,11 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
           return;
         }
       }
+    }
+    if (helper.state === 'following') {
+      updateFollow(helper, deltaTime, time);
+      helper.y = world.heightAt(helper.x, helper.z);
+      return;
     }
     if (helper.state === 'fighting') {
       updateFight(helper, deltaTime, time);
@@ -620,9 +721,14 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     }
   }
 
+  const follower = () => list.find((helper) => helper.job === 'follow') || null;
+
   function setJob(id, job, carryOrder = null) {
     const helper = list.find((candidate) => candidate.id === id);
     if (!helper) return false;
+    const currentFollower = follower();
+    if (job === 'follow' && currentFollower && currentFollower !== helper) return false;
+    if (helper.job === 'follow' && job !== 'follow' && helper.state === 'following') stopFollowing(helper, false);
     helper.job = job || null;
     helper.carryOrder = job === 'carry' ? carryOrder : null;
     if (!helper.inside && (helper.state === 'outbound' || helper.state === 'gathering')) headHome(helper, false);
@@ -635,5 +741,5 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
 
   for (const helper of list) placeAtNest(helper);
 
-  return { list, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [surfaceMesh, burrowMesh, carryMesh] };
+  return { list, follower, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [surfaceMesh, burrowMesh, carryMesh] };
 }

@@ -243,6 +243,7 @@ function helperStatus(helper) {
   if (helper.state === 'returning') return carried ? `Carrying ${carried} home` : 'Coming home';
   if (helper.state === 'fleeing') return 'Fleeing home!';
   if (helper.state === 'fighting') return 'Fighting!';
+  if (helper.state === 'following') return helper.fightTargetId ? 'Fighting by your side!' : 'Following you';
   if (helper.state === 'toSource') return 'Walking to the box to pick up';
   if (helper.state === 'toTarget') return carried ? `Carrying ${carried}` : 'Carrying';
   if (helper.state === 'toNest') return 'Walking back to the nest';
@@ -297,7 +298,7 @@ export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOption
       element('div', 'item-stats', text, `Attack ${info.attack} · Defense ${info.defense} · XP ${info.experience}/${info.toNext}`);
       statusLines.set(helper, element('div', helper.state === 'fleeing' ? 'item-ability danger' : 'item-stats', text, helperStatus(helper)));
       const jobRow = element('div', 'job-row', text);
-      const select = addSelect(jobRow, 'Job', jobOptions(), helper.job || '', (value) => changeJob(helper, value, null));
+      const select = addSelect(jobRow, 'Job', jobOptions(helper), helper.job || '', (value) => changeJob(helper, value, null));
       select.dataset.job = String(helper.id);
       if (helper.job === 'carry') renderCarry(jobRow, helper);
       const gearRow = element('div', 'job-row', text);

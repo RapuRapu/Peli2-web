@@ -556,6 +556,8 @@ const helpers = createHelpers(scene, {
   burrow,
   boxOf,
   strandedSpots: strandedHelperSpots(),
+  getPlayer: () => player,
+  isUnderground: () => underground,
   onDeposit: (nest, type, amount) => {
     const box = (nest && nest.box) || storage;
     box.inventory[type] = (box.inventory[type] || 0) + amount;
@@ -617,10 +619,12 @@ function equipHelper(id, category, itemId) {
   return true;
 }
 
-function helperJobOptions() {
+function helperJobOptions(helper) {
   const known = noteDiscoveries();
   const gatherable = Object.entries(RESOURCE_TYPES).filter(([type, definition]) => definition.count > 0 && (known.has(type) || ALWAYS_KNOWN_MATERIALS.has(type))).map(([type, definition]) => ({ value: type, label: `Gather ${definition.label.toLowerCase()}` }));
-  return [{ value: '', label: 'No job · rest in the nest' }, ...gatherable, { value: 'rack', label: 'Tend the drying rack' }, { value: 'carry', label: 'Carry between boxes' }];
+  const follower = helpers.follower();
+  const follow = !follower || follower === helper ? [{ value: 'follow', label: 'Follow and help you' }] : [];
+  return [{ value: '', label: 'No job · rest in the nest' }, ...follow, ...gatherable, { value: 'rack', label: 'Tend the drying rack' }, { value: 'carry', label: 'Carry between boxes' }];
 }
 
 function stationName(station) {
