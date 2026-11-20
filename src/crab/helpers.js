@@ -79,7 +79,11 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
   carryOutline.count = 0;
   carryOutline.frustumCulled = false;
   carryOutline.layers.enable(BURROW_LAYER);
-  scene.add(surfaceMesh, burrowMesh, carryMesh, carryOutline);
+  const strandedRings = new THREE.InstancedMesh(new THREE.RingGeometry(1.1, 1.4, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.4, 1.0), transparent: true, opacity: 0.7, depthWrite: false, fog: false }), strandedSpots.length || 1);
+  strandedRings.count = 0;
+  strandedRings.frustumCulled = false;
+  strandedRings.renderOrder = 5;
+  scene.add(surfaceMesh, burrowMesh, carryMesh, carryOutline, strandedRings);
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
 
@@ -419,7 +423,15 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       transform.scale.setScalar(HELPER_SIZE);
       transform.updateMatrix();
       surfaceMesh.setMatrixAt(surfaceCount++, transform.matrix);
+      const pulse = 1 + 0.12 * Math.sin(time * 3 + index);
+      transform.position.set(spot.x, world.heightAt(spot.x, spot.z) + 0.1, spot.z);
+      transform.rotation.set(0, 0, 0);
+      transform.scale.setScalar(pulse);
+      transform.updateMatrix();
+      strandedRings.setMatrixAt(index, transform.matrix);
     }
+    strandedRings.count = strandedVisible().length;
+    strandedRings.instanceMatrix.needsUpdate = true;
     surfaceMesh.count = surfaceCount;
     burrowMesh.count = burrowCount;
     carryMesh.count = carryCount;

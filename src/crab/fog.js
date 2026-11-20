@@ -32,12 +32,13 @@ float fogRevealAt(vec2 worldXZ) {
 }
 vec3 applyFog(vec3 color, vec2 worldXZ, float time) {
   float revealed = fogRevealAt(worldXZ);
+  float clumps = fogNoise(worldXZ * 0.07 + 13.0) * 0.55 + fogNoise(worldXZ * 0.19 - 7.0) * 0.3 + fogNoise(worldXZ * 0.5) * 0.15;
   float swirl = fogNoise(worldXZ * 0.12 + vec2(time * 0.05, -time * 0.03)) * 0.6 + fogNoise(worldXZ * 0.31 - vec2(time * 0.04, 0.0)) * 0.4;
-  float shaped = revealed + (swirl - 0.5) * 0.35;
-  float mist = 1.0 - smoothstep(0.62, 1.0, shaped);
-  float darkness = 1.0 - smoothstep(0.08, 0.55, shaped);
-  vec3 mistColor = vec3(0.58, 0.62, 0.66) * (0.85 + 0.3 * swirl);
-  color = mix(color, mistColor, mist * 0.72);
+  float shaped = revealed + (clumps - 0.5) * 0.75 + (swirl - 0.5) * 0.15;
+  float mist = 1.0 - smoothstep(0.55, 1.0, shaped);
+  float darkness = 1.0 - smoothstep(0.15, 0.7, shaped);
+  vec3 mistColor = vec3(0.36, 0.4, 0.45) * (0.8 + 0.3 * swirl);
+  color = mix(color, mistColor, mist * 0.6);
   return mix(color, vec3(0.0), darkness);
 }
 `;

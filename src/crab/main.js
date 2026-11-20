@@ -229,6 +229,12 @@ const POSES = {
   106: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 1.75, shell: 'whelk' },
   107: { x: 24, z: -27, distance: 12, tideShare: 0.56, heading: 4.9, shell: 'coral' },
   108: { workshop: true, reefFound: true, campFound: true, crafted: ['snail', 'coral'], x: 70, z: -60, distance: 70, tideShare: 0.56, heading: 1.6, level: 10, outfit: { shell: 'coral', claws: 'coralTipped', quality: 'masterwork' } },
+  111: { x: 15, z: -20, distance: 40, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [...[6, 7, 8, 9, 10, 11, 12, 13, 14].map((column) => [column, 5]), ...[6, 7, 8, 9, 10, 11, 12].map((row) => [14, row]), ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((column) => [column, 12]), [9, 10], [9, 11], [10, 10], [10, 11], [11, 11], [3, 8], [3, 9], [3, 10], [3, 11], [4, 8]], placed: [{ kind: 'helperNest', column: 13, row: 5 }, { kind: 'crabBed', column: 14, row: 9 }, { kind: 'helperNest', column: 9, row: 12 }], playerCell: { column: 10, row: 6 }, inBurrow: true },
+  112: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [...[6, 7, 8, 9, 10, 11, 12, 13, 14].map((column) => [column, 5]), ...[6, 7, 8, 9, 10, 11, 12].map((row) => [14, row]), ...[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((column) => [column, 12]), [9, 10], [9, 11], [10, 10], [10, 11], [11, 11], [3, 8], [3, 9], [3, 10], [3, 11], [4, 8]], playerCell: { column: 10, row: 6 }, inBurrow: true, placingStation: 'exit' },
+  113: { x: 15, z: -20, distance: 30, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], placed: [{ kind: 'helperNest', column: 4, row: 6 }], helpers: ['shellBits', 'carry'], inBurrow: true, helpersPanel: true },
+  114: { x: 31, z: -6, distance: 18, tideShare: 0.56, heading: 1.2 },
+  115: { x: 22.6, z: -22.4, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 } },
+  116: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, level: 9, enemy: { kind: 'shoreCrab', offsetX: -3.2, offsetZ: 1.2 } },
   109: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, level: 12, molts: ['crusher', 'cutter', 'crusher'], statusPanel: true },
   110: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], extraGear: [{ category: 'claws', kind: 'cleaver', quality: 'masterwork', binding: 'wire' }, { category: 'shell', kind: 'whelk', quality: 'masterwork', reinforcement: 'metalPlate' }, { category: 'claws', kind: 'coralTipped' }], inventory: { shellBits: 14, driftwood: 6 }, selectSlot: 1 },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
@@ -381,7 +387,7 @@ function applyWornLook() {
 applyWornLook();
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
 const hud = createHud(qualityName);
-const mapView = createMapView(hud.root, { world, fog, halfSize: PLAY_HALF_SIZE, waterLevel: TIDE_MIDDLE + TIDE_AMPLITUDE });
+const mapView = createMapView(hud.root, { world, fog, halfSize: PLAY_HALF_SIZE, waterLevel: TIDE_MIDDLE + TIDE_AMPLITUDE, cameraYaw: CAMERA_YAW });
 const tracks = createTracks(scene, world);
 const ripples = createRipples(water.uniforms);
 const workshop = createWorkbenchModel(scene, world, quality, WORKSHOP_SPOT, hud.root);
@@ -960,7 +966,7 @@ function chooseStation(kind) {
     const allowed = burrow.freeCells().filter((cell) => !exitCellProblem(cell.column, cell.row));
     burrow.showPlacementCells(true, (cell) => allowed.some((candidate) => candidate.column === cell.column && candidate.row === cell.row));
     mapView.show(exitMapMarkers(allowed));
-    hud.setMode(allowed.length ? 'Tap a glowing spot — the map shows where the exit comes up' : 'Dig tunnels toward explored dry sand first', cancelPlacement);
+    hud.setMode(allowed.length ? 'Tap a glowing spot · green dots show where' : 'Dig tunnels toward explored dry sand first', cancelPlacement);
     return;
   }
   burrow.showPlacementCells(true);
@@ -987,6 +993,7 @@ function exitCellProblem(column, row) {
 
 function exitMapMarkers(allowedCells) {
   return {
+    focus: { ...burrow.state.entrance },
     player: underground ? null : { x: player.x, z: player.z },
     entrances: burrow.travelPoints().map((point) => point.surface),
     candidates: allowedCells.map((cell) => burrow.surfacePointOf(cell.column, cell.row)),
@@ -1120,7 +1127,7 @@ function travelOption() {
   if (player.pathIndex < player.path.length || player.digTarget) return null;
   const nearest = nearestTravelPoint();
   if (!nearest) return null;
-  if (underground) return nearest.distance <= ENTRANCE_REACH ? 'exit' : null;
+  if (underground) return nearest.distance <= (nearest.point.station ? STATION_REACH : ENTRANCE_REACH) ? 'exit' : null;
   return nearest.distance <= TRAVEL_REACH_SURFACE ? 'enter' : null;
 }
 
@@ -2449,6 +2456,14 @@ if (isScreenshotMode) {
   if (pose.remainsAt) remains.add({ x: pose.remainsAt.x, z: pose.remainsAt.z, inventory: { shellBits: 4 }, gear: { shells: [{ id: 90, kind: 'cone', quality: pose.remainsQuality || 'fine' }], claws: [], wornShellId: 90, wornClawsId: null } });
   if (pose.burrowAt) digEntranceAt(pose.burrowAt.x, pose.burrowAt.z);
   for (const [column, row] of pose.dug || []) burrow.finishDig(column, row);
+  for (const placed of pose.placed || []) {
+    Object.assign(save.inventory, STATION_KINDS[placed.kind].cost);
+    buildStation(placed.kind, placed.column, placed.row);
+  }
+  if (pose.playerCell) {
+    const spot = cellCenter(pose.playerCell.column, pose.playerCell.row);
+    player.poseBurrowSpot = spot;
+  }
   for (const kind of pose.stations || []) {
     Object.assign(save.inventory, STATION_KINDS[kind].cost);
     const cell = kind === 'workshop' ? DEFAULT_WORKSHOP_CELL : DEFAULT_STORAGE_CELL;
@@ -2486,6 +2501,7 @@ if (isScreenshotMode) {
   for (let step = 0; step < (pose.simulateSeconds || 0) / FIXED_STEP; step++) simulate(FIXED_STEP);
   if (pose.inBurrow) {
     enterBurrow();
+    if (player.poseBurrowSpot) Object.assign(player, { x: player.poseBurrowSpot.x, z: player.poseBurrowSpot.z });
     cameraDistance = pose.distance;
     player.heading = pose.heading ?? 0;
     for (let step = 0; step < 20; step++) simulate(FIXED_STEP);
@@ -2584,7 +2600,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, salvageItem, startMovingStructure, dismantleStructure, moveStationTo, moveRackTo, isRecipeDiscovered, placement, cancelPlacement, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, startSleeping, wakeUp, isRested, mapView, fog, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, startSleeping, wakeUp, isRested, mapView, fog, exitCellProblem, chooseStation, nearestTravelPoint, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   setRendering: (enabled) => { rendersFrames = enabled; },
   isPaused: () => paused,

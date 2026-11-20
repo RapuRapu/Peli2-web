@@ -192,7 +192,7 @@ export function createHud(activeQualityName) {
       if (text && buffChip.textContent !== text) buffChip.textContent = text;
     },
     setTide(label, fraction) {
-      tideLabel.textContent = label;
+      tideLabel.textContent = /tide/i.test(label) ? label : `Tide ${label.toLowerCase()}`;
       tideFill.style.width = `${Math.round(fraction * 100)}%`;
     },
     setVitals(level, health, maxHealth, experience, experienceToNext) {
