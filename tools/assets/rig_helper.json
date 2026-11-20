@@ -1,0 +1,136 @@
+{
+ "GAME_SCALE": 1.15,
+ "CORE_HALF_WIDTH": 0.345,
+ "CORE_FRONT_Y": -0.45,
+ "CORE_BACK_Y": 0.25,
+ "CORE_BOTTOM_Z": -0.36,
+ "ABDOMEN_START_Y": 0.25,
+ "ABDOMEN_HALF_WIDTH": 0.32,
+ "ABDOMEN_MIN_Z": -0.36,
+ "EYE_MIN_Z": 0.22,
+ "EYE_MAX_Y": -0.35,
+ "EYE_MIN_Y": -0.64,
+ "EYE_HALF_WIDTH": 0.42,
+ "EYES_INSIDE_CORE": false,
+ "PALE_MIN": 2.0,
+ "BODY_CENTER_XY": [
+  0.0,
+  -0.1
+ ],
+ "LIMBS": {
+  "leg_front_R": {
+   "root": [
+    -0.345,
+    -0.33
+   ],
+   "tip": [
+    -0.46,
+    -0.34
+   ],
+   "joints": [
+    0.35,
+    0.7
+   ]
+  },
+  "leg_middle_R": {
+   "root": [
+    -0.345,
+    -0.11
+   ],
+   "tip": [
+    -0.55,
+    -0.11
+   ],
+   "joints": [
+    0.35,
+    0.7
+   ]
+  },
+  "leg_rear_R": {
+   "root": [
+    -0.345,
+    0.12
+   ],
+   "tip": [
+    -0.54,
+    0.12
+   ],
+   "joints": [
+    0.35,
+    0.7
+   ]
+  },
+  "leg_front_L": {
+   "root": [
+    0.345,
+    -0.33
+   ],
+   "tip": [
+    0.46,
+    -0.34
+   ],
+   "joints": [
+    0.35,
+    0.7
+   ]
+  },
+  "leg_middle_L": {
+   "root": [
+    0.345,
+    -0.11
+   ],
+   "tip": [
+    0.55,
+    -0.11
+   ],
+   "joints": [
+    0.35,
+    0.7
+   ]
+  },
+  "leg_rear_L": {
+   "root": [
+    0.345,
+    0.12
+   ],
+   "tip": [
+    0.54,
+    0.12
+   ],
+   "joints": [
+    0.35,
+    0.7
+   ]
+  },
+  "claw_small": {
+   "root": [
+    -0.3,
+    -0.42
+   ],
+   "tip": [
+    -0.31,
+    -0.95
+   ],
+   "joints": [
+    0.3,
+    0.55
+   ]
+  },
+  "claw_big": {
+   "root": [
+    0.3,
+    -0.42
+   ],
+   "tip": [
+    0.31,
+    -0.95
+   ],
+   "joints": [
+    0.3,
+    0.55
+   ]
+  }
+ },
+ "FACE_HALF_WIDTH": 0.2,
+ "FACE_FRONT_Y": -0.64
+}

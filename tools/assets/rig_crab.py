@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import bpy
@@ -22,6 +23,14 @@ JOINT_BLEND = 0.035
 REAR_START_Y = 0.1
 PALE_MIN = 0.35
 PALE_SPREAD = 0.25
+EYE_MIN_Z = 0.17
+EYE_MAX_Y = -0.15
+EYE_HALF_WIDTH = 0.2
+EYE_MIN_Y = -10.0
+EYES_INSIDE_CORE = True
+FACE_HALF_WIDTH = 0.0
+FACE_FRONT_Y = 0.0
+ABDOMEN_MIN_Z = -0.25
 
 LIMBS = {
     "leg_front_R": {"tip": (-0.65, -0.38), "joints": (0.45, 0.78)},
@@ -35,6 +44,13 @@ LIMBS = {
 }
 BODY_CENTER_XY = np.array([0.0, -0.05])
 ROOT_RADIUS = 0.17
+
+if os.environ.get("RIG_CONFIG"):
+    with open(os.environ["RIG_CONFIG"]) as config_file:
+        overrides = json.load(config_file)
+    if "BODY_CENTER_XY" in overrides:
+        overrides["BODY_CENTER_XY"] = np.array(overrides["BODY_CENTER_XY"])
+    globals().update(overrides)
 
 bpy.ops.wm.open_mainfile(filepath=stage_blend)
 high = bpy.data.objects["crab_high"]
@@ -86,9 +102,11 @@ print("normal baked")
 positions = np.array([vertex.co[:] for vertex in low.data.vertices])
 edges = np.array([edge.vertices[:] for edge in low.data.edges])
 x, y, z = positions.T
-abdomen_mask = (y > ABDOMEN_START_Y) & (np.abs(x) < ABDOMEN_HALF_WIDTH) & (z > -0.25)
+abdomen_mask = (y > ABDOMEN_START_Y) & (np.abs(x) < ABDOMEN_HALF_WIDTH) & (z > ABDOMEN_MIN_Z)
 core_mask = (np.abs(x) < CORE_HALF_WIDTH) & (y > CORE_FRONT_Y) & (y < CORE_BACK_Y) & (z > CORE_BOTTOM_Z)
-outside = ~(abdomen_mask | core_mask)
+core_mask |= (np.abs(x) < FACE_HALF_WIDTH) & (y > FACE_FRONT_Y) & (y <= CORE_FRONT_Y) & (z > CORE_BOTTOM_Z)
+eye_mask = (core_mask | (not EYES_INSIDE_CORE)) & (z > EYE_MIN_Z) & (y < EYE_MAX_Y) & (y > EYE_MIN_Y) & (np.abs(x) < EYE_HALF_WIDTH)
+outside = ~(abdomen_mask | core_mask | eye_mask)
 outside_index = np.where(outside)[0]
 remap = -np.ones(len(positions), int)
 remap[outside_index] = np.arange(len(outside_index))
@@ -100,14 +118,13 @@ small_component = component_sizes[component_labels] < SMALL_COMPONENT_LIMIT
 body_extra = outside_index[small_component]
 limb_vertices = outside_index[~small_component]
 
-eye_mask = core_mask & (z > 0.17) & (y < -0.15) & (np.abs(x) < 0.2)
 
 limb_names = list(LIMBS)
 roots = {}
 for name, limb in LIMBS.items():
     tip = np.array(limb["tip"])
     direction = (tip - BODY_CENTER_XY) / np.linalg.norm(tip - BODY_CENTER_XY)
-    roots[name] = BODY_CENTER_XY + direction * ROOT_RADIUS
+    roots[name] = np.array(limb["root"]) if "root" in limb else BODY_CENTER_XY + direction * ROOT_RADIUS
 
 
 def segment_distance(points, start, end):

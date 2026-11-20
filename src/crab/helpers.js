@@ -1,11 +1,9 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { applySeaside } from './seaside.js';
-import { buildShellGeometry } from './hermit.js';
+import { createHermit } from './hermit.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { BURROW_LAYER, BURROW_ORIGIN } from './burrow.js';
 import { RACK_BATCH, RACK_REACH } from './rack.js';
-import { SHELLS, CLAWS, BINDINGS, REINFORCEMENTS, shellDefenseOf, clawAttackOf } from './gear.js';
+import { SHELLS, CLAWS, NAKED, BINDINGS, REINFORCEMENTS, shellDefenseOf, clawAttackOf } from './gear.js';
 import { MAX_LEVEL, experienceForLevel } from './progression.js';
 
 export const HELPER_LIMIT = 6;
@@ -38,19 +36,13 @@ const FOLLOW_CATCH_UP_DISTANCE = 35;
 const FOLLOW_REPATH_SECONDS = 0.5;
 const ASSIST_RANGE = 16;
 
-const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
-const BODY_COLOR = linearColor(0.92, 0.42, 0.18);
-const SHELL_LOOK = { turns: 2.4, spireShare: 0.86, whorlRadius: 0.5, tubeRadius: 0.6, height: 1.15, bandFrequency: 22, light: [0.9, 0.97, 0.94], band: [0.02, 0.62, 0.6], inside: [0.36, 0.22, 0.2] };
+const HELPER_TINTS = [[1, 1, 1], [1, 0.88, 0.8], [0.88, 0.93, 1], [1, 0.84, 0.86], [0.88, 1, 0.86], [1, 0.97, 0.78]];
+const STRANDED_STRUGGLE_SPEED = 1.5;
+const MAX_RENDER_STEP = 0.1;
+const FLAT_GROUND = new THREE.Vector3(0, 1, 0);
+const CULL_RADIUS = 2.5;
 const CARRY_COLORS = { shellBits: new THREE.Color(1.7, 1.55, 1.3), driftwood: new THREE.Color(0.9, 0.5, 0.18), seaLettuce: new THREE.Color(0.35, 1.5, 0.3), driedKelp: new THREE.Color(1.1, 0.62, 0.18), coral: new THREE.Color(1.8, 0.5, 0.45), seaGlass: new THREE.Color(0.4, 1.2, 1.8), pearls: new THREE.Color(1.9, 1.85, 1.7), scrap: new THREE.Color(0.7, 0.7, 0.75), cloth: new THREE.Color(1.4, 1.2, 0.9), fishBone: new THREE.Color(1.6, 1.6, 1.45), wax: new THREE.Color(1.8, 1.6, 1.1) };
 const DEFAULT_CARRY_COLOR = new THREE.Color(1.2, 1.2, 1.2);
-
-function painted(geometry, color) {
-  const colors = new Float32Array(geometry.attributes.position.count * 3);
-  for (let index = 0; index < geometry.attributes.position.count; index++) colors.set([color.r, color.g, color.b], index * 3);
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.deleteAttribute('uv');
-  return geometry;
-}
 
 export function helperMaxHealth(helper) {
   return HELPER_HEALTH + ((helper.level || 1) - 1) * HELPER_HEALTH_PER_LEVEL;
@@ -80,22 +72,6 @@ export function expectsToWin(helper, enemy) {
   return (enemy.health / helperPerSecond) * WIN_MARGIN < helper.health / enemyPerSecond;
 }
 
-function buildHelperGeometry(look = SHELL_LOOK) {
-  const shell = buildShellGeometry(look);
-  const shellGeometry = shell.geometry.clone().rotateY(Math.PI).translate(shell.mouthOffset, 0, 0).rotateX(-0.5).translate(0, 0.64, -0.12);
-  const parts = [shellGeometry];
-  parts.push(painted(new THREE.SphereGeometry(0.4, 14, 10).scale(0.95, 0.66, 1.2).translate(0, 0.5, 0.24), BODY_COLOR));
-  for (const side of [-1, 1]) {
-    parts.push(painted(new THREE.SphereGeometry(0.17, 10, 8).scale(1, 0.8, 1.3).translate(side * 0.3, 0.42, 0.72), BODY_COLOR));
-    parts.push(painted(new THREE.CylinderGeometry(0.03, 0.04, 0.32, 6).translate(side * 0.14, 0.82, 0.56), BODY_COLOR));
-    for (let pair = 0; pair < 2; pair++) {
-      parts.push(painted(new THREE.ConeGeometry(0.06, 0.62, 6).rotateZ(side * 0.9).translate(side * 0.42, 0.28, 0.32 - pair * 0.3), BODY_COLOR));
-    }
-  }
-  for (const part of parts) if (part.attributes.uv) part.deleteAttribute('uv');
-  return mergeGeometries(parts.map((part) => (part.index ? part : part)));
-}
-
 export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, getPlayer, isUnderground, onDeposit, onLost, onSound }) {
   const savedState = Array.isArray(saved) ? { list: saved, rescued: [] } : saved || { list: [], rescued: [] };
   const list = savedState.list.map((entry) => {
@@ -105,36 +81,18 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
   });
   const rescued = new Set(savedState.rescued || []);
   let nextId = list.reduce((highest, helper) => Math.max(highest, helper.id), 0) + 1;
-  const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.12 });
-  const geometry = buildHelperGeometry();
-  const burrowMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide });
-  const skins = new Map();
-  const skinFor = (key) => {
-    if (!skins.has(key)) {
-      const skinGeometry = buildHelperGeometry(SHELLS[key].look);
-      const surface = new THREE.InstancedMesh(skinGeometry, material, HELPER_LIMIT);
-      const below = new THREE.InstancedMesh(skinGeometry, burrowMaterial, HELPER_LIMIT);
-      for (const mesh of [surface, below]) {
-        mesh.castShadow = true;
-        mesh.count = 0;
-        mesh.frustumCulled = false;
-      }
-      below.layers.set(BURROW_LAYER);
-      scene.add(surface, below);
-      skins.set(key, { surface, below, surfaceCount: 0, belowCount: 0 });
+  const crabs = new Map();
+  function crabFor(key, tintIndex) {
+    if (!crabs.has(key)) {
+      const crab = createHermit(scene, quality, NAKED.look, { crabModel: 'helper', scale: HELPER_SIZE, bodyTint: HELPER_TINTS[tintIndex % HELPER_TINTS.length] });
+      crabs.set(key, { crab, gearKey: null, inside: null });
     }
-    return skins.get(key);
-  };
-  const surfaceCapacity = HELPER_LIMIT + strandedSpots.length;
-  const surfaceMesh = new THREE.InstancedMesh(geometry, material, surfaceCapacity);
-  surfaceMesh.castShadow = true;
-  surfaceMesh.count = 0;
-  surfaceMesh.frustumCulled = false;
-  const burrowMesh = new THREE.InstancedMesh(geometry, burrowMaterial, HELPER_LIMIT);
-  burrowMesh.castShadow = true;
-  burrowMesh.count = 0;
-  burrowMesh.frustumCulled = false;
-  burrowMesh.layers.set(BURROW_LAYER);
+    return crabs.get(key);
+  }
+  let lastRenderTime = null;
+  const viewFrustum = new THREE.Frustum();
+  const viewMatrix = new THREE.Matrix4();
+  const cullSphere = new THREE.Sphere(new THREE.Vector3(), CULL_RADIUS);
   const carryMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.3, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), HELPER_LIMIT);
   carryMesh.count = 0;
   carryMesh.frustumCulled = false;
@@ -147,7 +105,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
   strandedRings.count = 0;
   strandedRings.frustumCulled = false;
   strandedRings.renderOrder = 5;
-  scene.add(surfaceMesh, burrowMesh, carryMesh, carryOutline, strandedRings);
+  scene.add(carryMesh, carryOutline, strandedRings);
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
 
@@ -286,6 +244,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       const stats = helperStats(helper);
       helper.attackTimer = stats.attackInterval;
       onSound('shellClonk', helper);
+      helper.attackAnimPending = true;
       enemies.damage(target, hitDamage(stats.attack, target.definition.defense || 0), time, helper, { provoke: false });
       return;
     }
@@ -494,6 +453,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     const stats = helperStats(helper);
     helper.attackTimer = stats.attackInterval;
     onSound('shellClonk', helper);
+    helper.attackAnimPending = true;
     const killed = enemies.damage(enemy, hitDamage(stats.attack, enemy.definition.defense || 0), time, helper, { provoke: false });
     if (killed) helper.fightTargetId = null;
   }
@@ -544,6 +504,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       if (helper.biteTimer <= 0) {
         helper.biteTimer = threat.enemy.definition.attackInterval;
         helper.health -= hitDamage(threat.enemy.definition.attack, helperStats(helper).defense);
+        helper.hurtAnimPending = true;
         onSound('shellClonk', helper);
         if (helper.health <= 0) {
           knockedOut(helper, threat.enemy);
@@ -623,35 +584,49 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
 
   const strandedVisible = () => strandedSpots.filter((spot) => !rescued.has(spot.id));
 
-  function render(time) {
-    let surfaceCount = 0;
-    let burrowCount = 0;
-    let carryCount = 0;
-    for (const skin of skins.values()) {
-      skin.surfaceCount = 0;
-      skin.belowCount = 0;
+  function drawCrab(entry, { x, y, z, heading, speed, inside, gear, deltaTime }) {
+    const shellKind = gear && gear.shell ? gear.shell.kind : null;
+    const clawKind = gear && gear.claws ? gear.claws.kind : null;
+    const gearKey = `${shellKind}|${clawKind}`;
+    if (entry.gearKey !== gearKey) {
+      entry.crab.setShell(shellKind ? SHELLS[shellKind].look : NAKED.look);
+      entry.crab.setClawWeapon(clawKind);
+      entry.gearKey = gearKey;
     }
+    cullSphere.center.set(x, y, z);
+    if (!viewFrustum.intersectsSphere(cullSphere)) {
+      entry.crab.root.visible = false;
+      return;
+    }
+    if (entry.inside !== inside) {
+      entry.crab.root.traverse((child) => child.layers.set(inside ? BURROW_LAYER : 0));
+      entry.inside = inside;
+    }
+    entry.crab.root.visible = true;
+    entry.crab.update(deltaTime, { x, y, z, heading, speed, working: false, groundNormal: FLAT_GROUND });
+  }
+
+  function render(time, camera) {
+    viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    viewFrustum.setFromProjectionMatrix(viewMatrix);
+    const deltaTime = lastRenderTime === null ? 0 : Math.min(MAX_RENDER_STEP, Math.max(0, time - lastRenderTime));
+    lastRenderTime = time;
+    const drawn = new Set();
+    let carryCount = 0;
     for (const [index, helper] of list.entries()) {
-      const bob = helper.moving ? Math.abs(Math.sin(time * 14 + index)) * 0.06 : 0;
-      const skin = helper.gear && helper.gear.shell ? skinFor(helper.gear.shell.kind) : null;
-      const lunge = helper.state === 'fighting' ? Math.max(0, Math.sin(time * 9 + index)) * 0.12 : 0;
-      if (helper.inside) {
-        transform.position.set(helper.x, BURROW_ORIGIN.y + bob, helper.z);
-        transform.rotation.set(0, helper.state === 'resting' ? index * 2.1 + Math.sin(time * 0.3 + index) * 0.3 : helper.heading || 0, 0);
-        transform.scale.setScalar(HELPER_SIZE);
-        transform.updateMatrix();
-        if (skin) skin.below.setMatrixAt(skin.belowCount++, transform.matrix);
-        else burrowMesh.setMatrixAt(burrowCount++, transform.matrix);
-      } else {
-        transform.position.set(helper.x + Math.sin(helper.heading || 0) * lunge, helper.y + bob, helper.z + Math.cos(helper.heading || 0) * lunge);
-        transform.rotation.set(0, helper.heading || 0, 0);
-        transform.scale.setScalar(HELPER_SIZE);
-        transform.updateMatrix();
-        if (skin) skin.surface.setMatrixAt(skin.surfaceCount++, transform.matrix);
-        else surfaceMesh.setMatrixAt(surfaceCount++, transform.matrix);
-      }
+      const key = `helper-${helper.id}`;
+      const entry = crabFor(key, helper.id);
+      drawn.add(key);
+      if (helper.attackAnimPending) entry.crab.playAttack(Math.random() < 0.5 ? 'big' : 'small');
+      if (helper.hurtAnimPending) entry.crab.playHurt(0.6, 0);
+      helper.attackAnimPending = false;
+      helper.hurtAnimPending = false;
+      const speed = helper.moving ? (helper.state === 'fleeing' ? FLEE_SPEED : WALK_SPEED) * helperStats(helper).speedFactor : 0;
+      const restingHeading = index * 2.1 + Math.sin(time * 0.3 + index) * 0.3;
+      const heading = helper.inside && helper.state === 'resting' ? restingHeading : helper.heading || 0;
+      drawCrab(entry, { x: helper.x, y: helper.inside ? BURROW_ORIGIN.y : helper.y, z: helper.z, heading, speed, inside: helper.inside, gear: helper.gear, deltaTime });
       if (helper.carrying) {
-        transform.position.set(helper.x, (helper.inside ? BURROW_ORIGIN.y : helper.y) + 1.45 + bob, helper.z);
+        transform.position.set(helper.x, (helper.inside ? BURROW_ORIGIN.y : helper.y) + 1.45, helper.z);
         transform.rotation.set(0, 0, 0);
         transform.scale.setScalar(1);
         transform.updateMatrix();
@@ -661,12 +636,11 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       }
     }
     for (const [index, spot] of strandedVisible().entries()) {
+      const key = `stranded-${spot.id}`;
+      const entry = crabFor(key, index + 1);
+      drawn.add(key);
       const wiggle = Math.sin(time * STRANDED_BOB_SPEED + index * 1.7);
-      transform.position.set(spot.x, world.heightAt(spot.x, spot.z) + Math.max(0, wiggle) * 0.08, spot.z);
-      transform.rotation.set(0, spot.heading + wiggle * 0.25, wiggle * 0.08);
-      transform.scale.setScalar(HELPER_SIZE);
-      transform.updateMatrix();
-      surfaceMesh.setMatrixAt(surfaceCount++, transform.matrix);
+      drawCrab(entry, { x: spot.x, y: world.heightAt(spot.x, spot.z), z: spot.z, heading: spot.heading + wiggle * 0.25, speed: STRANDED_STRUGGLE_SPEED, inside: false, gear: null, deltaTime });
       const pulse = 1 + 0.12 * Math.sin(time * 3 + index);
       transform.position.set(spot.x, world.heightAt(spot.x, spot.z) + 0.1, spot.z);
       transform.rotation.set(0, 0, 0);
@@ -674,19 +648,12 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       transform.updateMatrix();
       strandedRings.setMatrixAt(index, transform.matrix);
     }
+    for (const [key, entry] of crabs) if (!drawn.has(key)) entry.crab.root.visible = false;
     strandedRings.count = strandedVisible().length;
     strandedRings.instanceMatrix.needsUpdate = true;
-    surfaceMesh.count = surfaceCount;
-    burrowMesh.count = burrowCount;
-    for (const skin of skins.values()) {
-      skin.surface.count = skin.surfaceCount;
-      skin.below.count = skin.belowCount;
-      skin.surface.instanceMatrix.needsUpdate = true;
-      skin.below.instanceMatrix.needsUpdate = true;
-    }
     carryMesh.count = carryCount;
     carryOutline.count = carryCount;
-    for (const mesh of [surfaceMesh, burrowMesh, carryMesh, carryOutline]) mesh.instanceMatrix.needsUpdate = true;
+    for (const mesh of [carryMesh, carryOutline]) mesh.instanceMatrix.needsUpdate = true;
     if (carryMesh.instanceColor) carryMesh.instanceColor.needsUpdate = true;
   }
 
@@ -745,5 +712,5 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
 
   for (const helper of list) placeAtNest(helper);
 
-  return { list, follower, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [surfaceMesh, burrowMesh, carryMesh] };
+  return { list, follower, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [carryMesh] };
 }

@@ -8,6 +8,7 @@ GATHER_AND_BUILD = r'''
   const d = window.__debug; const p = d.player;
   const step = (seconds, until) => { let t = 0; for (; t < seconds; t += 1/60) { d.simulate(1/60); if (until && until()) break; } return t; };
   d.setPaused(false);
+  for (const enemy of d.enemies.list) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 });
   for (const [type, count] of Object.entries({ shellBits: 5, driftwood: 3, seaLettuce: 3 })) {
     for (let n = 0; n < count; n++) {
       const node = d.resources.nodes.filter(node => node.type === type && !node.gathered).sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];

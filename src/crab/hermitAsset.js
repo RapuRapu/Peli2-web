@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import crabModelBytes from './assets/crab.glb';
+import helperCrabModelBytes from './assets/helperCrab.glb';
 import shellModelBytes from './assets/shells.glb';
 import weaponModelBytes from './assets/weapons.glb';
 import { Joint, limbChain, parseModel } from './rig.js';
@@ -31,21 +32,22 @@ export const WEAPON_MODEL_FIT = {
 };
 const WEAPON_MODEL_LENGTH = 1.9;
 
-let loadedCrab = null;
+const loadedCrabs = {};
 const shellModels = new Map();
 const weaponModels = new Map();
 
 
 export async function loadCrabAsset() {
-  const [crab, shells, weapons] = await Promise.all([parseModel(crabModelBytes), parseModel(shellModelBytes), parseModel(weaponModelBytes)]);
-  loadedCrab = crab.scene;
+  const [crab, helperCrab, shells, weapons] = await Promise.all([parseModel(crabModelBytes), parseModel(helperCrabModelBytes), parseModel(shellModelBytes), parseModel(weaponModelBytes)]);
+  loadedCrabs.player = crab.scene;
+  loadedCrabs.helper = helperCrab.scene;
   weapons.scene.traverse((node) => {
     if (node.isMesh && WEAPON_MODEL_FIT[node.name]) weaponModels.set(node.name, node);
   });
   shells.scene.traverse((node) => {
     if (node.isMesh && SHELL_MODEL_FIT[node.name]) shellModels.set(node.name, node);
   });
-  return loadedCrab;
+  return loadedCrabs.player;
 }
 
 export const shellModelAvailable = (kind) => shellModels.has(kind);
@@ -88,10 +90,10 @@ export function buildShellModel(kind, material) {
   return holder;
 }
 
-export const crabAssetLoaded = () => loadedCrab !== null;
+export const crabAssetLoaded = (model = 'player') => Boolean(loadedCrabs[model]);
 
-export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rearMaterial }) {
-  const model = cloneSkinned(loadedCrab);
+export function buildAssetRig({ bodyMaterial, clawMaterial, abdomenMaterial, rearMaterial, crabModel = 'player' }) {
+  const model = cloneSkinned(loadedCrabs[crabModel]);
   model.scale.setScalar(MODEL_SCALE);
   model.updateMatrixWorld(true);
   const bones = {};

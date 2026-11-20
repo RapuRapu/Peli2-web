@@ -367,8 +367,11 @@ function buildGearGlowParticles() {
   return { mesh, update };
 }
 
-export function createHermit(scene, quality, shellLook) {
-  const useAsset = crabAssetLoaded();
+export function createHermit(scene, quality, shellLook, { crabModel = 'player', scale = 1, bodyTint = null } = {}) {
+  const useAsset = crabAssetLoaded(crabModel);
+  const baseColor = new THREE.Color(1, 1, 1);
+  if (bodyTint) baseColor.setRGB(bodyTint[0], bodyTint[1], bodyTint[2], THREE.SRGBColorSpace);
+  const abdomenTint = crabModel === 'player' ? ASSET_ABDOMEN_TINT : baseColor;
   const wetnessUniforms = { uBodyWetness: { value: 0 }, uBodyWetTop: { value: -1000 } };
   const wetSurface = { wetDarkening: 0.45, wetRoughness: 0.08, causticStrength: 1.6, chromaticCaustics: quality.chromaticCaustics, bodyWetness: wetnessUniforms };
   const shellGearGlowUniforms = createGearGlowUniforms();
@@ -376,8 +379,10 @@ export function createHermit(scene, quality, shellLook) {
   const weaponGearGlowUniforms = createGearGlowUniforms();
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), wetSurface);
   const clawMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: !useAsset, roughness: 0.4, metalness: 0.02 }), { ...wetSurface, gearGlow: clawGearGlowUniforms });
-  const abdomenMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: ASSET_ABDOMEN_TINT }), wetSurface) : null;
-  const rearMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: ASSET_ABDOMEN_TINT }), wetSurface) : null;
+  const abdomenMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: abdomenTint }), wetSurface) : null;
+  const rearMaterial = useAsset ? applySeaside(new THREE.MeshStandardMaterial({ color: abdomenTint }), wetSurface) : null;
+  material.color.copy(baseColor);
+  clawMaterial.color.copy(baseColor);
   const shellMaterial = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, side: THREE.DoubleSide }), { ...wetSurface, wetDarkening: 0.42, wetRoughness: 0.12, gearGlow: shellGearGlowUniforms });
   const NO_GLOW = { glow: 0, color: [1, 1, 1], pulse: false };
   const gearGlow = { shell: NO_GLOW, claws: NO_GLOW };
@@ -388,9 +393,10 @@ export function createHermit(scene, quality, shellLook) {
   const tilt = new THREE.Group();
   const body = new THREE.Group();
   root.add(tilt);
+  root.scale.setScalar(scale);
   tilt.add(body);
 
-  const assetRig = useAsset ? buildAssetRig({ bodyMaterial: material, clawMaterial, abdomenMaterial, rearMaterial }) : null;
+  const assetRig = useAsset ? buildAssetRig({ bodyMaterial: material, clawMaterial, abdomenMaterial, rearMaterial, crabModel }) : null;
   const proceduralRig = useAsset ? null : buildProceduralRig(body, material, clawMaterial);
   if (assetRig) body.add(assetRig.object);
 
@@ -599,7 +605,7 @@ export function createHermit(scene, quality, shellLook) {
   function setClawTint(tint) {
     if (assetRig && wornWeapon) tint = null;
     if (tint) clawMaterial.color.setRGB(tint[0], tint[1], tint[2], THREE.SRGBColorSpace);
-    else clawMaterial.color.setRGB(1, 1, 1);
+    else clawMaterial.color.copy(baseColor);
   }
 
   return { root, update, wetnessUniforms, setShell, setGearGlow, setClawGrowth, setClawTint, setClawTines, setClawWeapon, playAttack, playHurt, playDeath, resetPose, clawPosition };
