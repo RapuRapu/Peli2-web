@@ -202,7 +202,7 @@
   #hud .scene-fade { position: absolute; inset: 0; background: #0b0805; opacity: 0; pointer-events: none; }
   #hud .scene-fade.visible { animation: scene-fade 0.7s ease-out; }
   @keyframes scene-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
-  #hud.underground .enemy-bar, #hud.underground .remains-arrow, #hud.underground .remains-label, #hud.underground .surface-label { display: none; }
+  #hud.underground .enemy-bar, #hud.underground .remains-label, #hud.underground .surface-label { display: none; }
   #hud:not(.underground) .burrow-label { display: none; }
   #hud.underground .hint { bottom: calc(max(14px, env(safe-area-inset-bottom)) + 128px); }
   #hud.panel-open .burrow-buttons, #hud.panel-open .mode-bar, #hud.panel-open .world-label { visibility: hidden; }
@@ -243,9 +243,6 @@
   #hud .molt-button { background: rgba(150, 70, 120, 0.92); border-color: #ffc6e6; }
   #hud .molt-button.hidden { display: none; }
   #hud .storage-panel .workbench-card { max-height: min(92vh, 780px); }
-  #hud .remains-arrow { position: absolute; left: 0; top: 0; display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: rgba(70, 76, 110, 0.9); border: 2px solid #d6dcff; font-size: 20px; }
-  #hud .remains-arrow.hidden { display: none; }
-  #hud .remains-arrow-pointer { position: absolute; left: -19px; right: -19px; top: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-end; font-size: 22px; color: #e6eaff; }
   #hud .workbench .item.naked { background: #4a3a3c; border: 1px solid rgba(255, 190, 170, 0.45); }
   #hud.panel-open .vitals { visibility: hidden; }
   #hud .backpack .workbench-card { position: relative; }

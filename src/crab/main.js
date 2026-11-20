@@ -1707,8 +1707,12 @@ function rewardHelperKill(helper, enemy) {
   const levelsGained = helpers.gainExperience(helper, experience);
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `Helper +${experience} XP`, 'experience');
   const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
+  const trophy = BOSS_TROPHIES[enemy.kind];
   const drops = enemy.definition.drops || [];
-  if (minibossMaterial) helpers.bringHome(helper, minibossMaterial, BOSS_MATERIAL_DROP);
+  if (trophy) {
+    save.bossDefeatedAt = { ...(save.bossDefeatedAt || {}), [enemy.kind]: wallClock() };
+    helpers.bringHome(helper, trophy.material, BOSS_MATERIAL_DROP);
+  } else if (minibossMaterial) helpers.bringHome(helper, minibossMaterial, BOSS_MATERIAL_DROP);
   else if (drops.length) helpers.bringHome(helper, drops[Math.floor(random() * drops.length)], 1);
   if (levelsGained) hud.toast(`A helper reached level ${helper.level}!`);
   if (helpersPanel.isOpen) helpersPanel.render();
@@ -2039,7 +2043,8 @@ function updateBodyWetness(deltaTime) {
 function updateHealth(deltaTime) {
   if (player.sleeping) {
     progression.state.health = Math.min(progression.maxHealth(), progression.state.health + (progression.maxHealth() / SLEEP_FULL_HEAL_SECONDS) * deltaTime);
-    if (progression.state.health >= progression.maxHealth()) wakeUp(true);
+    player.sleptSeconds = (player.sleptSeconds || 0) + deltaTime;
+    if (progression.state.health >= progression.maxHealth() && player.sleptSeconds >= SLEEP_MIN_SECONDS_FOR_REST) wakeUp(true);
     return;
   }
   const fed = isWellFed();
@@ -2048,6 +2053,7 @@ function updateHealth(deltaTime) {
 }
 
 const SLEEP_FULL_HEAL_SECONDS = 10;
+const SLEEP_MIN_SECONDS_FOR_REST = 6;
 const RESTED_SECONDS = 900;
 const RESTED_REGEN_FACTOR = 2;
 const RESTED_SPEED_FACTOR = 1.1;
@@ -2057,6 +2063,7 @@ function startSleeping(station) {
   if (player.combatTarget || isMolting()) return false;
   stopWalking();
   player.sleeping = station;
+  player.sleptSeconds = 0;
   hud.setMode('Sleeping — HP comes back fast', () => wakeUp(false));
   soundAt('recoverRemains', player.x, player.z, 0.4);
   return true;
@@ -2217,7 +2224,7 @@ function renderScene() {
   spotFeedback.visible = spotFeedback.visible && simulationTime < spotFeedbackUntil && !underground;
   spotFeedback.scale.setScalar(1 + 0.08 * Math.sin(simulationTime * 5));
   enemies.render(simulationTime, camera, player.combatTarget ? player.combatTarget.id : null, { x: player.x, z: player.z, level: progression.state.level, isRevealed: fog.isRevealed });
-  remains.update(simulationTime, camera, player);
+  remains.update(simulationTime, camera);
   hud.setVitals(progression.state.level, progression.state.health, progression.maxHealth(), progression.state.experience, progression.experienceToNext());
   const farZoomShare = THREE.MathUtils.smoothstep(cameraDistance, ...FAR_ZOOM_RING_DISTANCES);
   playerRing.position.set(player.x, player.y + 0.15, player.z);

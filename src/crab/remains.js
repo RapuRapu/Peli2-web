@@ -9,7 +9,7 @@ import { WORLD_LABEL_TOP_PIXELS } from './enemies.js';
 
 export const REMAINS_REACH = 2.2;
 const PICK_RADIUS_PIXELS = 64;
-const ARROW_MARGIN_PIXELS = 52;
+const SCREEN_MARGIN_PIXELS = 52;
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 
@@ -36,9 +36,6 @@ export function createRemains(scene, world, quality, labelParent, saved) {
   const ringMaterial = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 3.4, 4.6), transparent: true, opacity: 0.8, depthWrite: false, depthTest: false, fog: false });
   const ringGeometry = new THREE.RingGeometry(1.75, 2.35, 56).rotateX(-Math.PI / 2);
   const bundleGeometry = buildBundleGeometry();
-  const arrow = element('div', 'remains-arrow hidden', labelParent);
-  element('span', 'remains-arrow-icon', arrow, '💀');
-  const arrowPointer = element('span', 'remains-arrow-pointer', arrow, '➤');
   const list = [];
   const projected = new THREE.Vector3();
   let nextId = 1;
@@ -111,33 +108,17 @@ export function createRemains(scene, world, quality, labelParent, saved) {
     return { x: (projected.x * 0.5 + 0.5) * innerWidth, y: (-projected.y * 0.5 + 0.5) * innerHeight, behind: projected.z > 1 };
   }
 
-  function update(time, camera, player) {
-    let nearest = null;
+  function update(time, camera) {
     for (const entry of list) {
       const pulse = 0.5 + 0.5 * Math.sin(time * 3 + entry.id);
       entry.ring.scale.setScalar(1 + 0.06 * pulse);
       if (entry.gearGlowUniforms) updateGearGlowUniforms(entry.gearGlowUniforms, entry.gearGlowLookOfShell, time);
       const point = screenPoint(entry, camera);
-      const onScreen = !point.behind && point.x > ARROW_MARGIN_PIXELS && point.x < innerWidth - ARROW_MARGIN_PIXELS && point.y > ARROW_MARGIN_PIXELS && point.y < innerHeight - ARROW_MARGIN_PIXELS;
+      const onScreen = !point.behind && point.x > SCREEN_MARGIN_PIXELS && point.x < innerWidth - SCREEN_MARGIN_PIXELS && point.y > SCREEN_MARGIN_PIXELS && point.y < innerHeight - SCREEN_MARGIN_PIXELS;
       entry.label.classList.toggle('hidden', !onScreen);
       if (onScreen) entry.label.style.transform = `translate(-50%, -100%) translate(${point.x}px, ${Math.max(WORLD_LABEL_TOP_PIXELS, point.y - 5 * pulse)}px)`;
-      const distance = Math.hypot(entry.x - player.x, entry.z - player.z);
-      if (!onScreen && (!nearest || distance < nearest.distance)) nearest = { point, distance };
     }
     ringMaterial.opacity = 0.65 + 0.3 * Math.sin(time * 3);
-    arrow.classList.toggle('hidden', !nearest);
-    if (!nearest) return;
-    const centerX = innerWidth / 2;
-    const centerY = innerHeight / 2;
-    let directionX = nearest.point.x - centerX;
-    let directionY = nearest.point.y - centerY;
-    if (nearest.point.behind) {
-      directionX = -directionX;
-      directionY = -directionY;
-    }
-    const scale = Math.min((centerX - ARROW_MARGIN_PIXELS) / Math.max(1e-3, Math.abs(directionX)), (centerY - ARROW_MARGIN_PIXELS - 40) / Math.max(1e-3, Math.abs(directionY)));
-    arrow.style.transform = `translate(-50%, -50%) translate(${centerX + directionX * scale}px, ${centerY + directionY * scale}px)`;
-    arrowPointer.style.transform = `rotate(${Math.atan2(directionY, directionX)}rad)`;
   }
 
   function pick(clientX, clientY, camera) {
