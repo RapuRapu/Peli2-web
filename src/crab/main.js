@@ -2609,6 +2609,8 @@ function openMap() {
   const surfacePosition = underground ? (nearestTravelPoint() ? nearestTravelPoint().point.surface : burrow.state.entrance) : { x: player.x, z: player.z };
   mapView.open({
     player: surfacePosition,
+    playerHeading: underground ? 0 : player.heading,
+    bosses: enemies.list.filter((enemy) => enemy.definition.boss || enemy.kind === 'gull').map((enemy) => ({ x: enemy.home.x, z: enemy.home.z })),
     entrances: burrow.exists ? burrow.travelPoints().map((point) => point.surface) : [],
     remains: remains.list.map((entry) => ({ x: entry.x, z: entry.z })).filter((point) => fog.isRevealed(point.x, point.z)),
     rack: rack.exists ? { x: rack.state.x, z: rack.state.z } : null,
