@@ -1725,7 +1725,10 @@ function rewardHelperKill(helper, enemy) {
 
 function enemyKilled(enemy, attacker = null) {
   if (player.combatTarget === enemy) player.combatTarget = null;
-  if (attacker && attacker.helperId) {
+  if (attacker && attacker.helperId && attacker.job === 'follow') {
+    const helperExperience = experienceForKill(enemy.definition.experience, enemy.definition.level, attacker.level || 1);
+    if (helpers.gainExperience(attacker, helperExperience)) hud.toast(`A helper reached level ${attacker.level}!`);
+  } else if (attacker && attacker.helperId) {
     rewardHelperKill(attacker, enemy);
     return;
   }

@@ -383,10 +383,14 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
   }
 
   function threatNear(helper) {
+    const player = getPlayer();
+    const busyWithPlayer = player.alive ? player.combatTarget : null;
+    const followerIgnoresChasers = helper.state === 'following' && player.alive;
     let nearest = null;
     for (const enemy of enemies.list) {
       if (enemy.state === 'dead' || enemy.state === 'dying' || enemy.definition.temperament !== 'aggressive') continue;
-      if (enemy.state === 'chase' || enemy.state === 'landing') continue;
+      if (enemy === busyWithPlayer) continue;
+      if (followerIgnoresChasers && (enemy.state === 'chase' || enemy.state === 'landing')) continue;
       if (enemy.definition.flies && (enemy.altitude || 0) > 2) continue;
       const distance = Math.hypot(enemy.x - helper.x, enemy.z - helper.z);
       if (!nearest || distance < nearest.distance) nearest = { enemy, distance };
