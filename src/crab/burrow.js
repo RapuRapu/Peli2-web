@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { applySeaside } from './seaside.js';
 import { createNoise2D } from '../noise.js';
 import { element } from './workbench.js';
+import { pickTarget } from './picking.js';
 import { parseModel } from './rig.js';
 import burrowPropBytes from './assets/burrowProps.glb';
 
@@ -28,7 +29,6 @@ const WALL_HEIGHT = 1.05;
 const BORDER_RING = 2;
 const PLAYER_CLEARANCE = 0.55;
 const STATION_BLOCK_RADIUS = 1.15;
-const PICK_RADIUS_PIXELS = 70;
 const DIG_SECONDS = 3;
 const SAND_SAMPLES_PER_CELL = 10;
 const SAND_BLUR_CELLS = 0.6;
@@ -374,6 +374,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   scene.add(interior);
   const exitLabel = element('div', 'world-label burrow-label exit-label hidden', labelParent, 'Exit');
   const stationMeshes = new Map();
+  const exitPickables = new Map();
   const surfaceMeshes = new Map();
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
@@ -558,6 +559,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     const pool = shaft.pool.clone();
     pool.position.set(0, 0, 0);
     below.add(pool);
+    exitPickables.set(station, model || pool);
     below.position.set(spot.x - BURROW_ORIGIN.x, 0, spot.z - BURROW_ORIGIN.z);
     interior.add(below);
     setLayers(below, [BURROW_LAYER]);
@@ -790,38 +792,16 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     return { x, z, ...cellOf(x, z), wall: false };
   }
 
-  function screenDistance(x, y, z, clientX, clientY, camera) {
-    projected.set(x, y, z).project(camera);
-    if (projected.z > 1) return Infinity;
-    return Math.hypot((projected.x * 0.5 + 0.5) * innerWidth - clientX, (-projected.y * 0.5 + 0.5) * innerHeight - clientY);
-  }
-
-  function entranceUnder(clientX, clientY, camera, radiusPixels = PICK_RADIUS_PIXELS) {
-    let best = null;
-    for (const point of travelPoints()) {
-      const distance = screenDistance(point.surface.x, world.heightAt(point.surface.x, point.surface.z) + 0.4, point.surface.z, clientX, clientY, camera);
-      if (distance < radiusPixels && (!best || distance < best.distance)) best = { point, distance };
-    }
-    return best ? best.point : null;
+  function entranceUnder(clientX, clientY, camera) {
+    return pickTarget(clientX, clientY, camera, travelPoints().map((point) => ({ object: point.station ? surfaceMeshes.get(point.station) : entranceGroup, value: point })));
   }
 
   function shaftUnder(clientX, clientY, camera) {
-    let best = null;
-    for (const point of travelPoints()) {
-      const distance = screenDistance(point.below.x, BURROW_ORIGIN.y + 0.5, point.below.z, clientX, clientY, camera);
-      if (distance < PICK_RADIUS_PIXELS && (!best || distance < best.distance)) best = { point, distance };
-    }
-    return best ? best.point : null;
+    return pickTarget(clientX, clientY, camera, travelPoints().map((point) => ({ object: point.station ? exitPickables.get(point.station) : exitModel || shaft.beam, value: point })));
   }
 
   function stationUnder(clientX, clientY, camera) {
-    let best = null;
-    for (const station of state.stations) {
-      const spot = stationSpot(station);
-      const distance = screenDistance(spot.x, BURROW_ORIGIN.y + 0.6, spot.z, clientX, clientY, camera);
-      if (distance < PICK_RADIUS_PIXELS && (!best || distance < best.distance)) best = { station, distance };
-    }
-    return best ? best.station : null;
+    return pickTarget(clientX, clientY, camera, state.stations.map((station) => ({ object: station.kind === 'exit' ? exitPickables.get(station) : stationMeshes.get(station), value: station })));
   }
 
   function freeCells() {
@@ -932,6 +912,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     const mesh = stationMeshes.get(station);
     if (mesh && station.kind !== 'workshop') mesh.removeFromParent();
     stationMeshes.delete(station);
+    exitPickables.delete(station);
     const surfaceMesh = surfaceMeshes.get(station);
     if (surfaceMesh) surfaceMesh.removeFromParent();
     surfaceMeshes.delete(station);

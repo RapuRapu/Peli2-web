@@ -1,18 +1,31 @@
 export const LOG_LIMIT = 50;
 const COLLAPSED_LINES = 4;
 export const LOG_KINDS = ['combat', 'loot', 'build', 'progress', 'helper', 'discovery', 'notice', 'chat', 'system'];
+const FILTERABLE_KINDS = LOG_KINDS.filter((kind) => kind !== 'system');
 
 const clockText = (date) => date.toTimeString().slice(0, 8);
 
 export function createGameLog(parent, { localAuthor = 'You', transport = null } = {}) {
   const entries = [];
   const commands = new Map();
-  let filter = null;
+  const shownKinds = new Set();
   let expanded = false;
   let nextId = 1;
 
   const root = document.createElement('div');
   root.className = 'game-log';
+  const filterBar = document.createElement('div');
+  filterBar.className = 'log-filters';
+  const filterChips = new Map();
+  for (const kind of ['all', ...FILTERABLE_KINDS]) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `log-chip log-${kind}`;
+    chip.textContent = kind;
+    chip.addEventListener('click', () => toggleKind(kind));
+    filterBar.append(chip);
+    filterChips.set(kind, chip);
+  }
   const lines = document.createElement('div');
   lines.className = 'log-lines';
   const form = document.createElement('form');
@@ -24,7 +37,7 @@ export function createGameLog(parent, { localAuthor = 'You', transport = null } 
   input.placeholder = 'Type here, /help for commands';
   input.enterKeyHint = 'send';
   form.append(input);
-  root.append(lines, form);
+  root.append(filterBar, lines, form);
   parent.append(root);
   queueMicrotask(render);
 
@@ -41,7 +54,8 @@ export function createGameLog(parent, { localAuthor = 'You', transport = null } 
   }
 
   function render() {
-    const visible = entries.filter((entry) => !filter || entry.kind === filter || entry.kind === 'system');
+    for (const [kind, chip] of filterChips) chip.classList.toggle('active', kind === 'all' ? shownKinds.size === 0 : shownKinds.has(kind));
+    const visible = entries.filter((entry) => shownKinds.size === 0 || shownKinds.has(entry.kind) || entry.kind === 'system');
     const shown = expanded ? visible : visible.slice(-COLLAPSED_LINES);
     lines.replaceChildren(...shown.map((entry) => {
       const line = document.createElement('div');
@@ -101,9 +115,22 @@ export function createGameLog(parent, { localAuthor = 'You', transport = null } 
     entries.length = 0;
     render();
   });
-  registerCommand('filter', `show one kind (${LOG_KINDS.join(', ')}) or all`, ([kind]) => {
-    filter = LOG_KINDS.includes(kind) ? kind : null;
-    post('system', filter ? `Showing ${filter} only` : 'Showing everything');
+  function toggleKind(kind) {
+    if (kind === 'all') shownKinds.clear();
+    else if (shownKinds.has(kind)) shownKinds.delete(kind);
+    else shownKinds.add(kind);
+    render();
+  }
+
+  function describeFilter() {
+    return shownKinds.size ? `Showing ${[...shownKinds].join(', ')}` : 'Showing everything';
+  }
+
+  registerCommand('filter', `show only some kinds, e.g. /filter combat loot (${FILTERABLE_KINDS.join(', ')}) — or /filter all`, (kinds) => {
+    const known = kinds.map((kind) => kind.toLowerCase()).filter((kind) => FILTERABLE_KINDS.includes(kind));
+    shownKinds.clear();
+    if (!kinds.includes('all')) for (const kind of known) shownKinds.add(kind);
+    post('system', describeFilter());
   });
 
   form.addEventListener('submit', (event) => {
@@ -121,5 +148,5 @@ export function createGameLog(parent, { localAuthor = 'You', transport = null } 
   });
   input.addEventListener('keyup', (event) => event.stopPropagation());
 
-  return { root, post, submit, receive, registerCommand, entries, setExpanded, get expanded() { return expanded; } };
+  return { root, shownKinds, toggleKind, post, submit, receive, registerCommand, entries, setExpanded, get expanded() { return expanded; } };
 }

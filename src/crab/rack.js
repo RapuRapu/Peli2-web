@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { applySeaside } from './seaside.js';
 import { element } from './workbench.js';
+import { pickTarget } from './picking.js';
 
 export const RACK_SLOTS = 3;
 export const RACK_BATCH = 3;
@@ -9,7 +10,6 @@ export const RACK_DRY_SECONDS = 60;
 export const RACK_REACH = 2.6;
 export const RACK_BLOCK_RADIUS = 1.3;
 const RACK_DISTANCE_FROM_ENTRANCE = 6.5;
-const PICK_RADIUS_PIXELS = 70;
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const POLE = linearColor(0.74, 0.6, 0.42);
@@ -196,11 +196,8 @@ export function createRack(scene, world, quality, labelParent, saved) {
   }
 
   function under(clientX, clientY, camera) {
-    const current = stateRef.current;
-    if (!current) return false;
-    projected.set(current.x, group.position.y + 1.4, current.z).project(camera);
-    if (projected.z > 1) return false;
-    return Math.hypot((projected.x * 0.5 + 0.5) * innerWidth - clientX, (-projected.y * 0.5 + 0.5) * innerHeight - clientY) < PICK_RADIUS_PIXELS;
+    if (!stateRef.current) return false;
+    return pickTarget(clientX, clientY, camera, [{ object: group, value: true }]) === true;
   }
 
   const api = {

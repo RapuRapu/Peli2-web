@@ -61,7 +61,6 @@ const WADE_SPEED = 5.2;
 const TURN_RATE = 9;
 const GATHER_REACH = 2.5;
 const PICK_RADIUS_PIXELS = 46;
-const ENTRANCE_PICK_RADIUS_PIXELS = 30;
 const DRAG_START_PIXELS = 14;
 const SURFACE_CAMERA_DISTANCE = 32;
 const BURROW_FRAMED_WIDTH = 11;
@@ -2468,7 +2467,7 @@ function handleTap(clientX, clientY, isNewTouch) {
     walkToRack();
     return;
   }
-  const entrancePoint = isNewTouch ? burrow.entranceUnder(clientX, clientY, camera, ENTRANCE_PICK_RADIUS_PIXELS) : null;
+  const entrancePoint = isNewTouch ? burrow.entranceUnder(clientX, clientY, camera) : null;
   if (entrancePoint) {
     walkToEntrance({ point: entrancePoint });
     return;

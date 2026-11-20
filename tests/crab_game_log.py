@@ -37,6 +37,15 @@ FLOW = r'''
   out.chat = { kind: last.kind, author: last.author, text: last.text };
   d.hud.gameLog.submit('/help');
   out.helpListed = texts().some((t) => t.startsWith('system|/filter'));
+  d.hud.gameLog.submit('/filter combat loot');
+  out.multiFilter = [...d.hud.gameLog.shownKinds].sort().join(',');
+  d.hud.gameLog.setExpanded(true);
+  out.visibleKinds = [...new Set([...document.querySelectorAll('#hud .game-log .log-line')].map((line) => line.className.replace('log-line log-', '')))].sort().join(',');
+  document.querySelector('#hud .game-log .log-chip.log-loot').click();
+  out.afterChip = [...d.hud.gameLog.shownKinds].join(',');
+  document.querySelector('#hud .game-log .log-chip.log-all').click();
+  out.afterAll = d.hud.gameLog.shownKinds.size;
+  d.hud.gameLog.setExpanded(false);
   for (let i = 0; i < 70; i++) d.hud.log('notice', `spam ${i}`);
   out.capped = d.hud.gameLog.entries.length;
   d.hud.gameLog.submit('/clear');
@@ -76,6 +85,7 @@ with sync_playwright() as playwright:
         'chatEntry': out['chat']['kind'] == 'chat' and out['chat']['author'] == 'You' and out['chat']['text'] == 'hello crabs',
         'commands': out['helpListed'] and out['cleared'] == 0,
         'cappedAt50': out['capped'] == 50,
+        'multiKindFilter': out['multiFilter'] == 'combat,loot' and set(out['visibleKinds'].split(',')) <= {'combat', 'loot', 'system'} and out['afterChip'] == 'combat' and out['afterAll'] == 0,
         'performanceSetting': out['perfHiddenByDefault'] and out['perfShown'],
         'typingInInput': typed['last'] == 'wasd typed',
         'noErrors': not errors,
