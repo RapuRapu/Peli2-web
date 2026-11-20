@@ -4,6 +4,7 @@ import { applySeaside } from './seaside.js';
 import { createNoise2D } from '../noise.js';
 import { SHELLS, CLAWS, canAfford, QUALITIES, TOOL_TIERS, BINDINGS, REINFORCEMENTS, qualityForTools, refineCost } from './gear.js';
 import { RESOURCE_TYPES } from './resources.js';
+import { CONSUMABLES } from './consumables.js';
 import { tierClass, tierBadge, itemName, itemStatsText, modificationOf } from './itemInfo.js';
 import { renderStructureActions } from './inventoryView.js';
 
@@ -146,7 +147,7 @@ function costRow(cost, inventory, parent) {
   }
 }
 
-export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCraft, onUpgradeTools, onRefine, onModify, onMove, onDismantle, onClose }) {
+export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCraft, onCraftSupply = () => {}, onUpgradeTools, onRefine, onModify, onMove, onDismantle, onClose }) {
   const overlay = element('div', 'workbench workshop-panel', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -188,6 +189,18 @@ export function createWorkbenchPanel(root, { gear, inventory, isDiscovered, onCr
       button.addEventListener('click', () => onCraft(category, kind));
     }
     if (hidden) element('div', 'placeholder undiscovered', body, `${hidden} more ${hidden === 1 ? 'recipe' : 'recipes'} to discover — find new materials out in the world.`);
+    for (const [type, supply] of Object.entries(CONSUMABLES).filter(([, definition]) => definition.recipe)) {
+      const row = element('div', 'item supply', body);
+      const text = element('div', 'item-text', row);
+      element('div', 'item-name', text, `${RESOURCE_TYPES[type].icon} ${RESOURCE_TYPES[type].label} · supply`);
+      element('div', 'item-ability', text, supply.description);
+      if (inventory()[type]) element('div', 'item-owned', text, `Owned: ${inventory()[type]}`);
+      costRow(supply.recipe, inventory(), text);
+      const button = element('button', 'item-action', row, 'Craft');
+      button.dataset.craft = `supply:${type}`;
+      button.disabled = !canAfford(supply.recipe, inventory());
+      button.addEventListener('click', () => onCraftSupply(type));
+    }
   }
 
   function renderResult() {

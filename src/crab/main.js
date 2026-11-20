@@ -19,6 +19,7 @@ import { createResources, RESOURCE_TYPES } from './resources.js';
 import { createHud } from './hud.js';
 import { createTracks } from './tracks.js';
 import { createRipples } from './ripples.js';
+import { CONSUMABLES, QUICK_SLOT_COUNT } from './consumables.js';
 import { createGear, SHELLS, CLAWS, QUALITIES, REINFORCEMENTS, qualityFactor, shellDefenseOf, canAfford, BOSS_TROPHIES, MINIBOSS_MATERIALS, BOSS_MATERIAL_DROP, BOSS_ITEM_CHANCE, gearGlowLook, normalizeItem } from './gear.js';
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
@@ -687,6 +688,7 @@ const workbenchPanel = createWorkbenchPanel(hud.root, {
   gear,
   inventory: () => save.inventory,
   onCraft: craftItem,
+  onCraftSupply: craftSupply,
   onUpgradeTools: upgradeTools,
   onRefine: refineItem,
   onModify: modifyItem,
@@ -706,7 +708,9 @@ const backpack = createBackpackPanel(hud.root, {
   thumbnails,
   onWear: wearItem,
   onUnequip: unequipItem,
-  onEat: eatKelp,
+  onUse: useConsumable,
+  onAssignQuickSlot: assignQuickSlot,
+  quickSlots: () => quickSlots(),
   onSalvage: salvageItem,
   onClose: () => {
     backpack.close();
@@ -834,8 +838,76 @@ function hasCraftedGear() {
   return save.craftedOnce;
 }
 
+const DEFAULT_QUICK_SLOTS = ['kelpPoultice', 'driedKelp'];
+
+function quickSlots() {
+  if (!Array.isArray(save.quickSlots)) save.quickSlots = DEFAULT_QUICK_SLOTS.slice(0, QUICK_SLOT_COUNT);
+  return save.quickSlots;
+}
+
+function quickSlotViews() {
+  return quickSlots().map((type) => {
+    if (!type) return null;
+    const readyAt = (player.consumableReadyAt || {})[type] || 0;
+    const cooldownShare = Math.max(0, Math.min(1, (readyAt - simulationTime) / CONSUMABLES[type].cooldownSeconds));
+    return { icon: RESOURCE_TYPES[type].icon, label: RESOURCE_TYPES[type].label, count: save.inventory[type] || 0, cooldownShare };
+  });
+}
+
+function assignQuickSlot(index, type) {
+  const slots = quickSlots();
+  for (let other = 0; other < slots.length; other++) if (slots[other] === type) slots[other] = null;
+  slots[index] = type;
+  hud.log('notice', `${RESOURCE_TYPES[type].label} set to quick slot ${index + 1}`);
+  refreshHud(null);
+  if (backpack.isOpen) backpack.render();
+  persist();
+}
+
+function useConsumable(type) {
+  const consumable = CONSUMABLES[type];
+  if (!consumable || !(save.inventory[type] > 0) || !player.alive) return false;
+  player.consumableReadyAt ||= {};
+  if (simulationTime < (player.consumableReadyAt[type] || 0)) {
+    hud.log('notice', `${RESOURCE_TYPES[type].label} is not ready yet`);
+    return false;
+  }
+  if (consumable.healShare) {
+    const maxHealth = progression.maxHealth();
+    if (progression.state.health >= maxHealth) {
+      hud.log('notice', 'Already at full HP');
+      return false;
+    }
+    const healed = Math.min(maxHealth - progression.state.health, Math.round(maxHealth * consumable.healShare));
+    save.inventory[type] -= 1;
+    progression.state.health += healed;
+    floatAt(player.x, player.y + 2.2, player.z, `+${healed} ❤`, 'experience');
+    soundAt('gatherSeaLettuce');
+    hud.log('combat', `${RESOURCE_TYPES[type].label} heals you +${healed} · ${healthText()}`);
+    persist();
+  } else if (type === 'driedKelp' && !eatKelp()) return false;
+  player.consumableReadyAt[type] = simulationTime + consumable.cooldownSeconds;
+  refreshHud(null);
+  if (backpack.isOpen) backpack.render();
+  return true;
+}
+
+function craftSupply(type) {
+  const recipe = CONSUMABLES[type].recipe;
+  if (!recipe || !canAfford(recipe, save.inventory)) return false;
+  for (const [material, amount] of Object.entries(recipe)) save.inventory[material] -= amount;
+  save.inventory[type] = (save.inventory[type] || 0) + 1;
+  soundAt('craft');
+  hud.log('build', `Made a ${RESOURCE_TYPES[type].label.toLowerCase()}`);
+  refreshHud(type);
+  workbenchPanel.render();
+  persist();
+  return true;
+}
+
 function refreshHud(bumpedType) {
   if (bumpedType) hud.bumpBag();
+  hud.setQuickSlots(quickSlotViews());
   hud.setBuildButton(underground || !burrow.exists, { surface: !underground });
   hud.setMoltButton(underground && !isMolting() ? progression.moltsAvailable() : 0);
 }
@@ -2324,6 +2396,7 @@ function renderScene() {
   destinationMarker.scale.setScalar(1 + 0.12 * Math.sin(simulationTime * 5));
   workshop.update(simulationTime, underground && !hasCraftedGear() && !anyPanelOpen() && !isPlacing(), camera, underground);
   burrow.update(simulationTime, camera, underground);
+  if (Object.values(player.consumableReadyAt || {}).some((readyAt) => readyAt > simulationTime - 0.1)) hud.setQuickSlots(quickSlotViews());
   if (placement.filling && simulationTime - (placement.fillRefreshedAt || 0) > FILL_REFRESH_SECONDS) {
     placement.fillRefreshedAt = simulationTime;
     refreshFillCells();
@@ -2602,6 +2675,12 @@ hud.onVolume((key, value) => {
   }
 });
 hud.onTravel(travel);
+hud.onQuickSlot((index) => {
+  const type = quickSlots()[index];
+  if (!type) hud.log('notice', 'Open the backpack and tap an item to put it in a quick slot');
+  else if (!(save.inventory[type] > 0)) hud.log('notice', `No ${RESOURCE_TYPES[type].label.toLowerCase()} left`);
+  else useConsumable(type);
+});
 hud.onBuild(() => {
   if (anyPanelOpen()) return;
   if (underground) buildPanel.open();
@@ -2882,7 +2961,7 @@ if (isScreenshotMode) {
 window.__debug = {
   hud, setShowPerformance, simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, salvageItem, startMovingStructure, dismantleStructure, moveStationTo, moveRackTo, isRecipeDiscovered, placement, cancelPlacement, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, equipHelper, openMap, startFillMode, startFillCell, startSleeping, wakeUp, isRested, mapView, fog, exitCellProblem, chooseStation, nearestTravelPoint, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, useConsumable, craftSupply, assignQuickSlot, quickSlots, isWellFed, walkToRack, helpers, helpersPanel, equipHelper, openMap, startFillMode, startFillCell, startSleeping, wakeUp, isRested, mapView, fog, exitCellProblem, chooseStation, nearestTravelPoint, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   setRendering: (enabled) => { rendersFrames = enabled; },
   isPaused: () => paused,

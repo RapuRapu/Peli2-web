@@ -1,9 +1,10 @@
 import { CLAWS } from './gear.js';
+import { CONSUMABLES, QUICK_SLOT_COUNT } from './consumables.js';
 import { element } from './workbench.js';
 import { materialEntries, gearEntries, renderSlot, renderItemPopup, attachSlotGestures, salvageAction } from './inventoryView.js';
 import { itemName, itemStatsText, definitionOf, shellDefense, clawAttack } from './itemInfo.js';
 
-export function createBackpackPanel(root, { gear, inventory, thumbnails, onWear, onUnequip, onEat, onSalvage, onClose }) {
+export function createBackpackPanel(root, { gear, inventory, thumbnails, onWear, onUnequip, onUse, onAssignQuickSlot, quickSlots, onSalvage, onClose }) {
   const overlay = element('div', 'workbench backpack', root);
   const card = element('div', 'workbench-card', overlay);
   const header = element('div', 'workbench-header', card);
@@ -53,7 +54,17 @@ export function createBackpackPanel(root, { gear, inventory, thumbnails, onWear,
 
   function actionsFor(entry) {
     if (!entry) return [];
-    if (entry.kind === 'material') return entry.type === 'driedKelp' ? [{ label: 'Eat · 2× regen 90 s', data: { eat: 'driedKelp' }, run: () => onEat() }] : [];
+    if (entry.kind === 'material') {
+      const consumable = CONSUMABLES[entry.type];
+      if (!consumable) return [];
+      const quickSlotActions = Array.from({ length: QUICK_SLOT_COUNT }, (_, index) => ({
+        label: quickSlots()[index] === entry.type ? `In quick slot ${index + 1}` : `Quick slot ${index + 1}`,
+        secondary: true,
+        data: { quickSlot: String(index) },
+        run: () => onAssignQuickSlot(index, entry.type),
+      }));
+      return [{ label: consumable.useLabel, data: { eat: entry.type }, run: () => onUse(entry.type) }, ...quickSlotActions];
+    }
     if (entry.worn) return entry.category === 'shell' || CLAWS[entry.item.kind].cost ? [{ label: 'Take off', secondary: true, data: { unequip: entry.category }, run: () => unequipEntry(entry) }] : [];
     const salvage = salvageAction(entry, () => {
       selectedKey = null;

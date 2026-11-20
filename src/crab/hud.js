@@ -40,6 +40,18 @@ export function createHud(activeQualityName) {
   const BUILD_ICON = '🔨';
   const DIG_BURROW_LABEL = 'Burrow';
   const buildButton = iconButton('build-open', BUILD_ICON, 'Build');
+  const quickSlotBar = element('div', 'quick-slots', root);
+  let quickSlotListener = () => {};
+  const quickSlotButtons = [0, 1].map((index) => {
+    const button = element('button', 'quick-slot empty', quickSlotBar);
+    button.dataset.quickSlot = String(index);
+    const icon = element('span', 'quick-slot-icon', button, '+');
+    const count = element('span', 'quick-slot-count', button);
+    const cooldown = element('span', 'quick-slot-cooldown', button);
+    button.setAttribute('aria-label', `Quick slot ${index + 1}`);
+    button.addEventListener('click', () => quickSlotListener(index));
+    return { button, icon, count, cooldown };
+  });
   const travelButton = element('button', 'travel-button hidden', root);
   const modeBar = element('div', 'mode-bar hidden', root);
   const modeText = element('span', 'mode-text', modeBar);
@@ -158,6 +170,21 @@ export function createHud(activeQualityName) {
     onReset: (listener) => { resetListener = listener; },
     onQuality: (listener) => { qualityListener = listener; },
     onVolume: (listener) => { volumeListener = listener; },
+    onQuickSlot: (listener) => { quickSlotListener = listener; },
+    setQuickSlots(views) {
+      views.forEach((view, index) => {
+        const slot = quickSlotButtons[index];
+        slot.button.classList.toggle('empty', !view);
+        slot.button.classList.toggle('used-up', Boolean(view) && view.count === 0);
+        const iconText = view ? view.icon : '+';
+        if (slot.icon.textContent !== iconText) slot.icon.textContent = iconText;
+        const countText = view ? String(view.count) : '';
+        if (slot.count.textContent !== countText) slot.count.textContent = countText;
+        const cooldownDegrees = view ? Math.round(view.cooldownShare * 360) : 0;
+        slot.cooldown.style.background = cooldownDegrees > 0 ? `conic-gradient(rgba(10, 14, 18, 0.65) ${cooldownDegrees}deg, transparent 0)` : 'none';
+        slot.button.title = view ? view.label : `Quick slot ${index + 1} — assign an item in the backpack`;
+      });
+    },
     onPerformanceToggle: (listener) => { performanceListener = listener; },
     setPerformanceToggle(visible) {
       performanceToggle.checked = visible;
