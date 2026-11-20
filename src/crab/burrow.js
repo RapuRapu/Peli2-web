@@ -378,10 +378,12 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   const transform = new THREE.Object3D();
   const projected = new THREE.Vector3();
   const digging = { cell: -1, progress: 0 };
+  const filling = { cell: -1, progress: 0 };
   let lastUpdateTime = null;
   const sandNoise = createNoise2D(91);
 
   const exitKeep = new Set(EXIT_KEEP_CELLS.map(([column, row]) => cellIndex(SHAFT_CELL.column + column, SHAFT_CELL.row + row)));
+  for (const station of state.stations) for (const [column, row] of station.keep || []) exitKeep.add(cellIndex(column, row));
   const isDug = (column, row) => insideGrid(column, row) && dugCells.has(cellIndex(column, row));
   const stationAt = (column, row) => state.stations.find((station) => station.column === column && station.row === row) || null;
 
@@ -396,7 +398,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   }
 
   function solidity(column, row) {
-    if (isDug(column, row)) return 0;
+    if (isDug(column, row)) return insideGrid(column, row) && cellIndex(column, row) === filling.cell ? Math.floor(filling.progress * DIG_CHUNK_STEPS) / DIG_CHUNK_STEPS : 0;
     if (insideGrid(column, row) && cellIndex(column, row) === digging.cell) return 1 - Math.floor(digging.progress * DIG_CHUNK_STEPS) / DIG_CHUNK_STEPS;
     return 1;
   }
@@ -681,6 +683,49 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     if (focus >= 0) rebuildWalls(cellColumn(focus), cellRow(focus));
   }
 
+  function fillProblem(column, row, occupiedCells = []) {
+    if (!isDug(column, row)) return 'notDug';
+    if (stationAt(column, row)) return 'structure';
+    if (column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row - 1)) return 'shaft';
+    if (state.stations.some((station) => station.access && station.access.column === column && station.access.row === row)) return 'exitAccess';
+    if (occupiedCells.some((cell) => cell.column === column && cell.row === row)) return 'occupied';
+    const removed = cellIndex(column, row);
+    const reached = new Set([cellIndex(SHAFT_CELL.column, SHAFT_CELL.row)]);
+    const queue = [[SHAFT_CELL.column, SHAFT_CELL.row]];
+    while (queue.length) {
+      const [currentColumn, currentRow] = queue.pop();
+      for (const [stepColumn, stepRow] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nextColumn = currentColumn + stepColumn;
+        const nextRow = currentRow + stepRow;
+        const index = insideGrid(nextColumn, nextRow) ? cellIndex(nextColumn, nextRow) : -1;
+        if (index < 0 || index === removed || reached.has(index) || !dugCells.has(index)) continue;
+        reached.add(index);
+        if (!stationAt(nextColumn, nextRow)) queue.push([nextColumn, nextRow]);
+      }
+    }
+    if (state.stations.some((station) => !reached.has(cellIndex(station.column, station.row)))) return 'cutsOff';
+    return null;
+  }
+
+  function setFillProgress(index, progress) {
+    const step = Math.floor(progress * DIG_CHUNK_STEPS);
+    const previousStep = filling.cell === index ? Math.floor(filling.progress * DIG_CHUNK_STEPS) : -1;
+    const previousCell = filling.cell;
+    filling.cell = index;
+    filling.progress = progress;
+    if (step === previousStep) return;
+    const focus = index >= 0 ? index : previousCell;
+    if (focus >= 0) rebuildWalls(cellColumn(focus), cellRow(focus));
+  }
+
+  function finishFill(column, row) {
+    dugCells.delete(cellIndex(column, row));
+    state.dug = [...dugCells];
+    filling.cell = -1;
+    filling.progress = 0;
+    rebuildWalls(column, row);
+  }
+
   function finishDig(column, row) {
     burstChunks(column, row);
     dugCells.add(cellIndex(column, row));
@@ -749,7 +794,55 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   }
 
   function freeCells() {
-    return [...dugCells].map((index) => ({ column: cellColumn(index), row: cellRow(index) })).filter(({ column, row }) => !stationAt(column, row) && !(column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row + SHAFT_ACCESS_ROW_STEP)));
+    const isExitAccess = (column, row) => state.stations.some((station) => station.access && station.access.column === column && station.access.row === row);
+    return [...dugCells].map((index) => ({ column: cellColumn(index), row: cellRow(index) })).filter(({ column, row }) => !stationAt(column, row) && !isExitAccess(column, row) && !(column === SHAFT_CELL.column && (row === SHAFT_CELL.row || row === SHAFT_CELL.row + SHAFT_ACCESS_ROW_STEP)));
+  }
+
+  function keepCellsFor(column, row, accessColumn, accessRow) {
+    const towardAccess = { column: accessColumn - column, row: accessRow - row };
+    const across = { column: -towardAccess.row, row: towardAccess.column };
+    return EXIT_KEEP_CELLS.map(([sideways, away]) => [column + sideways * across.column - away * towardAccess.column, row + sideways * across.row - away * towardAccess.row]);
+  }
+
+  function exitWallSpots() {
+    const spots = [];
+    const seen = new Set();
+    for (const index of dugCells) {
+      const accessColumn = cellColumn(index);
+      const accessRow = cellRow(index);
+      if (stationAt(accessColumn, accessRow)) continue;
+      for (const [stepColumn, stepRow] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const column = accessColumn + stepColumn;
+        const row = accessRow + stepRow;
+        const key = `${column},${row}`;
+        if (seen.has(key) || !insideGrid(column, row) || isDug(column, row) || exitKeep.has(cellIndex(column, row))) continue;
+        const keep = keepCellsFor(column, row, accessColumn, accessRow);
+        if (!keep.every(([keepColumn, keepRow]) => insideGrid(keepColumn, keepRow) && !isDug(keepColumn, keepRow))) continue;
+        seen.add(key);
+        const wall = cellCenter(column, row);
+        const access = cellCenter(accessColumn, accessRow);
+        spots.push({ column, row, accessColumn, accessRow, keep, marker: { x: access.x + (wall.x - access.x) * 0.42, z: access.z + (wall.z - access.z) * 0.42 } });
+      }
+    }
+    return spots;
+  }
+
+  function showExitSpots(spots) {
+    highlights.count = 0;
+    for (const spot of spots) {
+      transform.position.set(spot.marker.x - BURROW_ORIGIN.x, 0.1, spot.marker.z - BURROW_ORIGIN.z);
+      transform.rotation.set(0, 0, 0);
+      transform.scale.set(0.7, 1, 0.7);
+      transform.updateMatrix();
+      highlights.setMatrixAt(highlights.count++, transform.matrix);
+    }
+    highlights.instanceMatrix.needsUpdate = true;
+  }
+
+  function addExit(spot, workshopModel) {
+    for (const [column, row] of spot.keep) exitKeep.add(cellIndex(column, row));
+    finishDig(spot.column, spot.row);
+    return addStation('exit', spot.column, spot.row, workshopModel, { keep: spot.keep, access: { column: spot.accessColumn, row: spot.accessRow } });
   }
 
   function showPlacementCells(visible, allowed = () => true) {
@@ -883,6 +976,12 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
     update,
     travelLabelPoint,
     travelPoints,
+    exitWallSpots,
+    fillProblem,
+    setFillProgress,
+    finishFill,
+    showExitSpots,
+    addExit,
     surfacePointOf,
     cellIndex,
     get exists() {

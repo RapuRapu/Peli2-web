@@ -44,12 +44,18 @@ function costText(cost, inventory) {
   });
 }
 
-export function createBuildPanel(root, { inventory, hasStation, onChoose, onClose }) {
+export function createBuildPanel(root, { inventory, hasStation, onChoose, onFill, onClose }) {
   const shell = createPanelShell(root, 'build-panel', 'Build', onClose);
 
   function render() {
     shell.body.replaceChildren();
     element('div', 'summary', shell.body, 'Pick a station, then tap a glowing spot in your burrow.');
+    const fillRow = element('div', 'item', shell.body);
+    const fillText = element('div', 'item-text', fillRow);
+    element('div', 'item-name', fillText, 'Fill sand');
+    element('div', 'item-ability', fillText, 'Push sand back into a tunnel. Free. Tunnels that keep a structure reachable cannot be filled.');
+    const fillButton = element('button', 'item-action fill-sand', fillRow, 'Fill');
+    fillButton.addEventListener('click', () => onFill());
     for (const [kind, definition] of Object.entries(STATION_KINDS)) {
       const built = !definition.multiple && hasStation(kind);
       const row = element('div', 'item', shell.body);
