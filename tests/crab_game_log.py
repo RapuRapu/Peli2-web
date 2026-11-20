@@ -46,6 +46,9 @@ FLOW = r'''
   document.querySelector('#hud .game-log .log-chip.log-all').click();
   out.afterAll = d.hud.gameLog.shownKinds.size;
   d.hud.gameLog.setExpanded(false);
+  d.hud.gameLog.submit('/filter helper-combat');
+  out.helperCombatFilter = [...d.hud.gameLog.shownKinds].join(',') === 'helperCombat' && !!document.querySelector('#hud .game-log .log-chip.log-helperCombat');
+  d.hud.gameLog.submit('/filter all');
   for (let i = 0; i < 70; i++) d.hud.log('notice', `spam ${i}`);
   out.capped = d.hud.gameLog.entries.length;
   d.hud.gameLog.submit('/clear');
@@ -85,6 +88,7 @@ with sync_playwright() as playwright:
         'chatEntry': out['chat']['kind'] == 'chat' and out['chat']['author'] == 'You' and out['chat']['text'] == 'hello crabs',
         'commands': out['helpListed'] and out['cleared'] == 0,
         'cappedAt50': out['capped'] == 50,
+        'helperCombatFilter': out['helperCombatFilter'],
         'multiKindFilter': out['multiFilter'] == 'combat,loot' and set(out['visibleKinds'].split(',')) <= {'combat', 'loot', 'system'} and out['afterChip'] == 'combat' and out['afterAll'] == 0,
         'performanceSetting': out['perfHiddenByDefault'] and out['perfShown'],
         'typingInInput': typed['last'] == 'wasd typed',

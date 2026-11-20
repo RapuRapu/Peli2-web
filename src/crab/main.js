@@ -568,7 +568,7 @@ const helpers = createHelpers(scene, {
     if (storagePanel.isOpen) storagePanel.render();
   },
   onLost: (helper, enemy) => {
-    hud.log('combat', `The ${enemy.definition.label.toLowerCase()} knocked out ${helpers.nameOf(helper)} — it woke up in its nest without a job`);
+    hud.log('helperCombat', `The ${enemy.definition.label.toLowerCase()} knocked out ${helpers.nameOf(helper)} — it woke up in its nest without a job`);
     if (helpersPanel.isOpen) helpersPanel.render();
     persist();
   },
@@ -1784,7 +1784,7 @@ function dropLoot(enemy) {
 function rewardHelperKill(helper, enemy) {
   const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, helper.level || 1);
   const levelsGained = helpers.gainExperience(helper, experience);
-  hud.log('helper', `${helpers.nameOf(helper)} defeated the ${enemy.definition.label.toLowerCase()} (+${experience} XP)`);
+  hud.log('helperCombat', `${helpers.nameOf(helper)} defeated the ${enemy.definition.label.toLowerCase()} (+${experience} XP)`);
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `Helper +${experience} XP`, 'experience');
   const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
   const trophy = BOSS_TROPHIES[enemy.kind];
@@ -1803,7 +1803,7 @@ function enemyKilled(enemy, attacker = null) {
   if (player.combatTarget === enemy) player.combatTarget = null;
   if (attacker && attacker.helperId && attacker.job === 'follow') {
     const helperExperience = experienceForKill(enemy.definition.experience, enemy.definition.level, attacker.level || 1);
-    hud.log('helper', `${helpers.nameOf(attacker)} landed the final blow (+${helperExperience} XP)`);
+    hud.log('helperCombat', `${helpers.nameOf(attacker)} landed the final blow (+${helperExperience} XP)`);
     if (helpers.gainExperience(attacker, helperExperience)) hud.log('helper', `${helpers.nameOf(attacker)} reached level ${attacker.level}!`);
   } else if (attacker && attacker.helperId) {
     rewardHelperKill(attacker, enemy);

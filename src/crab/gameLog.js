@@ -1,6 +1,8 @@
 export const LOG_LIMIT = 50;
 const COLLAPSED_LINES = 4;
-export const LOG_KINDS = ['combat', 'loot', 'build', 'progress', 'helper', 'discovery', 'notice', 'chat', 'system'];
+export const LOG_KINDS = ['combat', 'helperCombat', 'loot', 'build', 'progress', 'helper', 'discovery', 'notice', 'chat', 'system'];
+const KIND_LABELS = { helperCombat: 'helper combat' };
+const commandNameOf = (kind) => (KIND_LABELS[kind] || kind).replace(' ', '-');
 const FILTERABLE_KINDS = LOG_KINDS.filter((kind) => kind !== 'system');
 
 const clockText = (date) => date.toTimeString().slice(0, 8);
@@ -21,7 +23,7 @@ export function createGameLog(parent, { localAuthor = 'You', transport = null } 
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = `log-chip log-${kind}`;
-    chip.textContent = kind;
+    chip.textContent = KIND_LABELS[kind] || kind;
     chip.addEventListener('click', () => toggleKind(kind));
     filterBar.append(chip);
     filterChips.set(kind, chip);
@@ -123,11 +125,11 @@ export function createGameLog(parent, { localAuthor = 'You', transport = null } 
   }
 
   function describeFilter() {
-    return shownKinds.size ? `Showing ${[...shownKinds].join(', ')}` : 'Showing everything';
+    return shownKinds.size ? `Showing ${[...shownKinds].map((kind) => KIND_LABELS[kind] || kind).join(', ')}` : 'Showing everything';
   }
 
-  registerCommand('filter', `show only some kinds, e.g. /filter combat loot (${FILTERABLE_KINDS.join(', ')}) — or /filter all`, (kinds) => {
-    const known = kinds.map((kind) => kind.toLowerCase()).filter((kind) => FILTERABLE_KINDS.includes(kind));
+  registerCommand('filter', `show only some kinds, e.g. /filter combat loot (${FILTERABLE_KINDS.map(commandNameOf).join(', ')}) — or /filter all`, (kinds) => {
+    const known = FILTERABLE_KINDS.filter((kind) => kinds.some((typed) => typed.toLowerCase() === commandNameOf(kind) || typed.toLowerCase() === kind.toLowerCase()));
     shownKinds.clear();
     if (!kinds.includes('all')) for (const kind of known) shownKinds.add(kind);
     post('system', describeFilter());
