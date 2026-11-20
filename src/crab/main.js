@@ -238,6 +238,7 @@ const POSES = {
   115: { x: 22.6, z: -22.4, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 } },
   116: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, level: 9, enemy: { kind: 'shoreCrab', offsetX: -3.2, offsetZ: 1.2 } },
   117: { x: -20, z: 30, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 }, mapOpen: true },
+  118: { x: 15, z: -20, distance: 34, tideShare: 0.56, heading: 0.4, burrowAt: { x: 24, z: -21 }, stations: ['workshop', 'storage'], dug: [[3, 5], [2, 5], [7, 5], [8, 5], [9, 5]], placed: [{ kind: 'helperNest', column: 4, row: 6 }], helpers: ['shellBits'], extraGear: [{ category: 'shell', kind: 'whelk', quality: 'masterwork' }, { category: 'claws', kind: 'cleaver' }], equipHelperGear: true, inBurrow: true, helpersPanel: true },
   109: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, level: 12, molts: ['crusher', 'cutter', 'crusher'], statusPanel: true },
   110: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], extraGear: [{ category: 'claws', kind: 'cleaver', quality: 'masterwork', binding: 'wire' }, { category: 'shell', kind: 'whelk', quality: 'masterwork', reinforcement: 'metalPlate' }, { category: 'claws', kind: 'coralTipped' }], inventory: { shellBits: 14, driftwood: 6 }, selectSlot: 1 },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
@@ -2650,7 +2651,7 @@ if (isScreenshotMode) {
     chooseStation(pose.placingStation);
     const firstSpot = placement.exitSpots && placement.exitSpots[0];
     if (firstSpot) {
-      const stand = cellCenter(firstSpot.accessColumn, firstSpot.accessRow);
+      const stand = cellCenter(firstSpot.accessColumn * 2 - firstSpot.column, firstSpot.accessRow * 2 - firstSpot.row);
       Object.assign(player, { x: stand.x, z: stand.z });
     }
   }
@@ -2668,6 +2669,13 @@ if (isScreenshotMode) {
   if (pose.backpack) openBackpack();
   if (pose.statusPanel) statusPanel.open();
   if (pose.mapOpen) openMap();
+  if (pose.equipHelperGear && helpers.list[0]) {
+    const shell = gear.state.shells.find((item) => item.kind === 'whelk');
+    const claws = gear.state.claws.find((item) => item.kind === 'cleaver');
+    if (shell) equipHelper(helpers.list[0].id, 'shell', shell.id);
+    if (claws) equipHelper(helpers.list[0].id, 'claws', claws.id);
+    if (helpersPanel.isOpen) helpersPanel.render();
+  }
   const poseSlot = pose.selectSlot && hud.root.querySelector(`.backpack .slot-grid [data-slot-key]:nth-child(${pose.selectSlot})`);
   if (poseSlot) backpack.select(poseSlot.dataset.slotKey);
   if (pose.walkFrom) {

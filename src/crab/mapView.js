@@ -1,6 +1,7 @@
 import { element } from './workbench.js';
 
 const MAP_CELLS = 160;
+const MIN_EXTENT = 40;
 const SAND = [214, 188, 140];
 const WET_SAND = [170, 150, 112];
 const WATER = [62, 132, 150];
@@ -21,7 +22,7 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
   const canvas = element('canvas', 'map-canvas', card);
   canvas.width = canvas.height = MAP_CELLS * 4;
   const legend = element('div', 'map-legend', card);
-  for (const [className, text] of [['you', 'You'], ['door', 'Burrow ways in'], ['remains', 'Your remains'], ['rack', 'Drying rack']]) {
+  for (const [className, text] of [['you', 'You'], ['door', 'Burrow exits'], ['remains', 'Your remains'], ['rack', 'Drying rack']]) {
     const entry = element('span', 'map-legend-entry', legend);
     element('span', `map-key ${className}`, entry);
     element('span', '', entry, text);
@@ -29,7 +30,7 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
   const context = canvas.getContext('2d');
   let terrain = null;
 
-  const extent = halfSize * 1.05;
+  let extent = halfSize;
   let center = { x: 0, z: 0 };
   const forward = { x: -Math.sin(cameraYaw), z: Math.cos(cameraYaw) };
   const right = { x: -forward.z, z: forward.x };
@@ -70,11 +71,26 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
     }
   }
 
-  function draw({ focus = { x: 0, z: 0 }, player = null, entrances = [], remains = [], rack = null }) {
-    if (!terrain || focus.x !== center.x || focus.z !== center.z) {
-      center = { ...focus };
-      buildTerrain();
-    }
+  function frameExplored(points) {
+    let low = { x: Infinity, z: Infinity };
+    let high = { x: -Infinity, z: -Infinity };
+    const include = (x, z) => {
+      low = { x: Math.min(low.x, x), z: Math.min(low.z, z) };
+      high = { x: Math.max(high.x, x), z: Math.max(high.z, z) };
+    };
+    const step = halfSize / 40;
+    for (let x = -halfSize; x <= halfSize; x += step) for (let z = -halfSize; z <= halfSize; z += step) if (fog.isRevealed(x, z)) include(x, z);
+    for (const point of points) include(point.x, point.z);
+    if (!Number.isFinite(low.x)) return { center: { x: 0, z: 0 }, extent: halfSize };
+    const size = Math.max(high.x - low.x, high.z - low.z) / 2;
+    return { center: { x: (low.x + high.x) / 2, z: (low.z + high.z) / 2 }, extent: Math.min(halfSize * 1.05, Math.max(MIN_EXTENT, size * 1.25 + 8)) };
+  }
+
+  function draw({ player = null, entrances = [], remains = [], rack = null }) {
+    const frame = frameExplored([player, ...entrances, ...remains, rack].filter(Boolean));
+    center = frame.center;
+    extent = frame.extent;
+    buildTerrain();
     const image = context.createImageData(MAP_CELLS, MAP_CELLS);
     for (let row = 0; row < MAP_CELLS; row++) {
       for (let column = 0; column < MAP_CELLS; column++) {
@@ -91,9 +107,9 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
     context.imageSmoothingEnabled = true;
     context.drawImage(scratch, 0, 0, canvas.width, canvas.height);
     if (rack) dot(rack, 6, '#7bd36a', '#1d3b16');
-    for (const point of remains) dot(point, 7, '#e8e2d4', '#3a1010');
-    for (const point of entrances) dot(point, 7, '#3a2410', '#ffd28a');
-    if (player) dot(player, 8, '#ff6a3c', '#fff3d6');
+    for (const point of remains) dot(point, 9, '#e8e2d4', '#3a1010');
+    for (const point of entrances) dot(point, 9, '#ffd23c', '#3a2410');
+    if (player) dot(player, 11, '#ff6a3c', '#fff3d6');
   }
 
   return {

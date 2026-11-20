@@ -821,7 +821,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
         seen.add(key);
         const wall = cellCenter(column, row);
         const access = cellCenter(accessColumn, accessRow);
-        spots.push({ column, row, accessColumn, accessRow, keep, marker: { x: access.x + (wall.x - access.x) * 0.3, z: access.z + (wall.z - access.z) * 0.3 } });
+        spots.push({ column, row, accessColumn, accessRow, keep, marker: { x: access.x + (wall.x - access.x) * 0.38, z: access.z + (wall.z - access.z) * 0.38 } });
       }
     }
     return spots;
@@ -829,10 +829,12 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
 
   function showExitSpots(spots) {
     highlights.count = 0;
+    highlights.renderOrder = 6;
+    highlightMaterial.depthTest = false;
     for (const spot of spots) {
       transform.position.set(spot.marker.x - BURROW_ORIGIN.x, 0.18, spot.marker.z - BURROW_ORIGIN.z);
       transform.rotation.set(0, 0, 0);
-      transform.scale.set(0.8, 1, 0.8);
+      transform.scale.set(0.6, 1, 0.6);
       transform.updateMatrix();
       highlights.setMatrixAt(highlights.count++, transform.matrix);
     }
@@ -847,6 +849,8 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
 
   function showPlacementCells(visible, allowed = () => true) {
     highlights.count = 0;
+    highlights.renderOrder = 0;
+    highlightMaterial.depthTest = true;
     if (!visible) return;
     for (const { column, row } of freeCells().filter(allowed)) {
       const center = cellCenter(column, row);
@@ -925,6 +929,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   }
 
   function update(time, camera, underground) {
+    highlightMaterial.opacity = 0.45 + 0.3 * Math.sin(time * 4);
     if (state.entrance) placeLabel(entranceLabel, state.entrance.x, entranceGroup.position.y + 2.4, state.entrance.z, camera, !underground);
     placeLabel(exitLabel, shaftCenter.x, BURROW_ORIGIN.y + 1.4, shaftCenter.z - 0.6, camera, underground);
     for (const station of state.stations) {
