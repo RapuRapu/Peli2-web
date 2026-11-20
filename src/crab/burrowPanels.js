@@ -242,6 +242,7 @@ function helperStatus(helper) {
   if (helper.state === 'gathering') return `Gathering ${(RESOURCE_TYPES[helper.job] || {}).label || helper.job}`;
   if (helper.state === 'returning') return carried ? `Carrying ${carried} home` : 'Coming home';
   if (helper.state === 'fleeing') return 'Fleeing home!';
+  if (helper.state === 'fighting') return 'Fighting!';
   if (helper.state === 'toSource') return 'Walking to the box to pick up';
   if (helper.state === 'toTarget') return carried ? `Carrying ${carried}` : 'Carrying';
   if (helper.state === 'toNest') return 'Walking back to the nest';
@@ -261,7 +262,7 @@ function addSelect(parent, label, options, value, onChange) {
   return select;
 }
 
-export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOptions, onJob, onClose }) {
+export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOptions, gearOptions, helperInfo, onJob, onEquip, onClose }) {
   const shell = createPanelShell(root, 'helpers-panel', 'Helpers', onClose);
   const statusLines = new Map();
 
@@ -291,12 +292,24 @@ export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOption
       const row = element('div', 'item helper-row', shell.body);
       row.dataset.helper = String(helper.id);
       const text = element('div', 'item-text', row);
-      element('div', 'item-name', text, `Helper ${index + 1} · ${Math.max(0, Math.ceil(helper.health))}/${helpers.maxHealth} HP`);
+      const info = helperInfo(helper);
+      element('div', 'item-name', text, `Helper ${index + 1} · Lv ${info.level} · ${Math.max(0, Math.ceil(helper.health))}/${info.maxHealth} HP`);
+      element('div', 'item-stats', text, `Attack ${info.attack} · Defense ${info.defense} · XP ${info.experience}/${info.toNext}`);
       statusLines.set(helper, element('div', helper.state === 'fleeing' ? 'item-ability danger' : 'item-stats', text, helperStatus(helper)));
       const jobRow = element('div', 'job-row', text);
       const select = addSelect(jobRow, 'Job', jobOptions(), helper.job || '', (value) => changeJob(helper, value, null));
       select.dataset.job = String(helper.id);
       if (helper.job === 'carry') renderCarry(jobRow, helper);
+      const gearRow = element('div', 'job-row', text);
+      for (const [category, label] of [['shell', 'Shell'], ['claws', 'Claws']]) {
+        const options = [{ value: '', label: 'None' }, ...gearOptions(helper, category)];
+        const current = helper.gear && helper.gear[category];
+        const select = addSelect(gearRow, label, options, current ? current.id : '', (value) => {
+          onEquip(helper.id, category, value ? Number(value) : null);
+          render();
+        });
+        select.dataset.gear = `${helper.id}:${category}`;
+      }
     }
   }
 

@@ -23,7 +23,7 @@ import { createGear, SHELLS, CLAWS, canAfford, BOSS_TROPHIES, MINIBOSS_MATERIALS
 import { createWorkbenchModel, createWorkbenchPanel } from './workbench.js';
 import { createBackpackPanel } from './backpack.js';
 import { createStatusPanel } from './statusPanel.js';
-import { createProgression, experienceForKill, difficultyOf, GATHER_EXPERIENCE, MOLT_KINDS, MOLT_SECONDS, SOFT_SECONDS, SOFT_DEFENSE_FACTOR } from './progression.js';
+import { createProgression, experienceForKill, experienceForLevel, MAX_LEVEL, difficultyOf, GATHER_EXPERIENCE, MOLT_KINDS, MOLT_SECONDS, SOFT_SECONDS, SOFT_DEFENSE_FACTOR } from './progression.js';
 import { createMoltPanel } from './moltPanel.js';
 import { createEnemies, ENEMY_KINDS } from './enemies.js';
 import { createRemains, REMAINS_REACH } from './remains.js';
@@ -33,7 +33,8 @@ import { createBurrow, loadBurrowModels, createEmptyBurrow, BURROW_LAYER, BURROW
 import { createThumbnails } from './thumbnails.js';
 import { createBuildPanel, createStoragePanel, createHelpersPanel, createRackPanel } from './burrowPanels.js';
 import { createRack, RACK_BATCH, RACK_DRY_SECONDS, RACK_REACH, RACK_BLOCK_RADIUS } from './rack.js';
-import { createHelpers, HELPER_LIMIT } from './helpers.js';
+import { createHelpers, HELPER_LIMIT, helperStats, helperMaxHealth } from './helpers.js';
+import { itemName } from './itemInfo.js';
 import { createFog } from './fog.js';
 import { createMapView } from './mapView.js';
 
@@ -236,6 +237,7 @@ const POSES = {
   114: { x: 31, z: -6, distance: 18, tideShare: 0.56, heading: 1.2 },
   115: { x: 22.6, z: -22.4, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 } },
   116: { x: -1, z: -6, distance: 16, tideShare: 0.75, heading: 0.4, level: 9, enemy: { kind: 'shoreCrab', offsetX: -3.2, offsetZ: 1.2 } },
+  117: { x: -20, z: 30, distance: 22, tideShare: 0.56, heading: 0.9, burrowAt: { x: 24, z: -21 }, mapOpen: true },
   109: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, level: 12, molts: ['crusher', 'cutter', 'crusher'], statusPanel: true },
   110: { x: 15, z: -20, distance: 22, tideShare: 0.56, heading: 0.9, workshop: true, backpack: true, crafted: ['snail'], extraGear: [{ category: 'claws', kind: 'cleaver', quality: 'masterwork', binding: 'wire' }, { category: 'shell', kind: 'whelk', quality: 'masterwork', reinforcement: 'metalPlate' }, { category: 'claws', kind: 'coralTipped' }], inventory: { shellBits: 14, driftwood: 6 }, selectSlot: 1 },
   92: { x: 10, z: -22, distance: 22, tideShare: 0.56, heading: 2.4, workshop: true, reefFound: true, crafted: ['snail', 'coral'] },
@@ -388,7 +390,7 @@ function applyWornLook() {
 applyWornLook();
 const resources = createResources(scene, { scene: pipeline.overlayScene, uniforms: pipeline.overlayUniforms }, world, quality, save.nodes, STARTER_SPOTS);
 const hud = createHud(qualityName);
-const mapView = createMapView(hud.root, { world, fog, halfSize: PLAY_HALF_SIZE, waterLevel: TIDE_MIDDLE + TIDE_AMPLITUDE, cameraYaw: CAMERA_YAW });
+const mapView = createMapView(hud.root, { world, fog, halfSize: PLAY_HALF_SIZE, waterLevel: TIDE_MIDDLE + TIDE_AMPLITUDE, cameraYaw: CAMERA_YAW, onClose: () => mapView.close() });
 const tracks = createTracks(scene, world);
 const ripples = createRipples(water.uniforms);
 const workshop = createWorkbenchModel(scene, world, quality, WORKSHOP_SPOT, hud.root);
@@ -576,8 +578,43 @@ const helpersPanel = createHelpersPanel(hud.root, {
     helpers.setJob(id, job, carryOrder);
     persist();
   },
+  gearOptions: (helper, category) => {
+    const owned = category === 'shell' ? gear.state.shells : gear.state.claws;
+    const wornId = category === 'shell' ? gear.state.wornShellId : gear.state.wornClawsId;
+    const current = helper.gear && helper.gear[category];
+    const candidates = owned.filter((item) => item.id !== wornId && (category === 'shell' || CLAWS[item.kind].cost));
+    return [...(current ? [current] : []), ...candidates].map((item) => ({ value: item.id, label: itemName(category, item) }));
+  },
+  helperInfo: (helper) => {
+    const stats = helperStats(helper);
+    const level = helper.level || 1;
+    return { level, maxHealth: helperMaxHealth(helper), attack: stats.attack, defense: stats.defense, experience: Math.floor(helper.experience || 0), toNext: level >= MAX_LEVEL ? 0 : experienceForLevel(level) };
+  },
+  onEquip: (id, category, itemId) => {
+    equipHelper(id, category, itemId);
+    persist();
+  },
   onClose: () => helpersPanel.close(),
 });
+
+function equipHelper(id, category, itemId) {
+  const helper = helpers.list.find((candidate) => candidate.id === id);
+  if (!helper) return false;
+  const owned = category === 'shell' ? gear.state.shells : gear.state.claws;
+  const previous = helper.gear[category];
+  if (previous && previous.id === itemId) return true;
+  let next = null;
+  if (itemId) {
+    const index = owned.findIndex((item) => item.id === itemId);
+    const wornId = category === 'shell' ? gear.state.wornShellId : gear.state.wornClawsId;
+    if (index < 0 || owned[index].id === wornId) return false;
+    next = owned.splice(index, 1)[0];
+  }
+  if (previous) owned.push(previous);
+  helper.gear[category] = next;
+  helper.health = Math.min(helper.health, helperMaxHealth(helper));
+  return true;
+}
 
 function helperJobOptions() {
   const known = noteDiscoveries();
@@ -678,10 +715,11 @@ const statusPanel = createStatusPanel(hud.root, {
 });
 
 function anyPanelOpen() {
-  return statusPanel.isOpen || workbenchPanel.isOpen || moltPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen || helpersPanel.isOpen || rackPanel.isOpen;
+  return mapView.isOpen || statusPanel.isOpen || workbenchPanel.isOpen || moltPanel.isOpen || backpack.isOpen || buildPanel.isOpen || storagePanel.isOpen || helpersPanel.isOpen || rackPanel.isOpen;
 }
 
 function closePanels() {
+  mapView.close();
   statusPanel.close();
   workbenchPanel.close();
   if (backpack.isOpen) backpack.close();
@@ -786,7 +824,6 @@ function hasCraftedGear() {
 
 function refreshHud(bumpedType) {
   if (bumpedType) hud.bumpBag();
-  if (backpack.isOpen) backpack.render();
   hud.setBuildButton(underground || !burrow.exists, { surface: !underground });
   hud.setMoltButton(underground && !isMolting() ? progression.moltsAvailable() : 0);
 }
@@ -936,7 +973,6 @@ function eatKelp() {
   player.wellFedUntil = simulationTime + WELL_FED_SECONDS;
   soundAt('gatherSeaLettuce');
   hud.toast('Well fed — HP comes back twice as fast for 90 s');
-  if (backpack.isOpen) backpack.render();
   persist();
   return true;
 }
@@ -1665,8 +1701,25 @@ function dropLoot(enemy) {
   if (drops.length && random() < COMMON_DROP_CHANCE) giveMaterial(drops[Math.floor(random() * drops.length)], 1, enemy);
 }
 
-function enemyKilled(enemy) {
+function rewardHelperKill(helper, enemy) {
+  const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, helper.level || 1);
+  const levelsGained = helpers.gainExperience(helper, experience);
+  floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `Helper +${experience} XP`, 'experience');
+  const minibossMaterial = MINIBOSS_MATERIALS[enemy.kind];
+  const drops = enemy.definition.drops || [];
+  if (minibossMaterial) helpers.bringHome(helper, minibossMaterial, BOSS_MATERIAL_DROP);
+  else if (drops.length) helpers.bringHome(helper, drops[Math.floor(random() * drops.length)], 1);
+  if (levelsGained) hud.toast(`A helper reached level ${helper.level}!`);
+  if (helpersPanel.isOpen) helpersPanel.render();
+  persist();
+}
+
+function enemyKilled(enemy, attacker = null) {
   if (player.combatTarget === enemy) player.combatTarget = null;
+  if (attacker && attacker.helperId) {
+    rewardHelperKill(attacker, enemy);
+    return;
+  }
   const experience = experienceForKill(enemy.definition.experience, enemy.definition.level, progression.state.level);
   const levelsGained = progression.gainExperience(experience);
   floatAt(enemy.x, enemy.y + enemy.altitude + enemy.definition.barHeight, enemy.z, `+${experience} XP`, 'experience');
@@ -2029,7 +2082,7 @@ function simulate(deltaTime) {
   if (underground) Object.assign(surfaceProbe, { x: burrow.state.entrance.x, z: burrow.state.entrance.z });
   enemies.update(deltaTime, simulationTime, underground ? surfaceProbe : player);
   rack.update(deltaTime);
-  helpers.update(deltaTime);
+  helpers.update(deltaTime, simulationTime);
   updateHealth(deltaTime);
   updateBodyWetness(deltaTime);
   noticeReef();
@@ -2433,6 +2486,20 @@ hud.onHelpers(() => {
   if (underground && !anyPanelOpen()) helpersPanel.open();
 });
 hud.onBag(openBackpack);
+hud.onMap(() => {
+  if (!anyPanelOpen()) openMap();
+});
+
+function openMap() {
+  const surfacePosition = underground ? (nearestTravelPoint() ? nearestTravelPoint().point.surface : burrow.state.entrance) : { x: player.x, z: player.z };
+  mapView.open({
+    player: surfacePosition,
+    entrances: burrow.exists ? burrow.travelPoints().map((point) => point.surface) : [],
+    remains: remains.list.map((entry) => ({ x: entry.x, z: entry.z })).filter((point) => fog.isRevealed(point.x, point.z)),
+    rack: rack.exists ? { x: rack.state.x, z: rack.state.z } : null,
+  });
+}
+
 hud.onStatus(() => {
   if (!anyPanelOpen()) statusPanel.open();
 });
@@ -2581,6 +2648,11 @@ if (isScreenshotMode) {
   if (pose.placingStation) {
     Object.assign(save.inventory, STATION_KINDS[pose.placingStation].cost);
     chooseStation(pose.placingStation);
+    const firstSpot = placement.exitSpots && placement.exitSpots[0];
+    if (firstSpot) {
+      const stand = cellCenter(firstSpot.accessColumn, firstSpot.accessRow);
+      Object.assign(player, { x: stand.x, z: stand.z });
+    }
   }
   if (pose.placingEntrance) startEntrancePlacement();
   if (pose.previewEntrance) previewEntranceSpot(pose.previewEntrance.x, pose.previewEntrance.z);
@@ -2595,6 +2667,7 @@ if (isScreenshotMode) {
   if (pose.molting) startMolt('crusher');
   if (pose.backpack) openBackpack();
   if (pose.statusPanel) statusPanel.open();
+  if (pose.mapOpen) openMap();
   const poseSlot = pose.selectSlot && hud.root.querySelector(`.backpack .slot-grid [data-slot-key]:nth-child(${pose.selectSlot})`);
   if (poseSlot) backpack.select(poseSlot.dataset.slotKey);
   if (pose.walkFrom) {
@@ -2672,7 +2745,7 @@ if (isScreenshotMode) {
 window.__debug = {
   simulate, simulationTime: () => simulationTime, player, world, resources, navigation, save, tideState, camera, renderer, scene, pipeline, performanceMonitor, quality, qualityName,
   tracks, ripples, hermit, gear, workshop, workbenchPanel, salvageItem, startMovingStructure, dismantleStructure, moveStationTo, moveRackTo, isRecipeDiscovered, placement, cancelPlacement, backpack, openBackpack, buildWorkshop, craftItem, wearItem, unequipItem, walkToWorkshop, setDestination, setPaused, handleTap, renderScene, updateCamera, seaLevelAt,
-  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, startFillMode, startFillCell, startSleeping, wakeUp, isRested, mapView, fog, exitCellProblem, chooseStation, nearestTravelPoint, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
+  audio, isAudioUnlocked: () => audioUnlocked, progression, statusPanel, difficultyOf, experienceForKill, enemies, remains, engage, die, recoverRemains, playerStats, randomSource, upgradeTools, refineItem, modifyItem, startMolt, finishMolt, isMolting, isSoft, moltPanel, rack, rackPanel, buildRackStation, eatKelp, isWellFed, walkToRack, helpers, helpersPanel, equipHelper, openMap, startFillMode, startFillCell, startSleeping, wakeUp, isRested, mapView, fog, exitCellProblem, chooseStation, nearestTravelPoint, rescueHelperAt, walkToStranded, burrow, storage, storagePanel, buildPanel, enterBurrow, exitBurrow, travel, travelOption, walkToShaft, cameraDistanceFor, getCameraDistance: () => cameraDistance, digEntranceAt, chooseEntranceSpot, startEntrancePlacement, buildStation, startDigCell, previewEntranceSpot, walkToEntrance, walkToStation, isUnderground: () => underground, entranceSpotProblem, wakeSpot, persist, startOver,
   setCameraDistance: (distance) => { cameraDistance = distance; },
   setRendering: (enabled) => { rendersFrames = enabled; },
   isPaused: () => paused,

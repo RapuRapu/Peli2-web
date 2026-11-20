@@ -479,7 +479,7 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
     if (enemy.altitude < 0.5 && world.isWalkable(nextX, nextZ)) Object.assign(enemy, { x: nextX, z: nextZ });
   }
 
-  function damage(enemy, amount, time, attacker = null) {
+  function damage(enemy, amount, time, attacker = null, { provoke = true } = {}) {
     if (!alive(enemy)) return false;
     enemy.health = Math.max(0, enemy.health - amount);
     enemy.lastHurtTime = time;
@@ -505,10 +505,14 @@ export function createEnemies({ scene, world, navigation, quality, spawnTable, l
       if (enemy.definition.flees) onAlert(enemy, '😱');
       enemy.path = [];
       enemy.repathTimer = 0;
-      onKilled(enemy);
+      onKilled(enemy, attacker);
       return true;
     }
-    startChase(enemy);
+    if (provoke) startChase(enemy);
+    else {
+      enemy.path = [];
+      enemy.wanderTimer = Math.max(enemy.wanderTimer, 2);
+    }
     return false;
   }
 

@@ -1,22 +1,35 @@
 import { element } from './workbench.js';
 
-const MAP_CELLS = 96;
-const MAP_EXTENT = 75;
+const MAP_CELLS = 160;
 const SAND = [214, 188, 140];
 const WET_SAND = [170, 150, 112];
 const WATER = [62, 132, 150];
 const ROCK = [110, 104, 96];
 const OUTSIDE = [20, 24, 26];
 
-export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYaw }) {
-  const frame = element('div', 'map-view hidden', root);
-  element('div', 'map-title', frame, 'Map');
-  const canvas = element('canvas', 'map-canvas', frame);
-  canvas.width = canvas.height = MAP_CELLS * 2;
+export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYaw, onClose }) {
+  const overlay = element('div', 'workbench map-panel', root);
+  const card = element('div', 'workbench-card map-card', overlay);
+  const header = element('div', 'workbench-header', card);
+  element('div', 'workbench-title', header, 'Map');
+  const closeButton = element('button', 'workbench-close', header, '✕');
+  closeButton.setAttribute('aria-label', 'Close map');
+  closeButton.addEventListener('click', () => onClose());
+  overlay.addEventListener('pointerdown', (event) => {
+    if (event.target === overlay) onClose();
+  });
+  const canvas = element('canvas', 'map-canvas', card);
+  canvas.width = canvas.height = MAP_CELLS * 4;
+  const legend = element('div', 'map-legend', card);
+  for (const [className, text] of [['you', 'You'], ['door', 'Burrow ways in'], ['remains', 'Your remains'], ['rack', 'Drying rack']]) {
+    const entry = element('span', 'map-legend-entry', legend);
+    element('span', `map-key ${className}`, entry);
+    element('span', '', entry, text);
+  }
   const context = canvas.getContext('2d');
   let terrain = null;
 
-  const extent = MAP_EXTENT;
+  const extent = halfSize * 1.05;
   let center = { x: 0, z: 0 };
   const forward = { x: -Math.sin(cameraYaw), z: Math.cos(cameraYaw) };
   const right = { x: -forward.z, z: forward.x };
@@ -52,12 +65,12 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
     context.fill();
     if (stroke) {
       context.strokeStyle = stroke;
-      context.lineWidth = 1.5;
+      context.lineWidth = 3;
       context.stroke();
     }
   }
 
-  function draw({ focus = { x: 0, z: 0 }, player = null, entrances = [], candidates = [] }) {
+  function draw({ focus = { x: 0, z: 0 }, player = null, entrances = [], remains = [], rack = null }) {
     if (!terrain || focus.x !== center.x || focus.z !== center.z) {
       center = { ...focus };
       buildTerrain();
@@ -67,7 +80,7 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
       for (let column = 0; column < MAP_CELLS; column++) {
         const { x, z } = worldOfCell(column, row);
         const index = (row * MAP_CELLS + column) * 4;
-        const shade = fog.isRevealed(x, z) ? 1 : 0.12;
+        const shade = fog.isRevealed(x, z) ? 1 : 0;
         for (let channel = 0; channel < 3; channel++) image.data[index + channel] = terrain.data[index + channel] * shade;
         image.data[index + 3] = 255;
       }
@@ -77,21 +90,24 @@ export function createMapView(root, { world, fog, halfSize, waterLevel, cameraYa
     scratch.getContext('2d').putImageData(image, 0, 0);
     context.imageSmoothingEnabled = true;
     context.drawImage(scratch, 0, 0, canvas.width, canvas.height);
-    for (const point of candidates) dot(point, 5, 'rgba(120, 255, 150, 0.95)', '#0b2a12');
-    for (const point of entrances) dot(point, 4.5, '#3a2410', '#ffd28a');
-    if (player) dot(player, 4, '#ff6a3c', '#fff3d6');
+    if (rack) dot(rack, 6, '#7bd36a', '#1d3b16');
+    for (const point of remains) dot(point, 7, '#e8e2d4', '#3a1010');
+    for (const point of entrances) dot(point, 7, '#3a2410', '#ffd28a');
+    if (player) dot(player, 8, '#ff6a3c', '#fff3d6');
   }
 
   return {
-    show(markers) {
+    open(markers) {
       draw(markers);
-      frame.classList.remove('hidden');
+      overlay.classList.add('visible');
+      root.classList.add('panel-open');
     },
-    hide() {
-      frame.classList.add('hidden');
+    close() {
+      overlay.classList.remove('visible');
+      root.classList.remove('panel-open');
     },
     get isOpen() {
-      return !frame.classList.contains('hidden');
+      return overlay.classList.contains('visible');
     },
   };
 }

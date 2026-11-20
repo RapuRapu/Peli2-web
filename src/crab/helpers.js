@@ -5,6 +5,8 @@ import { buildShellGeometry } from './hermit.js';
 import { RESOURCE_TYPES } from './resources.js';
 import { BURROW_LAYER, BURROW_ORIGIN } from './burrow.js';
 import { RACK_BATCH, RACK_REACH } from './rack.js';
+import { SHELLS, CLAWS, BINDINGS, REINFORCEMENTS, shellDefenseOf, clawAttackOf } from './gear.js';
+import { MAX_LEVEL, experienceForLevel } from './progression.js';
 
 export const HELPER_LIMIT = 6;
 export const NEST_CAPACITY = 3;
@@ -23,6 +25,14 @@ const BITE_DISTANCE = 1.7;
 const REST_SECONDS = 4;
 const IDLE_RETRY_SECONDS = 8;
 const NEST_SLOTS = [[-0.75, 0.25], [-0.15, -0.45], [-0.05, 0.6]];
+const HELPER_BASE_ATTACK = 2;
+const HELPER_HEALTH_PER_LEVEL = 3;
+const HELPER_ATTACK_INTERVAL = 1.2;
+const WIN_MARGIN = 1.25;
+const FLEE_HEALTH_SHARE = 0.3;
+const FIGHT_REACH = 0.9;
+const FIGHT_GIVE_UP_DISTANCE = 12;
+const HELPER_REGEN_PER_SECOND = 1;
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 const BODY_COLOR = linearColor(0.92, 0.42, 0.18);
@@ -38,8 +48,36 @@ function painted(geometry, color) {
   return geometry;
 }
 
-function buildHelperGeometry() {
-  const shell = buildShellGeometry(SHELL_LOOK);
+export function helperMaxHealth(helper) {
+  return HELPER_HEALTH + ((helper.level || 1) - 1) * HELPER_HEALTH_PER_LEVEL;
+}
+
+export function helperStats(helper) {
+  const shellItem = helper.gear && helper.gear.shell;
+  const clawsItem = helper.gear && helper.gear.claws;
+  const shell = shellItem ? SHELLS[shellItem.kind] : null;
+  const claws = clawsItem ? CLAWS[clawsItem.kind] : null;
+  const binding = clawsItem && clawsItem.binding ? BINDINGS[clawsItem.binding] : null;
+  const reinforcement = shellItem && shellItem.reinforcement ? REINFORCEMENTS[shellItem.reinforcement] : null;
+  return {
+    attack: HELPER_BASE_ATTACK + ((helper.level || 1) - 1) + (claws ? clawAttackOf(claws, clawsItem) : 0),
+    defense: shell ? shellDefenseOf(shell, shellItem) : 0,
+    attackInterval: HELPER_ATTACK_INTERVAL * ((claws && claws.ability && claws.ability.attackIntervalFactor) || 1) * ((binding && binding.attackIntervalFactor) || 1),
+    speedFactor: (shell ? shell.speedFactor : 1) * ((reinforcement && reinforcement.speedFactor) || 1),
+  };
+}
+
+const hitDamage = (attack, defense) => Math.max(1, Math.round(attack - defense / 2));
+
+export function expectsToWin(helper, enemy) {
+  const stats = helperStats(helper);
+  const helperPerSecond = hitDamage(stats.attack, enemy.definition.defense || 0) / stats.attackInterval;
+  const enemyPerSecond = hitDamage(enemy.definition.attack, stats.defense) / enemy.definition.attackInterval;
+  return (enemy.health / helperPerSecond) * WIN_MARGIN < helper.health / enemyPerSecond;
+}
+
+function buildHelperGeometry(look = SHELL_LOOK) {
+  const shell = buildShellGeometry(look);
   const shellGeometry = shell.geometry.clone().rotateY(Math.PI).translate(shell.mouthOffset, 0, 0).rotateX(-0.5).translate(0, 0.64, -0.12);
   const parts = [shellGeometry];
   parts.push(painted(new THREE.SphereGeometry(0.4, 14, 10).scale(0.95, 0.66, 1.2).translate(0, 0.5, 0.24), BODY_COLOR));
@@ -56,17 +94,39 @@ function buildHelperGeometry() {
 
 export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, onDeposit, onLost, onSound }) {
   const savedState = Array.isArray(saved) ? { list: saved, rescued: [] } : saved || { list: [], rescued: [] };
-  const list = savedState.list.map((entry) => ({ job: null, nestId: null, carryOrder: null, ...entry, state: 'resting', inside: true, path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, load: entry.load || 0, health: HELPER_HEALTH, targetId: null }));
+  const list = savedState.list.map((entry) => {
+    const helper = { job: null, nestId: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, ...entry, helperId: entry.id, state: 'resting', inside: true, path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, load: entry.load || 0, targetId: null };
+    helper.health = helperMaxHealth(helper);
+    return helper;
+  });
   const rescued = new Set(savedState.rescued || []);
   let nextId = list.reduce((highest, helper) => Math.max(highest, helper.id), 0) + 1;
   const material = applySeaside(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide }), { chromaticCaustics: quality.chromaticCaustics, wetDarkening: 0.5, wetRoughness: 0.12 });
   const geometry = buildHelperGeometry();
+  const burrowMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide });
+  const skins = new Map();
+  const skinFor = (key) => {
+    if (!skins.has(key)) {
+      const skinGeometry = buildHelperGeometry(SHELLS[key].look);
+      const surface = new THREE.InstancedMesh(skinGeometry, material, HELPER_LIMIT);
+      const below = new THREE.InstancedMesh(skinGeometry, burrowMaterial, HELPER_LIMIT);
+      for (const mesh of [surface, below]) {
+        mesh.castShadow = true;
+        mesh.count = 0;
+        mesh.frustumCulled = false;
+      }
+      below.layers.set(BURROW_LAYER);
+      scene.add(surface, below);
+      skins.set(key, { surface, below, surfaceCount: 0, belowCount: 0 });
+    }
+    return skins.get(key);
+  };
   const surfaceCapacity = HELPER_LIMIT + strandedSpots.length;
   const surfaceMesh = new THREE.InstancedMesh(geometry, material, surfaceCapacity);
   surfaceMesh.castShadow = true;
   surfaceMesh.count = 0;
   surfaceMesh.frustumCulled = false;
-  const burrowMesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, side: THREE.DoubleSide }), HELPER_LIMIT);
+  const burrowMesh = new THREE.InstancedMesh(geometry, burrowMaterial, HELPER_LIMIT);
   burrowMesh.castShadow = true;
   burrowMesh.count = 0;
   burrowMesh.frustumCulled = false;
@@ -249,7 +309,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
 
   function knockedOut(helper, enemy) {
     release(helper);
-    Object.assign(helper, { job: null, carryOrder: null, carrying: null, load: 0, health: HELPER_HEALTH, state: 'resting', restTimer: REST_SECONDS, exitPoint: null });
+    Object.assign(helper, { job: null, carryOrder: null, carrying: null, load: 0, health: helperMaxHealth(helper), state: 'resting', restTimer: REST_SECONDS, exitPoint: null, fightTargetId: null });
     placeAtNest(helper);
     onLost(helper, enemy);
   }
@@ -299,8 +359,71 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     }
   }
 
-  function updateHelper(helper, deltaTime) {
+  function startFight(helper, enemy) {
+    release(helper);
+    helper.state = 'fighting';
+    helper.fightTargetId = enemy.id;
+    helper.attackTimer = 0.3;
+  }
+
+  function updateFight(helper, deltaTime, time) {
+    const enemy = enemies.list.find((candidate) => candidate.id === helper.fightTargetId);
+    if (!enemy || !enemies.alive(enemy)) {
+      helper.fightTargetId = null;
+      headHome(helper, false);
+      return;
+    }
+    const distance = Math.hypot(enemy.x - helper.x, enemy.z - helper.z);
+    if (distance > FIGHT_GIVE_UP_DISTANCE) {
+      helper.fightTargetId = null;
+      headHome(helper, false);
+      return;
+    }
+    if (helper.health < helperMaxHealth(helper) * FLEE_HEALTH_SHARE && !expectsToWin(helper, enemy)) {
+      helper.fightTargetId = null;
+      headHome(helper, true);
+      return;
+    }
+    const reach = enemy.definition.radius + FIGHT_REACH;
+    helper.heading = Math.atan2(enemy.x - helper.x, enemy.z - helper.z);
+    if (distance > reach) {
+      const stride = Math.min(distance - reach, WALK_SPEED * helperStats(helper).speedFactor * deltaTime);
+      const nextX = helper.x + ((enemy.x - helper.x) / distance) * stride;
+      const nextZ = helper.z + ((enemy.z - helper.z) / distance) * stride;
+      if (world.isWalkable(nextX, nextZ)) Object.assign(helper, { x: nextX, z: nextZ, moving: true });
+      return;
+    }
+    helper.attackTimer -= deltaTime;
+    if (helper.attackTimer > 0) return;
+    const stats = helperStats(helper);
+    helper.attackTimer = stats.attackInterval;
+    onSound('shellClonk', helper);
+    const killed = enemies.damage(enemy, hitDamage(stats.attack, enemy.definition.defense || 0), time, helper, { provoke: false });
+    if (killed) helper.fightTargetId = null;
+  }
+
+  function gainExperience(helper, amount) {
+    let levelsGained = 0;
+    helper.experience = (helper.experience || 0) + amount;
+    while ((helper.level || 1) < MAX_LEVEL && helper.experience >= experienceForLevel(helper.level || 1)) {
+      helper.experience -= experienceForLevel(helper.level || 1);
+      helper.level = (helper.level || 1) + 1;
+      helper.health += HELPER_HEALTH_PER_LEVEL;
+      levelsGained++;
+    }
+    if (helper.level >= MAX_LEVEL) helper.experience = 0;
+    return levelsGained;
+  }
+
+  function bringHome(helper, type, amount) {
+    helper.carrying = type;
+    helper.load = amount;
+    headHome(helper, false);
+  }
+
+  function updateHelper(helper, deltaTime, time) {
     helper.moving = false;
+    if (helper.state === 'resting' || helper.inside) helper.health = Math.min(helperMaxHealth(helper), helper.health + HELPER_REGEN_PER_SECOND * deltaTime);
     if (helper.state === 'resting') {
       helper.restTimer -= deltaTime;
       if (helper.carrying) {
@@ -320,7 +443,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       helper.biteTimer = (helper.biteTimer || 0) - deltaTime;
       if (helper.biteTimer <= 0) {
         helper.biteTimer = threat.enemy.definition.attackInterval;
-        helper.health -= threat.enemy.definition.attack;
+        helper.health -= hitDamage(threat.enemy.definition.attack, helperStats(helper).defense);
         onSound('shellClonk', helper);
         if (helper.health <= 0) {
           knockedOut(helper, threat.enemy);
@@ -328,7 +451,15 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
         }
       }
     }
-    if (threat && threat.distance < DANGER_DISTANCE && helper.state !== 'fleeing') headHome(helper, true);
+    if (helper.state === 'fighting') {
+      updateFight(helper, deltaTime, time);
+      helper.y = world.heightAt(helper.x, helper.z);
+      return;
+    }
+    if (threat && threat.distance < DANGER_DISTANCE && helper.state !== 'fleeing') {
+      if (expectsToWin(helper, threat.enemy)) startFight(helper, threat.enemy);
+      else headHome(helper, true);
+    }
     if (helper.state === 'toRack') {
       step(helper, deltaTime, WALK_SPEED);
       if (!rack.exists || Math.hypot(rack.state.x - helper.x, rack.state.z - helper.z) <= RACK_REACH || helper.pathIndex >= helper.path.length) {
@@ -377,11 +508,11 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     helper.y = world.heightAt(helper.x, helper.z);
   }
 
-  function update(deltaTime) {
+  function update(deltaTime, time = 0) {
     if (!burrow.exists) return;
     for (const helper of list) {
       if (!nestOf(helper)) continue;
-      updateHelper(helper, deltaTime);
+      updateHelper(helper, deltaTime, time);
     }
   }
 
@@ -391,20 +522,28 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     let surfaceCount = 0;
     let burrowCount = 0;
     let carryCount = 0;
+    for (const skin of skins.values()) {
+      skin.surfaceCount = 0;
+      skin.belowCount = 0;
+    }
     for (const [index, helper] of list.entries()) {
       const bob = helper.moving ? Math.abs(Math.sin(time * 14 + index)) * 0.06 : 0;
+      const skin = helper.gear && helper.gear.shell ? skinFor(helper.gear.shell.kind) : null;
+      const lunge = helper.state === 'fighting' ? Math.max(0, Math.sin(time * 9 + index)) * 0.12 : 0;
       if (helper.inside) {
         transform.position.set(helper.x, BURROW_ORIGIN.y + bob, helper.z);
         transform.rotation.set(0, helper.state === 'resting' ? index * 2.1 + Math.sin(time * 0.3 + index) * 0.3 : helper.heading || 0, 0);
         transform.scale.setScalar(HELPER_SIZE);
         transform.updateMatrix();
-        burrowMesh.setMatrixAt(burrowCount++, transform.matrix);
+        if (skin) skin.below.setMatrixAt(skin.belowCount++, transform.matrix);
+        else burrowMesh.setMatrixAt(burrowCount++, transform.matrix);
       } else {
-        transform.position.set(helper.x, helper.y + bob, helper.z);
+        transform.position.set(helper.x + Math.sin(helper.heading || 0) * lunge, helper.y + bob, helper.z + Math.cos(helper.heading || 0) * lunge);
         transform.rotation.set(0, helper.heading || 0, 0);
         transform.scale.setScalar(HELPER_SIZE);
         transform.updateMatrix();
-        surfaceMesh.setMatrixAt(surfaceCount++, transform.matrix);
+        if (skin) skin.surface.setMatrixAt(skin.surfaceCount++, transform.matrix);
+        else surfaceMesh.setMatrixAt(surfaceCount++, transform.matrix);
       }
       if (helper.carrying) {
         transform.position.set(helper.x, (helper.inside ? BURROW_ORIGIN.y : helper.y) + 1.45 + bob, helper.z);
@@ -434,6 +573,12 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     strandedRings.instanceMatrix.needsUpdate = true;
     surfaceMesh.count = surfaceCount;
     burrowMesh.count = burrowCount;
+    for (const skin of skins.values()) {
+      skin.surface.count = skin.surfaceCount;
+      skin.below.count = skin.belowCount;
+      skin.surface.instanceMatrix.needsUpdate = true;
+      skin.below.instanceMatrix.needsUpdate = true;
+    }
     carryMesh.count = carryCount;
     carryOutline.count = carryCount;
     for (const mesh of [surfaceMesh, burrowMesh, carryMesh, carryOutline]) mesh.instanceMatrix.needsUpdate = true;
@@ -460,7 +605,8 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     const nest = freeNest();
     if (!nest) return null;
     rescued.add(spot.id);
-    const helper = { id: nextId++, spotId: spot.id, nestId: nest.id, job: null, carryOrder: null, state: 'resting', inside: true, x: 0, z: 0, y: 0, heading: 0, path: [], pathIndex: 0, restTimer: 1.5, carrying: null, load: 0, health: HELPER_HEALTH, targetId: null };
+    const id = nextId++;
+    const helper = { id, helperId: id, spotId: spot.id, nestId: nest.id, job: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, state: 'resting', inside: true, x: 0, z: 0, y: 0, heading: 0, path: [], pathIndex: 0, restTimer: 1.5, carrying: null, load: 0, health: HELPER_HEALTH, targetId: null };
     list.push(helper);
     placeAtNest(helper);
     return helper;
@@ -485,9 +631,9 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     return true;
   }
 
-  const serialize = () => ({ list: list.map(({ id, spotId, nestId, job, carryOrder, carrying, load }) => ({ id, spotId, nestId, job, carryOrder, carrying, load })), rescued: [...rescued] });
+  const serialize = () => ({ list: list.map(({ id, spotId, nestId, job, carryOrder, carrying, load, gear, level, experience }) => ({ id, spotId, nestId, job, carryOrder, carrying, load, gear, level, experience })), rescued: [...rescued] });
 
   for (const helper of list) placeAtNest(helper);
 
-  return { list, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [surfaceMesh, burrowMesh, carryMesh] };
+  return { list, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [surfaceMesh, burrowMesh, carryMesh] };
 }

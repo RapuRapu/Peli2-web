@@ -271,11 +271,16 @@
   #hud .enemy-name.difficulty-hard { background: rgba(236, 124, 30, 0.94); color: #2a1200; text-shadow: none; }
   #hud .enemy-name.difficulty-deadly { background: rgba(212, 44, 32, 0.94); color: #ffffff; }
   #hud .enemy-name.difficulty-impossible { background: rgba(104, 12, 12, 0.95); color: #ffd9d4; }
-  #hud .map-view { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 50px); right: max(8px, env(safe-area-inset-right)); padding: 6px; border-radius: 12px; background: rgba(26, 34, 38, 0.82); border: 1px solid rgba(255, 226, 168, 0.5); pointer-events: none; }
-  #hud .map-view.hidden { display: none; }
-  #hud .map-title { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; opacity: 0.8; padding: 0 2px 4px; }
-  #hud .map-canvas { display: block; width: min(170px, 38vw); height: min(170px, 38vw); border-radius: 8px; }
-  @media (max-height: 500px) { #hud .map-canvas { width: 150px; height: 150px; } }
+  #hud .map-card { width: min(94vw, 560px); }
+  #hud .map-canvas { display: block; width: min(86vw, 520px, calc(100vh - 150px)); height: min(86vw, 520px, calc(100vh - 150px)); border-radius: 10px; margin: 0 auto; }
+  #hud .map-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; font-size: 13px; padding-top: 8px; }
+  #hud .map-legend-entry { display: flex; align-items: center; gap: 6px; }
+  #hud .map-key { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff3d6; }
+  #hud .map-key.you { background: #ff6a3c; }
+  #hud .map-key.door { background: #3a2410; border-color: #ffd28a; }
+  #hud .map-key.remains { background: #e8e2d4; border-color: #3a1010; }
+  #hud .map-key.rack { background: #7bd36a; border-color: #1d3b16; }
+  @media (max-height: 500px) { #hud .map-card { width: auto; flex-direction: row; } #hud .map-legend { flex-direction: column; } }
   #hud .workbench .job-select { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   #hud .workbench .job-select select { max-width: 210px; padding: 5px 6px; border-radius: 8px; border: 1px solid rgba(255, 244, 214, 0.4); background: #2c3a3f; color: #fff8e8; font: inherit; font-size: 14px; pointer-events: auto; }
   #hud.placing .burrow-buttons { visibility: hidden; }

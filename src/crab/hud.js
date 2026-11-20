@@ -23,6 +23,8 @@ export function createHud(activeQualityName) {
   const bagButton = element('button', 'bag-button', topLeft, '🎒');
   bagButton.setAttribute('aria-label', 'Backpack');
   const bagDot = element('span', 'bag-dot hidden', bagButton);
+  const mapButton = element('button', 'bag-button map-button', topLeft, '🗺️');
+  mapButton.setAttribute('aria-label', 'Map');
   const burrowButtons = element('div', 'burrow-buttons hidden', root);
   const iconButton = (className, icon, label) => {
     const button = element('button', `build-button icon-button ${className}`, burrowButtons, icon);
@@ -88,6 +90,7 @@ export function createHud(activeQualityName) {
   let resetListener = () => {};
   let qualityListener = () => {};
   let statusListener = () => {};
+  let mapListener = () => {};
   let bagListener = () => {};
   let volumeListener = () => {};
   let buildListener = () => {};
@@ -107,6 +110,7 @@ export function createHud(activeQualityName) {
   modeCancel.addEventListener('click', () => modeCancelListener());
   travelButton.addEventListener('click', () => travelListener());
   levelBadge.addEventListener('click', () => statusListener());
+  mapButton.addEventListener('click', () => mapListener());
   resumeButton.addEventListener('click', () => pauseListener(false));
   resetButton.addEventListener('click', () => {
     if (!resetArmed) {
@@ -128,6 +132,7 @@ export function createHud(activeQualityName) {
       for (const [key, input] of Object.entries(volumeInputs)) input.value = values[key];
     },
     onStatus: (listener) => { statusListener = listener; },
+    onMap: (listener) => { mapListener = listener; },
     onBag: (listener) => { bagListener = listener; },
     onBuild: (listener) => { buildListener = listener; },
     onHelpers: (listener) => { helpersListener = listener; },

@@ -821,7 +821,7 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
         seen.add(key);
         const wall = cellCenter(column, row);
         const access = cellCenter(accessColumn, accessRow);
-        spots.push({ column, row, accessColumn, accessRow, keep, marker: { x: access.x + (wall.x - access.x) * 0.42, z: access.z + (wall.z - access.z) * 0.42 } });
+        spots.push({ column, row, accessColumn, accessRow, keep, marker: { x: access.x + (wall.x - access.x) * 0.3, z: access.z + (wall.z - access.z) * 0.3 } });
       }
     }
     return spots;
@@ -830,9 +830,9 @@ export function createBurrow(scene, world, quality, labelParent, saved) {
   function showExitSpots(spots) {
     highlights.count = 0;
     for (const spot of spots) {
-      transform.position.set(spot.marker.x - BURROW_ORIGIN.x, 0.1, spot.marker.z - BURROW_ORIGIN.z);
+      transform.position.set(spot.marker.x - BURROW_ORIGIN.x, 0.18, spot.marker.z - BURROW_ORIGIN.z);
       transform.rotation.set(0, 0, 0);
-      transform.scale.set(0.7, 1, 0.7);
+      transform.scale.set(0.8, 1, 0.8);
       transform.updateMatrix();
       highlights.setMatrixAt(highlights.count++, transform.matrix);
     }
