@@ -28,7 +28,8 @@ export function createHud(activeQualityName) {
   mapButton.setAttribute('aria-label', 'Map');
   const burrowButtons = element('div', 'burrow-buttons hidden', root);
   const iconButton = (className, icon, label) => {
-    const button = element('button', `build-button icon-button ${className}`, burrowButtons, icon);
+    const button = element('button', `build-button icon-button ${className}`, burrowButtons);
+    button.innerHTML = icon;
     button.setAttribute('aria-label', label);
     button.title = label;
     return button;
@@ -36,7 +37,9 @@ export function createHud(activeQualityName) {
   const moltButton = iconButton('molt-button hidden', '🦞', 'Molt');
   const moltCount = element('span', 'button-count', moltButton);
   const helpersButton = iconButton('helpers-button', '🦀', 'Helpers');
-  const buildButton = iconButton('build-open', '🔨', 'Build');
+  const BUILD_ICON = '🔨';
+  const DIG_BURROW_ICON = '<svg class="dig-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M3 42 Q24 8 45 42 Z" fill="#f4e2b8" stroke="#5a3a18" stroke-width="2.5" stroke-linejoin="round"/><ellipse cx="24" cy="36" rx="11" ry="6" fill="#1c120a"/><circle cx="11" cy="15" r="2.6" fill="#f4e2b8" stroke="#5a3a18" stroke-width="1.5"/><circle cx="36" cy="11" r="2.2" fill="#f4e2b8" stroke="#5a3a18" stroke-width="1.5"/><circle cx="29" cy="5" r="1.8" fill="#f4e2b8" stroke="#5a3a18" stroke-width="1.5"/></svg>';
+  const buildButton = iconButton('build-open', BUILD_ICON, 'Build');
   const travelButton = element('button', 'travel-button hidden', root);
   const modeBar = element('div', 'mode-bar hidden', root);
   const modeText = element('span', 'mode-text', modeBar);
@@ -199,11 +202,18 @@ export function createHud(activeQualityName) {
     setBuildButton(visible, { surface = false } = {}) {
       burrowButtons.classList.toggle('hidden', !visible);
       burrowButtons.classList.toggle('surface', surface);
+      const label = surface ? 'Dig a burrow' : 'Build';
+      if (buildButton.getAttribute('aria-label') !== label) {
+        buildButton.innerHTML = surface ? DIG_BURROW_ICON : BUILD_ICON;
+        buildButton.setAttribute('aria-label', label);
+        buildButton.title = label;
+      }
     },
     setMode(text, onCancel = () => {}) {
       modeBar.classList.toggle('hidden', !text);
       burrowButtons.classList.toggle('dimmed', Boolean(text));
       root.classList.toggle('placing', Boolean(text));
+      if (text && text !== modeText.textContent) gameLog.post('notice', text);
       modeText.textContent = text || '';
       modeCancelListener = onCancel;
     },
