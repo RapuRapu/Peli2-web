@@ -89,6 +89,27 @@ export function createHud(activeQualityName) {
   const performanceToggle = element('input', '', performanceRow);
   performanceToggle.type = 'checkbox';
   performanceToggle.addEventListener('change', () => performanceListener(performanceToggle.checked));
+  const fullscreenButton = element('button', 'fullscreen-button', pauseCard, 'Fullscreen');
+  const fullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+  const refreshFullscreenButton = () => {
+    fullscreenButton.textContent = fullscreenElement() ? 'Exit fullscreen' : 'Fullscreen';
+  };
+  fullscreenButton.addEventListener('click', async () => {
+    try {
+      if (fullscreenElement()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else {
+        const page = document.documentElement;
+        const request = page.requestFullscreen || page.webkitRequestFullscreen;
+        if (!request || !(document.fullscreenEnabled || document.webkitFullscreenEnabled)) throw new Error('unsupported');
+        await request.call(page, { navigationUI: 'hide' });
+      }
+    } catch {
+      gameLog.post('notice', 'Fullscreen not available here');
+    }
+    refreshFullscreenButton();
+  });
+  document.addEventListener('fullscreenchange', refreshFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', refreshFullscreenButton);
   const resetButton = element('button', 'reset', pauseCard, 'Start over');
   element('div', 'pause-note', pauseCard, 'The game saves on its own.');
 
