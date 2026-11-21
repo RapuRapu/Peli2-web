@@ -866,7 +866,7 @@ function hasCraftedGear() {
   return save.craftedOnce;
 }
 
-const DEFAULT_QUICK_SLOTS = ['kelpPoultice', 'driedKelp'];
+const DEFAULT_QUICK_SLOTS = [null, null];
 
 function quickSlots() {
   if (!Array.isArray(save.quickSlots)) save.quickSlots = DEFAULT_QUICK_SLOTS.slice(0, QUICK_SLOT_COUNT);

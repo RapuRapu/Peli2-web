@@ -11,6 +11,9 @@ FLOW = r'''
   d.setPaused(false);
   for (const enemy of d.enemies.list) Object.assign(enemy, { state: 'dead', respawnTimer: 1e9 });
   out.defaultSlots = d.quickSlots().join(',');
+  out.emptyShowsPlus = [...document.querySelectorAll('#hud .quick-slot')].every((slot) => slot.classList.contains('empty') && slot.querySelector('.quick-slot-icon').textContent === '+');
+  d.assignQuickSlot(0, 'kelpPoultice');
+  d.assignQuickSlot(1, 'driedKelp');
   Object.assign(d.save.inventory, { driedKelp: 4, seaLettuce: 2 });
   out.crafted = d.craftSupply('kelpPoultice') && d.save.inventory.kelpPoultice === 1 && d.save.inventory.driedKelp === 2 && d.save.inventory.seaLettuce === 1;
   const max = d.progression.maxHealth();
@@ -46,7 +49,7 @@ with sync_playwright() as playwright:
     out = page.evaluate(FLOW)
     print(json.dumps(out))
     checks = {
-        'defaultSlots': out['defaultSlots'] == 'kelpPoultice,driedKelp',
+        'defaultSlotsEmpty': out['defaultSlots'] == ',' and out['emptyShowsPlus'],
         'craftPoultice': out['crafted'],
         'healFromSlot': out['healed'] == out['expectedHeal'] and out['poulticeUsed'] and out['countShown'] == '0',
         'cooldown': out['cooldownBlocks'] and out['afterCooldown'],
