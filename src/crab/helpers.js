@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { createHermit } from './hermit.js';
-import { RESOURCE_TYPES } from './resources.js';
+import { RESOURCE_TYPES, stackLimitOf } from './resources.js';
 import { BURROW_LAYER, BURROW_ORIGIN } from './burrow.js';
 import { RACK_BATCH, RACK_REACH } from './rack.js';
 import { SHELLS, CLAWS, NAKED, BINDINGS, REINFORCEMENTS, shellDefenseOf, clawAttackOf } from './gear.js';
 import { MAX_LEVEL, experienceForLevel } from './progression.js';
+import { CONSUMABLES } from './consumables.js';
 
 export const HELPER_LIMIT = 6;
 export const NEST_CAPACITY = 3;
@@ -31,6 +32,12 @@ const FLEE_HEALTH_SHARE = 0.3;
 const FIGHT_REACH = 0.9;
 const FIGHT_GIVE_UP_DISTANCE = 12;
 const HELPER_REGEN_PER_SECOND = 1;
+export const HELPER_BAG_SLOTS = 2;
+export const ITEM_USE_MODES = ['both', 'self', 'you', 'nobody'];
+const ITEM_USE_HEALTH_SHARE = 0.4;
+const ITEM_USE_REACH = 6;
+const WELL_FED_SECONDS = 90;
+const WELL_FED_REGEN_FACTOR = 2;
 const FOLLOW_DISTANCE = 2.6;
 const FOLLOW_CATCH_UP_DISTANCE = 35;
 const FOLLOW_REPATH_SECONDS = 0.5;
@@ -72,10 +79,10 @@ export function expectsToWin(helper, enemy) {
   return (enemy.health / helperPerSecond) * WIN_MARGIN < helper.health / enemyPerSecond;
 }
 
-export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, getPlayer, isUnderground, onDeposit, onLost, onSound, onLog = () => {} }) {
+export function createHelpers(scene, { world, navigation, resources, enemies, quality, saved, rack, burrow, boxOf, strandedSpots, getPlayer, isUnderground, onDeposit, onLost, onSound, onLog = () => {}, playerVitals = () => null, healPlayer = () => {}, onHealFloat = () => {} }) {
   const savedState = Array.isArray(saved) ? { list: saved, rescued: [] } : saved || { list: [], rescued: [] };
   const list = savedState.list.map((entry) => {
-    const helper = { job: null, nestId: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, ...entry, helperId: entry.id, state: 'resting', inside: true, path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, load: entry.load || 0, targetId: null };
+    const helper = { job: null, nestId: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, bag: emptyBag(), itemUse: 'both', ...entry, helperId: entry.id, state: 'resting', inside: true, path: [], pathIndex: 0, restTimer: 1 + Math.random() * 2, carrying: entry.carrying || null, load: entry.load || 0, targetId: null };
     helper.health = helperMaxHealth(helper);
     return helper;
   });
@@ -483,7 +490,9 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
 
   function updateHelper(helper, deltaTime, time) {
     helper.moving = false;
-    if (helper.state === 'resting' || helper.inside) helper.health = Math.min(helperMaxHealth(helper), helper.health + HELPER_REGEN_PER_SECOND * deltaTime);
+    const regenFactor = time < (helper.wellFedUntil || 0) ? WELL_FED_REGEN_FACTOR : 1;
+    if (helper.state === 'resting' || helper.inside) helper.health = Math.min(helperMaxHealth(helper), helper.health + HELPER_REGEN_PER_SECOND * regenFactor * deltaTime);
+    useItemsIfNeeded(helper, time);
     if (helper.state === 'resting') {
       helper.restTimer -= deltaTime;
       if (helper.carrying) {
@@ -690,7 +699,7 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     if (!nest) return null;
     rescued.add(spot.id);
     const id = nextId++;
-    const helper = { id, helperId: id, spotId: spot.id, nestId: nest.id, job: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, state: 'resting', inside: true, x: 0, z: 0, y: 0, heading: 0, path: [], pathIndex: 0, restTimer: 1.5, carrying: null, load: 0, health: HELPER_HEALTH, targetId: null };
+    const helper = { id, helperId: id, spotId: spot.id, nestId: nest.id, job: null, carryOrder: null, gear: { shell: null, claws: null }, level: 1, experience: 0, bag: emptyBag(), itemUse: 'both', state: 'resting', inside: true, x: 0, z: 0, y: 0, heading: 0, path: [], pathIndex: 0, restTimer: 1.5, carrying: null, load: 0, health: HELPER_HEALTH, targetId: null };
     list.push(helper);
     placeAtNest(helper);
     return helper;
@@ -702,6 +711,94 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
       helper.nestId = nest.id;
       placeAtNest(helper);
     }
+  }
+
+  function emptyBag() {
+    return Array(HELPER_BAG_SLOTS).fill(null);
+  }
+
+  const helperById = (id) => list.find((helper) => helper.id === id) || null;
+
+  function giveItem(id, type, amount) {
+    const helper = helperById(id);
+    if (!helper || !CONSUMABLES[type]) return 0;
+    helper.bag ||= emptyBag();
+    let slotIndex = helper.bag.findIndex((slot) => slot && slot.type === type);
+    if (slotIndex < 0) {
+      slotIndex = helper.bag.findIndex((slot) => !slot);
+      if (slotIndex < 0) return 0;
+      helper.bag[slotIndex] = { type, count: 0 };
+    }
+    const slot = helper.bag[slotIndex];
+    const moved = Math.max(0, Math.min(amount, stackLimitOf(type) - slot.count));
+    slot.count += moved;
+    if (!slot.count) helper.bag[slotIndex] = null;
+    return moved;
+  }
+
+  function takeItem(id, slotIndex) {
+    const helper = helperById(id);
+    const slot = helper && helper.bag && helper.bag[slotIndex];
+    if (!slot) return null;
+    helper.bag[slotIndex] = null;
+    return slot;
+  }
+
+  function setItemUse(id, mode) {
+    const helper = helperById(id);
+    if (!helper || !ITEM_USE_MODES.includes(mode)) return false;
+    helper.itemUse = mode;
+    return true;
+  }
+
+  function bagSlotFor(helper, predicate, time) {
+    return (helper.bag || []).findIndex((slot) => slot && slot.count > 0 && predicate(CONSUMABLES[slot.type]) && time >= ((helper.itemReadyAt || {})[slot.type] || 0));
+  }
+
+  function consumeFromBag(helper, slotIndex, time) {
+    const slot = helper.bag[slotIndex];
+    slot.count -= 1;
+    (helper.itemReadyAt ||= {})[slot.type] = time + CONSUMABLES[slot.type].cooldownSeconds;
+    if (!slot.count) helper.bag[slotIndex] = null;
+    return slot.type;
+  }
+
+  function useItemsIfNeeded(helper, time) {
+    const mode = helper.itemUse || 'both';
+    if (mode === 'nobody' || !helper.bag || !helper.bag.some(Boolean)) return null;
+    const maxHealth = helperMaxHealth(helper);
+    const selfShare = helper.health / maxHealth;
+    const vitals = playerVitals();
+    const playerInReach = vitals && vitals.alive && vitals.inside === helper.inside && Math.hypot(vitals.x - helper.x, vitals.z - helper.z) <= ITEM_USE_REACH;
+    const playerShare = playerInReach ? vitals.health / vitals.maxHealth : 1;
+    const wantsSelf = (mode === 'self' || mode === 'both') && selfShare < ITEM_USE_HEALTH_SHARE;
+    const wantsPlayer = (mode === 'you' || mode === 'both') && playerInReach && playerShare < ITEM_USE_HEALTH_SHARE;
+    if (!wantsSelf && !wantsPlayer) return null;
+    const target = wantsSelf && (!wantsPlayer || selfShare <= playerShare) ? 'self' : 'player';
+    const healIndex = bagSlotFor(helper, (definition) => definition.healShare, time);
+    if (healIndex >= 0) {
+      const type = consumeFromBag(helper, healIndex, time);
+      const share = CONSUMABLES[type].healShare;
+      const label = RESOURCE_TYPES[type].label.toLowerCase();
+      if (target === 'self') {
+        const healed = Math.min(maxHealth - helper.health, Math.round(maxHealth * share));
+        helper.health += healed;
+        onHealFloat(helper, healed);
+        onLog('helperCombat', `${nameOf(helper)} uses a ${label} on itself +${healed} · HP ${Math.ceil(helper.health)}/${maxHealth}`);
+      } else {
+        const healed = healPlayer(Math.round(vitals.maxHealth * share));
+        onLog('helperCombat', `${nameOf(helper)} uses a ${label} on you +${healed} · HP ${Math.ceil(vitals.health + healed)}/${vitals.maxHealth}`);
+      }
+      onSound('craft', helper);
+      return { type, target };
+    }
+    if (target !== 'self' || time < (helper.wellFedUntil || 0)) return null;
+    const kelpIndex = bagSlotFor(helper, (definition) => !definition.healShare, time);
+    if (kelpIndex < 0) return null;
+    const type = consumeFromBag(helper, kelpIndex, time);
+    helper.wellFedUntil = time + WELL_FED_SECONDS;
+    onLog('helperCombat', `${nameOf(helper)} eats ${RESOURCE_TYPES[type].label.toLowerCase()} — heals twice as fast for 90 s`);
+    return { type, target };
   }
 
   const nameOf = (helper) => `Helper ${list.indexOf(helper) + 1}`;
@@ -727,9 +824,9 @@ export function createHelpers(scene, { world, navigation, resources, enemies, qu
     return true;
   }
 
-  const serialize = () => ({ list: list.map(({ id, spotId, nestId, job, carryOrder, carrying, load, gear, level, experience }) => ({ id, spotId, nestId, job, carryOrder, carrying, load, gear, level, experience })), rescued: [...rescued] });
+  const serialize = () => ({ list: list.map(({ id, spotId, nestId, job, carryOrder, carrying, load, gear, level, experience, bag, itemUse }) => ({ id, spotId, nestId, job, carryOrder, carrying, load, gear, level, experience, bag, itemUse })), rescued: [...rescued] });
 
   for (const helper of list) placeAtNest(helper);
 
-  return { list, nameOf, follower, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [carryMesh] };
+  return { list, nameOf, follower, giveItem, takeItem, setItemUse, useItemsIfNeeded, update, render, rescue, adopt, freeNest, setJob, serialize, strandedUnder, strandedVisible, gainExperience, bringHome, isRescued: (spotId) => rescued.has(spotId), markRescued: (spotId) => rescued.add(spotId), maxHealth: HELPER_HEALTH, meshes: [carryMesh] };
 }

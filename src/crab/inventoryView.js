@@ -1,5 +1,5 @@
 import { CLAWS, salvageReturn } from './gear.js';
-import { RESOURCE_TYPES } from './resources.js';
+import { RESOURCE_TYPES, stackLimitOf } from './resources.js';
 import { element } from './workbench.js';
 import { definitionOf, modificationOf, itemName, itemStatsText, itemStatsBreakdown, itemAbilityText, tierClass, tierBadge, tierLine, itemTier, qualityBadge, masterworkGlowCss } from './itemInfo.js';
 
@@ -9,7 +9,14 @@ const DOUBLE_TAP_MILLISECONDS = 360;
 const TAP_SLOP_PIXELS = 10;
 
 export function materialEntries(inventory) {
-  return Object.keys(RESOURCE_TYPES).filter((type) => (inventory[type] || 0) > 0).map((type) => ({ key: `material:${type}`, kind: 'material', type, count: inventory[type] }));
+  const entries = [];
+  for (const type of Object.keys(RESOURCE_TYPES)) {
+    const limit = stackLimitOf(type);
+    for (let remaining = inventory[type] || 0, stack = 0; remaining > 0; remaining -= limit, stack++) {
+      entries.push({ key: stack ? `material:${type}:${stack}` : `material:${type}`, kind: 'material', type, count: Math.min(limit, remaining) });
+    }
+  }
+  return entries;
 }
 
 export function gearEntries(shells, claws) {

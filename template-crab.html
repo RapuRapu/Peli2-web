@@ -223,6 +223,10 @@
   #hud .remains-label { background: rgba(70, 76, 110, 0.92); border-color: #d6dcff; }
   #hud .burrow-buttons { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 8px); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; max-width: calc(100vw - 130px); }
   #hud .burrow-buttons.hidden { display: none; }
+  #hud .helper-bag, #hud .helper-give { align-items: center; flex-wrap: wrap; gap: 6px; }
+  #hud .bag-slot { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 8px; background: rgba(255, 244, 214, 0.12); font-size: 13px; }
+  #hud .bag-slot.empty { opacity: 0.5; font-style: italic; }
+  #hud .bag-take, #hud .bag-give { padding: 4px 9px; border-radius: 8px; border: 1px solid rgba(255, 244, 214, 0.45); background: rgba(40, 80, 90, 0.9); color: #fff8e8; font-size: 13px; }
   #hud .quick-slots { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: calc(max(14px, env(safe-area-inset-bottom)) + 76px); display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
   #hud .quick-slot { position: relative; width: 52px; height: 52px; border-radius: 50%; border: 2px solid #ffe2a8; background: rgba(30, 40, 46, 0.82); font-size: 26px; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; overflow: hidden; }
   #hud .quick-slot.empty { opacity: 0.45; border-style: dashed; font-size: 22px; color: #fff8e8; }

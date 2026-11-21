@@ -263,7 +263,9 @@ function addSelect(parent, label, options, value, onChange) {
   return select;
 }
 
-export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOptions, gearOptions, helperInfo, onJob, onEquip, onClose }) {
+const ITEM_USE_LABELS = { both: 'Itself and you', self: 'Itself', you: 'You', nobody: 'Nobody' };
+
+export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOptions, gearOptions, helperInfo, onJob, onEquip, giveOptions = () => [], onGiveItem = () => {}, onTakeItem = () => {}, onItemUse = () => {}, onClose }) {
   const shell = createPanelShell(root, 'helpers-panel', 'Helpers', onClose);
   const statusLines = new Map();
 
@@ -282,6 +284,42 @@ export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOption
     addSelect(parent, 'What', materials, order.material || '', (value) => update({ material: value || null }));
     if (!helper.carryOrder) onJob(helper.id, 'carry', order);
     if (boxes.length < 2) element('div', 'item-ability danger', parent, 'Needs two boxes: a storage or helper nests.');
+  }
+
+  function renderBag(parent, helper) {
+    const bagRow = element('div', 'job-row helper-bag', parent);
+    element('span', 'job-label', bagRow, 'Bag');
+    for (const [slotIndex, slot] of (helper.bag || []).entries()) {
+      const cell = element('span', 'bag-slot', bagRow);
+      if (!slot) {
+        cell.textContent = 'Empty';
+        cell.classList.add('empty');
+        continue;
+      }
+      element('span', '', cell, `${RESOURCE_TYPES[slot.type].icon} ${RESOURCE_TYPES[slot.type].label} ×${slot.count}`);
+      const take = element('button', 'bag-take', cell, 'Take');
+      take.dataset.take = `${helper.id}:${slotIndex}`;
+      take.addEventListener('click', () => {
+        onTakeItem(helper.id, slotIndex);
+        render();
+      });
+    }
+    const giveRow = element('div', 'job-row helper-give', parent);
+    const options = giveOptions();
+    if (!options.length) element('span', 'item-stats', giveRow, 'Make kelp poultices or dry kelp to give your helpers.');
+    for (const option of options) {
+      for (const amount of [1, 5]) {
+        const button = element('button', 'bag-give', giveRow, `Give ${option.icon} +${amount}`);
+        button.dataset.give = `${helper.id}:${option.type}:${amount}`;
+        button.title = `${option.label} (you have ${option.count})`;
+        button.addEventListener('click', () => {
+          onGiveItem(helper.id, option.type, amount);
+          render();
+        });
+      }
+    }
+    const useSelect = addSelect(giveRow, 'Use items on', Object.entries(ITEM_USE_LABELS).map(([value, label]) => ({ value, label })), helper.itemUse || 'both', (value) => onItemUse(helper.id, value));
+    useSelect.dataset.itemUse = String(helper.id);
   }
 
   function render() {
@@ -311,6 +349,7 @@ export function createHelpersPanel(root, { helpers, limit, jobOptions, boxOption
         });
         select.dataset.gear = `${helper.id}:${category}`;
       }
+      renderBag(text, helper);
     }
   }
 

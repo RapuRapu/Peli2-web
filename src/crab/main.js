@@ -577,6 +577,16 @@ const helpers = createHelpers(scene, {
     if (helper.inside === underground) soundAt(name, helper.x, helper.z, 0.45);
   },
   onLog: (kind, text) => hud.log(kind, text),
+  playerVitals: () => (player.alive ? { alive: true, inside: underground, x: player.x, z: player.z, health: progression.state.health, maxHealth: progression.maxHealth() } : null),
+  healPlayer: (amount) => {
+    const healed = Math.max(0, Math.min(amount, progression.maxHealth() - progression.state.health));
+    progression.state.health += healed;
+    floatAt(player.x, player.y + 2.2, player.z, `+${healed} ❤`, 'experience');
+    return healed;
+  },
+  onHealFloat: (helper, amount) => {
+    if (helper.inside === underground) floatAt(helper.x, (helper.inside ? BURROW_ORIGIN.y : helper.y) + 1.6, helper.z, `+${amount} ❤`, 'experience');
+  },
 });
 const helpersPanel = createHelpersPanel(hud.root, {
   helpers,
@@ -601,6 +611,24 @@ const helpersPanel = createHelpersPanel(hud.root, {
   },
   onEquip: (id, category, itemId) => {
     equipHelper(id, category, itemId);
+    persist();
+  },
+  giveOptions: () => Object.keys(CONSUMABLES).filter((type) => save.inventory[type] > 0).map((type) => ({ type, icon: RESOURCE_TYPES[type].icon, label: RESOURCE_TYPES[type].label, count: save.inventory[type] })),
+  onGiveItem: (id, type, amount) => {
+    const moved = helpers.giveItem(id, type, Math.min(amount, save.inventory[type] || 0));
+    save.inventory[type] -= moved;
+    if (!moved) hud.log('notice', 'That helper has no room for it');
+    refreshHud(null);
+    persist();
+  },
+  onTakeItem: (id, slotIndex) => {
+    const slot = helpers.takeItem(id, slotIndex);
+    if (slot) save.inventory[slot.type] = (save.inventory[slot.type] || 0) + slot.count;
+    refreshHud(null);
+    persist();
+  },
+  onItemUse: (id, mode) => {
+    helpers.setItemUse(id, mode);
     persist();
   },
   onClose: () => helpersPanel.close(),

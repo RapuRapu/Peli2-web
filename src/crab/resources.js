@@ -6,6 +6,9 @@ import { TIDE_MIDDLE, TIDE_AMPLITUDE, isOnReef, isInCamp, isInHold } from './wor
 
 const linearColor = (red, green, blue) => new THREE.Color().setRGB(red, green, blue, THREE.SRGBColorSpace);
 
+const DEFAULT_STACK_LIMIT = 50;
+export const stackLimitOf = (type) => (RESOURCE_TYPES[type] && RESOURCE_TYPES[type].stackLimit) || DEFAULT_STACK_LIMIT;
+
 export const RESOURCE_TYPES = {
   shellBits: { label: 'Shell bits', icon: '🐚', count: 16, gatherSeconds: 1.0, standOff: 1.3 },
   driftwood: { label: 'Driftwood', icon: '🪵', count: 12, gatherSeconds: 1.3, standOff: 1.5 },
